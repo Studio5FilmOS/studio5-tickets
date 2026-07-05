@@ -1,0 +1,22 @@
+{
+  "short_name": "Studio 5",
+  "name": "Studio 5 E-Tickets PWA",
+  "icons": [
+    {
+      "src": "https://i.imgur.com/Gezz740.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://i.imgur.com/Gezz740.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#050505",
+  "theme_color": "#F1A51C",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/"
+}

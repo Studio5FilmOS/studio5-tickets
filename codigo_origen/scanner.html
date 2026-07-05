@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <?!= include('styles'); ?>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+      /* Estilos específicos para el escáner */
+      #reader {
+        width: 100%;
+        max-width: 400px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        background: white;
+      }
+      #result {
+        font-size: 1.1em;
+        font-weight: bold;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        /* Estilo para saltos de línea */
+        white-space: pre-wrap; 
+      }
+      .success { background-color: #d4edda; color: #155724; }
+      .error { background-color: #f8d7da; color: #721c24; }
+      .warning { background-color: #fff3cd; color: #856404; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Escaner de Tickets</h2>
+      <p>Apunta la cámara al código QR del ticket.</p>
+      
+      <div id="reader"></div>
+      
+      <div id="result">Esperando escaneo...</div>
+    </div>
+
+    <script>
+      const resultDiv = document.getElementById('result');
+
+      function onScanSuccess(decodedText, decodedResult) {
+        html5QrcodeScanner.pause();
+        resultDiv.innerText = "Verificando ticket...";
+        resultDiv.className = '';
+        
+        google.script.run
+          .withSuccessHandler(mostrarResultadoValidacion)
+          .withFailureHandler(mostrarError)
+          .validarTicket(decodedText);
+      }
+      
+      function mostrarResultadoValidacion(respuesta) {
+        resultDiv.innerText = respuesta.message;
+        
+        if (respuesta.status === "OK") {
+          resultDiv.className = 'success';
+        } else if (respuesta.status === "ADVERTENCIA") {
+          resultDiv.className = 'warning';
+        } else { // ERROR
+          resultDiv.className = 'error';
+        }
+        
+        setTimeout(() => {
+          if (html5QrcodeScanner.getState() === 2) { // 2 = PAUSED
+             html5QrcodeScanner.resume();
+             resultDiv.innerText = "Esperando escaneo...";
+             resultDiv.className = '';
+          }
+        }, 3500); // 3.5 segundos
+      }
+
+      function mostrarError(error) {
+        resultDiv.innerText = "Error de comunicación: " + error.message;
+        resultDiv.className = 'error';
+        setTimeout(() => {
+          if (html5QrcodeScanner.getState() === 2) { 
+             html5QrcodeScanner.resume();
+          }
+        }, 3500);
+      }
+
+      var html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader", 
+        { fps: 10, qrbox: {width: 250, height: 250} }, 
+        false);
+      
+      html5QrcodeScanner.render(onScanSuccess);
+    </script>
+  </body>
+</html>

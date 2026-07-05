@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <?!= include('styles'); ?>
+  <style>
+    .admin-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; max-width: 1200px; margin: 20px auto; padding: 0 15px; }
+    @media (max-width: 900px) { .admin-layout { grid-template-columns: 1fr; } }
+    .event-card-admin { background: rgba(0,0,0,0.6); border-radius: 12px; display: flex; overflow: hidden; margin-bottom: 15px; border-left: 5px solid #333; }
+    .event-card-admin img { width: 120px; object-fit: cover; }
+    .event-card-admin-info { padding: 15px; flex: 1; }
+    .btn-edit { background: #03A9F4; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .help-box { background: rgba(3, 169, 244, 0.08); border-left: 4px solid #03A9F4; padding: 12px 15px; margin-bottom: 15px; border-radius: 6px; }
+    .help-box p { margin: 0; font-size: 0.85rem; color: #ddd; line-height: 1.6; }
+    .help-box a { color: #F1A51C; text-decoration: none; font-weight: bold; border-bottom: 1px solid #F1A51C;}
+  </style>
+</head>
+<body>
+  <div class="admin-layout">
+    <div class="glass-panel">
+      <h2 style="color: #F1A51C;">Panel Studio 5</h2>
+      <form id="admin-form">
+        <input type="hidden" id="idEvento">
+        <label>Nombre del Evento</label><input type="text" id="nombre" required>
+        <label>Lugar / Cliente</label><input type="text" id="lugar" required>
+        
+        <div class="help-box">
+            <p><b style="color: #03A9F4;">💡 Guía de Imágenes</b><br>
+            Sube tus diseños a la nube: <a href="https://imgur.com/upload" target="_blank">Abrir Imgur.com ↗</a><br>
+            • <b>Afiche:</b> Horizontal (<b>1920x1080 px</b>)<br>
+            • <b>Boleto:</b> Alargado (<b>1200x400 px</b>)</p>
+        </div>
+
+        <label>Imagen Afiche (URL Imgur)</label><input type="text" id="imagen" required>
+        <label>Plantilla Boleto (URL Imgur)</label><input type="text" id="plantilla" required>
+        
+        <div style="margin-bottom: 15px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 6px; border: 1px solid #444;">
+            <label style="display:flex; align-items:center; cursor:pointer; margin:0;">
+                <input type="checkbox" id="tarifaUnica" onchange="toggleTarifaUnica()" style="width:20px; height:20px; margin-right:10px; cursor:pointer;">
+                <b style="color:#00ff00;">🎟️ Tarifa Única (Precio General para todos)</b>
+            </label>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <div style="flex:1;"><label id="lbl-precio-oficial">Precio Adulto Oficial ($)</label><input type="number" id="precioGeneral" step="0.01" required></div>
+            <div id="caja-ninos" style="flex:1;"><label>Precio Niño ($)</label><input type="number" id="precioNino" step="0.01" required></div>
+        </div>
+        
+        <label>Promoción</label>
+        <select id="tipoPromo" onchange="togglePromoUI()">
+            <option value="Ninguna">Ninguna (Precio Oficial)</option>
+            <option value="Preventa">Preventa</option>
+            <option value="2x1">2x1</option>
+        </select>
+
+        <div id="promo-settings" class="hidden" style="background: rgba(241, 165, 28, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid rgba(241,165,28,0.3);">
+            <div style="display: flex; gap: 10px;">
+                <div style="flex:1;"><label style="color:#F1A51C;">Precio Promoción ($)</label><input type="number" id="precioPromo" step="0.01" value="0"></div>
+                <div style="flex:1;"><label style="color:#F1A51C;">Fecha Límite Promo</label><input type="date" id="fechaLimitePromo"></div>
+            </div>
+            <p style="font-size: 0.75rem; color:#aaa; margin: 5px 0 0 0;">Al pasar esta fecha, cobrará automáticamente el Precio Oficial.</p>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <div style="flex:1;"><label>Aforo Máx.</label><input type="number" id="aforo" required></div>
+            <div style="flex:1;"><label>Estado</label><select id="estado"><option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div>
+        </div>
+        
+        <label>Fechas (Ej: 28 abril 14h00, 29 abril 16h00)</label><input type="text" id="fechas" required>
+        <br><button type="submit" id="btn-save" class="neon-btn">GUARDAR EVENTO</button>
+      </form>
+    </div>
+    
+    <div class="glass-panel">
+      <h2 style="color: #03A9F4;">Eventos Creados</h2>
+      <div id="lista-eventos">Cargando eventos...</div>
+    </div>
+  </div>
+
+  <script>
+    let eventosGlobales = [];
+    
+    function toggleTarifaUnica() {
+        if(document.getElementById('tarifaUnica').checked) {
+            document.getElementById('caja-ninos').style.display = 'none';
+            document.getElementById('precioNino').value = 0; document.getElementById('precioNino').required = false;
+            document.getElementById('lbl-precio-oficial').innerText = 'Precio General Único ($)';
+        } else {
+            document.getElementById('caja-ninos').style.display = 'block';
+            document.getElementById('precioNino').required = true;
+            document.getElementById('lbl-precio-oficial').innerText = 'Precio Adulto Oficial ($)';
+        }
+    }
+
+    function togglePromoUI() {
+        const tipo = document.getElementById('tipoPromo').value;
+        if (tipo !== "Ninguna") document.getElementById('promo-settings').classList.remove('hidden');
+        else { document.getElementById('promo-settings').classList.add('hidden'); document.getElementById('precioPromo').value = 0; document.getElementById('fechaLimitePromo').value = ""; }
+    }
+
+    function cargarTablaEventos() {
+      google.script.run.withSuccessHandler(function(eventos) {
+          eventosGlobales = eventos; let html = '';
+          eventos.forEach(e => {
+            const colorEstado = e.estado === "Activo" ? '#00ff00' : '#ff4444';
+            const textoEstado = e.estado === "Activo" ? 'Activo' : 'Inactivo';
+            let promoText = e.tipoPromo !== "Ninguna" ? `<br><span style="color:#F1A51C;">Promo: ${e.tipoPromo} ($${e.precioPromo}) hasta ${e.fechaLimitePromo || 'Sin límite'}</span>` : '';
+
+            html += `<div class="event-card-admin" style="border-left-color: ${colorEstado}">
+                <img src="${e.imagen}">
+                <div class="event-card-admin-info">
+                    <h3 style="color:#F1A51C; margin:0;">${e.nombre}</h3>
+                    <p style="font-size:0.8rem; color:#aaa; margin:5px 0;">📍 ${e.lugar}<br>📅 ${e.fechas} ${promoText}</p>
+                    <div style="display:flex; gap:5px;">
+                        <button type="button" class="btn-edit" onclick="editarEvento('${e.id}')">✏️ Editar</button>
+                        <button type="button" class="btn-edit" style="background:${colorEstado}; color:black;" onclick="toggleEstado('${e.id}', '${e.estado}')">${textoEstado}</button>
+                    </div>
+                </div>
+            </div>`;
+          });
+          document.getElementById('lista-eventos').innerHTML = html;
+      }).getTodosLosEventos();
+    }
+    document.addEventListener('DOMContentLoaded', cargarTablaEventos);
+    
+    function toggleEstado(id, estado) { google.script.run.withSuccessHandler(cargarTablaEventos).alternarEstadoEvento(id, estado); }
+    
+    function editarEvento(id) {
+      const e = eventosGlobales.find(x => x.id === id);
+      document.getElementById('idEvento').value = e.id; document.getElementById('nombre').value = e.nombre; document.getElementById('lugar').value = e.lugar; document.getElementById('imagen').value = e.imagen; document.getElementById('plantilla').value = e.plantilla; document.getElementById('precioGeneral').value = e.precioGeneral; document.getElementById('precioNino').value = e.precioNino; document.getElementById('aforo').value = e.aforo; document.getElementById('fechas').value = e.fechas; document.getElementById('estado').value = e.estado; document.getElementById('tipoPromo').value = e.tipoPromo; document.getElementById('precioPromo').value = e.precioPromo || 0; document.getElementById('fechaLimitePromo').value = e.fechaLimitePromo || "";
+      document.getElementById('tarifaUnica').checked = (e.tarifaUnica === "SI");
+      toggleTarifaUnica(); togglePromoUI(); window.scrollTo(0,0);
+    }
+
+    document.getElementById('admin-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const data = { idEvento: document.getElementById('idEvento').value, nombre: document.getElementById('nombre').value, lugar: document.getElementById('lugar').value, imagen: document.getElementById('imagen').value, plantilla: document.getElementById('plantilla').value, precioGeneral: document.getElementById('precioGeneral').value, precioNino: document.getElementById('precioNino').value, aforo: document.getElementById('aforo').value, fechas: document.getElementById('fechas').value, estado: document.getElementById('estado').value, tipoPromo: document.getElementById('tipoPromo').value, precioPromo: document.getElementById('precioPromo').value, fechaLimitePromo: document.getElementById('fechaLimitePromo').value, tarifaUnica: document.getElementById('tarifaUnica').checked ? "SI" : "NO" };
+      google.script.run.withSuccessHandler(res => { Swal.fire('Éxito', res.message, 'success'); cargarTablaEventos(); document.getElementById('admin-form').reset(); document.getElementById('idEvento').value=""; toggleTarifaUnica(); togglePromoUI(); }).guardarEventoDesdeWeb(data);
+    });
+  </script>
+</body>
+</html>

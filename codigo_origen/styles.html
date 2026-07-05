@@ -1,0 +1,32 @@
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700;900&display=swap');
+  :root { --bg-dark: #050505; --glass-bg: rgba(255, 255, 255, 0.05); --glass-border: rgba(255, 255, 255, 0.1); --accent: #F1A51C; --accent-glow: rgba(241, 165, 28, 0.6); }
+  body { font-family: 'Inter', sans-serif; background-color: var(--bg-dark); color: #fafafa; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+  .glass-panel { background: var(--glass-bg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--glass-border); border-radius: 24px; padding: 2.5rem; width: 100%; max-width: 500px; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6); box-sizing: border-box; }
+  .event-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px; }
+  .event-card { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; overflow: hidden; cursor: pointer; transition: all 0.3s ease; }
+  .event-card:hover { border-color: var(--accent); box-shadow: 0 0 20px var(--accent-glow); transform: translateY(-3px); }
+  .event-card img { width: 100%; height: 180px; object-fit: cover; border-bottom: 1px solid var(--glass-border); }
+  .event-card-content { padding: 15px; }
+  .event-card-title { font-weight: 700; font-size: 1.2rem; color: var(--accent); margin: 0 0 5px 0;}
+  label { display: block; font-size: 0.85rem; color: #a1a1aa; margin-bottom: 5px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; }
+  input, select { width: 100%; padding: 14px 16px; margin-bottom: 1.5rem; box-sizing: border-box; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: white; border-radius: 12px; font-size: 1rem; transition: all 0.3s ease; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); background: rgba(0,0,0,0.6); }
+  .neon-btn { width: 100%; padding: 16px; background: transparent; color: var(--accent); border: 2px solid var(--accent); border-radius: 12px; font-weight: 900; font-size: 1.1rem; cursor: pointer; text-transform: uppercase; letter-spacing: 2px; transition: all 0.3s; box-shadow: 0 0 10px var(--accent-glow), inset 0 0 10px var(--accent-glow); }
+  .neon-btn:hover { background: var(--accent); color: #000; box-shadow: 0 0 25px var(--accent-glow), inset 0 0 15px var(--accent-glow); transform: translateY(-2px); }
+  .hidden { display: none !important; }
+
+  /* --- BOLETO FÍSICO --- */
+  .ticket-container { position: relative; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 12px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.8); background: white; }
+  .ticket-bg { width: 100%; display: block; }
+  .ticket-overlay { position: absolute; right: 5%; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+  .ticket-qr { width: 120px; height: 120px; margin-bottom: 10px; }
+  
+  /* --- IMPRESIÓN --- */
+  @media print {
+    body * { visibility: hidden; }
+    #boleto-fisico, #boleto-fisico * { visibility: visible; }
+    #boleto-fisico { position: absolute; left: 0; top: 0; width: 100%; max-width: 100%; box-shadow: none; }
+    .glass-panel { border: none; background: transparent; box-shadow: none; }
+  }
+</style>

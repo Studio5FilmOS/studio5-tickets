@@ -1,0 +1,15 @@
+# Ignorar carpetas de dependencias
+node_modules/
+**/node_modules/
+
+# Ignorar archivos de variables de entorno locales (seguridad)
+.env
+**/.env
+
+# Ignorar carpetas de compilación temporal del frontend (ya está copiado en backend/public)
+frontend/dist/
+dist/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

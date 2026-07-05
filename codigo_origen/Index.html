@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <?!= include('styles'); ?>
+    <style>
+        #export-molde { position: fixed; top: -10000px; left: -10000px; width: 1200px; height: 400px; background: white; z-index: -9999; overflow: hidden; }
+        .exp-bg { position: absolute; top: 0; left: 0; width: 1200px; height: 400px; background-size: cover; background-position: center; background-repeat: no-repeat; }
+        .exp-overlay { position: absolute; right: 40px; top: 30px; width: 320px; height: 340px; background: white; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 15px; box-sizing: border-box; }
+        .exp-cortesia { color: #e50914; font-family: sans-serif; font-weight: 900; border: 2px solid #e50914; padding: 2px 10px; border-radius: 6px; font-size: 16px; margin-bottom: 5px; text-transform: uppercase; background: #fff5f5; display: none; }
+        .exp-nombre { font-family: sans-serif; font-size: 24px; color: black; font-weight: 900; margin: 0 0 10px 0; text-transform: uppercase; text-align: center; border-bottom: 2px solid #eee; padding-bottom: 5px; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .exp-qr { width: 170px; height: 170px; margin-bottom: 5px; }
+        .exp-id { font-family: sans-serif; font-weight: bold; font-size: 13px; color: #666; margin: 0; letter-spacing: 0.5px; }
+        .exp-fecha { font-family: sans-serif; font-weight: bold; font-size: 15px; color: #222; margin: 5px 0 0 0; }
+        .exp-cant { font-family: sans-serif; font-weight: 900; font-size: 16px; color: #d32f2f; margin: 5px 0 0 0; background: #ffeeee; padding: 4px 12px; border-radius: 12px; text-align: center; line-height: 1.2;}
+        .exp-desglose { font-size: 11px; color: #666; font-weight: normal; display: block; margin-top: 2px;}
+    </style>
+  </head>
+  <body>
+    <div class="glass-panel" id="cartelera-view">
+      <img src="https://i.imgur.com/0z5756T.png" style="width: 100px; display: block; margin: 0 auto 20px; filter: invert(1);">
+      <h2 style="text-align:center;">CARTELERA</h2>
+      <div class="event-grid" id="grid-eventos">
+          <p style="text-align:center; color:#F1A51C; font-weight:bold;">Cargando cartelera...</p>
+      </div>
+    </div>
+
+    <div class="glass-panel hidden" id="pos-view">
+      <button type="button" onclick="volverCartelera()" style="background: #2a2a2a; color: #fff; border: 1px solid #555; padding: 10px 20px; border-radius: 25px; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 0.9rem; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+         ⬅ VOLVER A CARTELERA
+      </button>
+
+      <h2 id="titulo-obra" style="color: #F1A51C; margin: 10px 0;"></h2>
+      <div id="contador-aforo" style="text-align:center; font-weight:bold; margin-bottom:15px;"></div>
+      <div id="banner-promo-container"></div>
+      
+      <form id="registro-form">
+        <input type="hidden" id="idEvento">
+        <label>Tipo Operación</label>
+        <select id="tipoVenta" onchange="togglePagoUI()"><option value="Venta">Venta Pagada</option><option value="Pendiente">Reserva</option><option value="Cortesia">Cortesía</option></select>
+        
+        <div id="pago-block">
+            <label>Método Pago</label>
+            <select id="metodoPago" onchange="toggleBancoUI()"><option value="Efectivo">Efectivo</option><option value="Transferencia">Transferencia</option></select>
+            <div id="banco-block" class="hidden">
+                <label>Banco</label><select id="banco"><option value="Pichincha">Pichincha</option><option value="Guayaquil">Guayaquil</option><option value="Otro">Otro</option></select>
+                <input type="text" id="bancoOtro" class="hidden" placeholder="Nombre banco" style="margin-top:5px;">
+                <label style="margin-top:10px; display:block;">Ref. Transacción</label><input type="text" id="numTransaccion">
+            </div>
+        </div>
+        
+        <label>Cliente</label><input type="text" id="nombre" required>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex:1;"><label>WhatsApp</label><input type="tel" id="whatsapp" placeholder="Ej. 098..."></div>
+          <div style="flex:1;"><label>Correo (Opcional)</label><input type="email" id="email" placeholder="Para enviar QR"></div>
+        </div>
+        <label>Función</label><select id="fecha" required></select>
+        
+        <div style="display: flex; gap: 10px; margin-top:15px; margin-bottom: 20px;">
+            <div style="flex:1; text-align:center; background:rgba(0,0,0,0.4); padding:12px; border-radius:8px; border: 1px solid #333;">
+                <label id="lbl-adultos" style="font-size:0.8rem; color:#ccc; font-weight:bold;">ADULTOS ($0)</label>
+                <input type="number" id="cantAdultos" value="1" min="0" style="text-align:center; width:100%; margin-top:5px; font-weight:bold; font-size:1.2rem;">
+            </div>
+            <div id="caja-ninos" style="flex:1; text-align:center; background:rgba(0,0,0,0.4); padding:12px; border-radius:8px; border: 1px solid #333;">
+                <label id="lbl-ninos" style="font-size:0.8rem; color:#ccc; font-weight:bold;">NIÑOS ($0)</label>
+                <input type="number" id="cantNinos" value="0" min="0" style="text-align:center; width:100%; margin-top:5px; font-weight:bold; font-size:1.2rem;">
+            </div>
+        </div>
+        <button type="submit" id="submit-button" class="neon-btn">PROCESAR VENTA</button>
+      </form>
+    </div>
+
+    <div class="glass-panel hidden" id="ticket-view" style="text-align: center; max-width: 650px; width:100%; margin: 0 auto;">
+      <h2 style="color: #00ff00; margin-top:0;">¡Operación Exitosa!</h2>
+      <p id="res-total" style="font-size: 1.2em; font-weight: bold; margin-bottom: 20px;"></p>
+
+      <div id="boleto-fisico" class="hidden" style="position: relative; width: 100%; max-width: 600px; aspect-ratio: 3/1; border-radius: 12px; overflow: hidden; background: white; border: 1px solid #333; margin: 0 auto;">
+         <div id="tk-bg" style="width: 100%; height: 100%; background-size: cover; background-position: center;"></div>
+         <div style="position: absolute; right: 4%; top: 10%; height: 80%; width: 28%; background: rgba(255,255,255,0.95); border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 2%; box-sizing: border-box; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+            <p id="tk-cortesia" style="color: #e50914; font-weight: 900; border: 2px solid #e50914; padding: 2px 6px; border-radius: 6px; font-size: clamp(0.5rem, 1.2vw, 0.7rem); margin: 0 0 3px 0; text-transform: uppercase; background: #fff5f5; display: none;">Cortesía</p>
+            <p id="tk-nombre" style="font-weight:900; font-size:clamp(0.7rem, 2vw, 1rem); margin:0 0 5px 0; color:black; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 3px;"></p>
+            <img id="tk-qr" src="" crossorigin="anonymous" style="width: 70%; aspect-ratio: 1/1; margin-bottom: 3px;">
+            <p id="tk-id" style="font-weight:bold; font-size:clamp(0.4rem, 1vw, 0.6rem); margin:0; color:#666; letter-spacing: 0.5px;"></p>
+            <p id="tk-cant" style="font-size:clamp(0.5rem, 1.5vw, 0.75rem); margin:3px 0 0 0; color:#d32f2f; font-weight:bold; background: #ffeeee; padding: 2px 8px; border-radius: 8px; text-align: center; line-height: 1.1;"></p>
+         </div>
+      </div>
+      
+      <p id="no-plantilla-msg" class="hidden" style="color:#aaa; margin-top:20px;">Sin plantilla configurada.</p>
+
+      <div style="display:flex; gap:10px; margin-top:30px;">
+        <button type="button" onclick="descargarBoletoPerfecto()" id="btn-print" class="neon-btn hidden" style="flex:1; border-color:#03A9F4; color:#03A9F4;">⬇️ DESCARGAR JPG</button>
+        <a id="link-wa-manual" href="#" target="_blank" class="hidden" style="flex:1; text-decoration:none;">
+            <button type="button" class="neon-btn" style="width:100%; border-color:#25D366; color:#25D366;">📱 WHATSAPP</button>
+        </a>
+      </div>
+      <button onclick="volverCartelera()" style="background:#333; color:#fff; border:none; padding:10px 20px; border-radius:20px; margin-top:20px; cursor:pointer; font-weight:bold;">NUEVA VENTA</button>
+    </div>
+
+    <div id="export-molde">
+        <div id="exp-bg" class="exp-bg"></div>
+        <div class="exp-overlay">
+            <p id="exp-cortesia" class="exp-cortesia">CORTESÍA</p>
+            <p id="exp-nombre" class="exp-nombre"></p>
+            <img id="exp-qr" class="exp-qr" crossorigin="anonymous" src="">
+            <p id="exp-id" class="exp-id"></p>
+            <p id="exp-fecha" class="exp-fecha"></p>
+            <p id="exp-cant" class="exp-cant"></p>
+        </div>
+    </div>
+
+    <script>
+      let evtGlobal = []; let eventoSeleccionado = null;
+      
+      function togglePagoUI() { document.getElementById('pago-block').style.display = (document.getElementById('tipoVenta').value === "Venta") ? "block" : "none"; }
+      function toggleBancoUI() { const isTransf = document.getElementById('metodoPago').value === "Transferencia"; document.getElementById('banco-block').classList.toggle('hidden', !isTransf); document.getElementById('numTransaccion').required = isTransf; }
+      document.getElementById('banco').addEventListener('change', function() { const bo = document.getElementById('bancoOtro'); if(this.value === 'Otro') { bo.classList.remove('hidden'); bo.required = true; } else { bo.classList.add('hidden'); bo.required = false; } });
+
+      function arrancarCartelera() {
+        google.script.run
+        .withFailureHandler(function(error) {
+            document.getElementById('grid-eventos').innerHTML = `<div style="background:rgba(255,0,0,0.1); border:1px solid #ff4444; padding:15px; border-radius:8px; text-align:left;">
+            <h3 style="color:#ff4444; margin-top:0;">🚨 Error Detectado</h3>
+            <p style="color:#ddd; font-size:0.9rem;">${error.message}</p>
+            <p style="color:#F1A51C; font-size:0.8rem;">Solución: Vuelve al editor de código, asegúrate de pegar cada código en su archivo, haz clic en Implementar > Gestionar implementaciones > Lápiz de editar > Selecciona "Nueva versión" y guarda.</p></div>`;
+        })
+        .withSuccessHandler(function(eventos) {
+            try {
+                evtGlobal = eventos.filter(e => e.estado === "Activo");
+                const grid = document.getElementById('grid-eventos'); grid.innerHTML = '';
+                if(evtGlobal.length === 0) { grid.innerHTML = '<p style="color:#aaa; text-align:center;">No hay obras activas.</p>'; return; }
+
+                evtGlobal.forEach(evt => {
+                  let opacity = evt.vencido ? "0.5" : "1";
+                  let badgePromo = (evt.tipoPromo !== 'Ninguna' && !evt.vencido) ? `<span style="background: #F1A51C; color: black; padding: 2px 6px; border-radius: 6px; font-size: 0.65em; margin-left: 5px; vertical-align:middle;">${evt.tipoPromo}</span>` : '';
+                  let badgeText = evt.vencido ? `<span style="background: #ff4444; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.7em; margin-left: 8px;">FINALIZADO</span>` : badgePromo;
+                  
+                  let htmlAforoGlobal = '';
+                  if(evt.aforoPorFecha && !evt.vencido) {
+                      let listaFechasAforo = []; let fechasDisponibles = Object.keys(evt.aforoPorFecha);
+                      for (let i = 0; i < fechasDisponibles.length; i++) {
+                          let cupoValue = evt.aforoPorFecha[fechasDisponibles[i]];
+                          if(cupoValue > 0) listaFechasAforo.push(`<b>${fechasDisponibles[i]}:</b> <span style="color:#00ff00;">${cupoValue} disp.</span>`);
+                      }
+                      if(listaFechasAforo.length > 0) htmlAforoGlobal = `<div style="margin-top:8px; font-size: 0.75rem; color: #ccc; line-height: 1.4; border-top: 1px solid #333; padding-top: 5px;">${listaFechasAforo.join('<br>')}</div>`;
+                      else htmlAforoGlobal = `<div style="margin-top:8px; font-size: 0.8rem; color: #ff4444; font-weight:bold; border-top: 1px solid #333; padding-top: 5px;">Agotado</div>`;
+                  }
+
+                  grid.innerHTML += `<div class="event-card" onclick="abrirReserva('${evt.id}')" style="opacity: ${opacity}; cursor:pointer;">
+                    <img src="${evt.imagen}" style="width:100%; border-radius:8px;">
+                    <div style="padding: 10px 5px 5px 5px;">
+                        <h3 style="margin:0 0 5px 0; font-size:1.1rem; display:flex; align-items:center;">${evt.nombre} ${badgeText}</h3>
+                        <p style="font-size:0.8rem; color:#F1A51C; margin:0;">📍 ${evt.lugar}</p>
+                        ${htmlAforoGlobal}
+                    </div>
+                  </div>`;
+                });
+            } catch(e) { document.getElementById('grid-eventos').innerHTML = `<p style="color:#ff4444;">Error visual: ${e.message}</p>`; }
+        }).getTodosLosEventos();
+      }
+
+      function abrirReserva(id) {
+        eventoSeleccionado = evtGlobal.find(e => e.id === id);
+        if (eventoSeleccionado.vencido) { Swal.fire({ title: 'Evento Finalizado', text: 'Este evento ya se realizó.', icon: 'error', confirmButtonColor: '#F1A51C' }); return; }
+
+        document.getElementById('cartelera-view').classList.add('hidden');
+        document.getElementById('pos-view').classList.remove('hidden');
+        document.getElementById('idEvento').value = eventoSeleccionado.id;
+        document.getElementById('titulo-obra').innerText = eventoSeleccionado.nombre;
+        
+        let promoActiva = false;
+        if (eventoSeleccionado.tipoPromo !== "Ninguna") {
+            if (!eventoSeleccionado.fechaLimitePromo) promoActiva = true;
+            else if (new Date() <= new Date(eventoSeleccionado.fechaLimitePromo + "T23:59:59")) promoActiva = true;
+        }
+
+        let precioAd = eventoSeleccionado.precioGeneral;
+        let etiquetaAd = ""; let bannerPromo = ""; let colorEtiqueta = "#ccc";
+
+        if (eventoSeleccionado.tarifaUnica === "SI") {
+            document.getElementById('caja-ninos').style.display = 'none';
+            document.getElementById('cantNinos').value = 0;
+            if (promoActiva) {
+                colorEtiqueta = "#00ff00";
+                if (eventoSeleccionado.tipoPromo === "Preventa") {
+                    precioAd = eventoSeleccionado.precioPromo;
+                    etiquetaAd = `PREVENTA GENERAL ($${precioAd})`;
+                    bannerPromo = `<div style="background:rgba(241,165,28,0.2); border:1px solid #F1A51C; color:#F1A51C; padding:10px; border-radius:8px; text-align:center; font-weight:bold; margin-bottom:15px; font-size:0.85rem;">⚠️ PREVENTA ÚNICA ACTIVA<br><span style="font-weight:normal; color:#ddd;">Cobrar $${precioAd} en lugar del precio oficial ($${eventoSeleccionado.precioGeneral})</span></div>`;
+                } else if (eventoSeleccionado.tipoPromo === "2x1") {
+                    etiquetaAd = `2X1 GENERAL ($${precioAd})`;
+                    bannerPromo = `<div style="background:rgba(241,165,28,0.2); border:1px solid #F1A51C; color:#F1A51C; padding:10px; border-radius:8px; text-align:center; font-weight:bold; margin-bottom:15px; font-size:0.85rem;">⚠️ 2x1 GENERAL ACTIVO</div>`;
+                }
+            } else { etiquetaAd = `ENTRADAS GENERALES ($${precioAd})`; }
+        } else {
+            document.getElementById('caja-ninos').style.display = 'block';
+            if (promoActiva) {
+                colorEtiqueta = "#00ff00";
+                if (eventoSeleccionado.tipoPromo === "Preventa") {
+                    precioAd = eventoSeleccionado.precioPromo;
+                    etiquetaAd = `PREVENTA ($${precioAd})`;
+                    bannerPromo = `<div style="background:rgba(241,165,28,0.2); border:1px solid #F1A51C; color:#F1A51C; padding:10px; border-radius:8px; text-align:center; font-weight:bold; margin-bottom:15px; font-size:0.85rem;">⚠️ PREVENTA ADULTOS ACTIVA</div>`;
+                } else if (eventoSeleccionado.tipoPromo === "2x1") {
+                    etiquetaAd = `2X1 ADULTOS ($${precioAd})`;
+                    bannerPromo = `<div style="background:rgba(241,165,28,0.2); border:1px solid #F1A51C; color:#F1A51C; padding:10px; border-radius:8px; text-align:center; font-weight:bold; margin-bottom:15px; font-size:0.85rem;">⚠️ 2x1 ADULTOS ACTIVO</div>`;
+                }
+            } else { etiquetaAd = `ADULTOS ($${precioAd})`; }
+            document.getElementById('lbl-ninos').innerText = `NIÑOS ($${eventoSeleccionado.precioNino})`;
+        }
+
+        document.getElementById('lbl-adultos').innerText = etiquetaAd;
+        document.getElementById('lbl-adultos').style.color = colorEtiqueta;
+        document.getElementById('banner-promo-container').innerHTML = bannerPromo;
+
+        const selF = document.getElementById('fecha'); selF.innerHTML = '';
+        eventoSeleccionado.fechas.split(',').forEach(f => { if(f.trim()) selF.innerHTML += `<option value="${f.trim()}">${f.trim()}</option>`; });
+        selF.onchange = actualizarAforoVisual; selF.onchange(); togglePagoUI();
+      }
+
+      function actualizarAforoVisual() {
+        const aforoUI = document.getElementById('contador-aforo'); const cAd = document.getElementById('cantAdultos'); const cNi = document.getElementById('cantNinos'); const btnSubmit = document.getElementById('submit-button');
+        const fechaActual = document.getElementById('fecha').value; const disponibles = eventoSeleccionado.aforoPorFecha[fechaActual] || 0;
+
+        if (disponibles <= 0) {
+            aforoUI.innerHTML = `<span style="background:rgba(255,0,0,0.2); border:1px solid #ff4444; color:#ff4444; padding:5px 15px; border-radius:20px; display:inline-block;">🚨 AGOTADO para ${fechaActual}</span>`;
+            cAd.value = 0; cNi.value = 0; btnSubmit.disabled = true; btnSubmit.innerText = "FUNCIÓN AGOTADA";
+        } else {
+            aforoUI.innerHTML = `<span style="background:rgba(0,255,0,0.1); border:1px solid #00ff00; color:#00ff00; padding:5px 15px; border-radius:20px; display:inline-block;">🎟️ Quedan ${disponibles} asientos</span>`;
+            cAd.value = 1; cNi.value = 0; btnSubmit.disabled = false; btnSubmit.innerText = "PROCESAR VENTA";
+        }
+      }
+
+      function volverCartelera() { document.getElementById('ticket-view').classList.add('hidden'); document.getElementById('pos-view').classList.add('hidden'); document.getElementById('cartelera-view').classList.remove('hidden'); document.getElementById('registro-form').reset(); }
+      
+      function descargarBoletoPerfecto() {
+          const btn = document.getElementById('btn-print'); btn.innerText = "Procesando...";
+          setTimeout(() => {
+              const molde = document.getElementById('export-molde');
+              html2canvas(molde, { scale: 2, useCORS: true, logging: false }).then(canvas => {
+                  let link = document.createElement('a'); link.download = `Ticket_${document.getElementById('exp-id').innerText}.jpg`; link.href = canvas.toDataURL('image/jpeg', 1.0); link.click();
+                  btn.innerText = "⬇️ DESCARGAR JPG";
+              }).catch(err => { Swal.fire('Aviso', 'Error al generar la imagen.', 'warning'); btn.innerText = "⬇️ DESCARGAR JPG"; });
+          }, 500);
+      }
+
+      document.getElementById('registro-form').addEventListener('submit', function(e) {
+        e.preventDefault(); const btn = document.getElementById('submit-button'); btn.disabled = true; btn.innerText = "Procesando...";
+        let met = document.getElementById('metodoPago').value;
+        if(met === "Transferencia") { let bnc = document.getElementById('banco').value === "Otro" ? document.getElementById('bancoOtro').value : document.getElementById('banco').value; met = `Transf. ${bnc} (${document.getElementById('numTransaccion').value})`; }
+        
+        const data = { idEvento: document.getElementById('idEvento').value, tipoVenta: document.getElementById('tipoVenta').value, metodoPago: met, nombre: document.getElementById('nombre').value, email: document.getElementById('email').value, whatsapp: document.getElementById('whatsapp').value, fecha: document.getElementById('fecha').value, cantAdultos: document.getElementById('cantAdultos').value, cantNinos: document.getElementById('cantNinos').value };
+        
+        google.script.run.withSuccessHandler(res => { 
+            if(res.status === "ERROR") { Swal.fire('Error', res.message, 'error'); btn.disabled=false; btn.innerText="PROCESAR VENTA"; return;}
+            
+            document.getElementById('pos-view').classList.add('hidden'); document.getElementById('ticket-view').classList.remove('hidden');
+            document.getElementById('res-total').innerText = `Total: $${res.precio}`;
+            
+            const urlQr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${res.ticketId}&color=000000&bgcolor=ffffff`;
+            const txtCant = `${res.cantidad} Entradas\n<span class="exp-desglose">${res.desglose}</span>`;
+            const esCortesia = res.tipo === "Cortesia";
+            
+            document.getElementById('tk-cortesia').style.display = esCortesia ? 'block' : 'none'; document.getElementById('exp-cortesia').style.display = esCortesia ? 'block' : 'none';
+
+            if(res.evento.plantilla && res.evento.plantilla.length > 5) {
+               document.getElementById('boleto-fisico').classList.remove('hidden'); document.getElementById('btn-print').classList.remove('hidden');
+               document.getElementById('tk-bg').style.backgroundImage = `url('${res.evento.plantilla}')`; document.getElementById('tk-nombre').innerText = res.nombre; document.getElementById('tk-qr').src = urlQr; document.getElementById('tk-id').innerText = res.ticketId; document.getElementById('tk-cant').innerHTML = txtCant;
+               document.getElementById('exp-bg').style.backgroundImage = `url('${res.evento.plantilla}')`; document.getElementById('exp-nombre').innerText = res.nombre; document.getElementById('exp-qr').src = urlQr; document.getElementById('exp-id').innerText = res.ticketId; document.getElementById('exp-fecha').innerText = res.fecha; document.getElementById('exp-cant').innerHTML = txtCant;
+            } else document.getElementById('no-plantilla-msg').classList.remove('hidden');
+
+            if(res.whatsapp && res.whatsapp.length >= 9) {
+                const btnWa = document.getElementById('link-wa-manual'); btnWa.classList.remove('hidden');
+                let num = res.whatsapp; if(num.startsWith('0')) num = '593' + num.substring(1);
+                const linkBoleto = `${res.scriptUrl}?t=${res.ticketId}`;
+                const txt = encodeURIComponent(`¡Hola ${res.nombre}! Aquí tienes tu acceso para *${res.evento.nombre}*.\n\n*Reserva:* ${res.ticketId}\n*Entradas:* ${res.cantidad} (${res.desglose})\n*Función:* ${res.fecha}\n*Lugar:* ${res.evento.lugar}\n\n🎟️ *VER Y DESCARGAR MI E-TICKET AQUÍ:*\n${linkBoleto}`);
+                btnWa.href = `https://wa.me/${num}?text=${txt}`;
+            }
+            btn.disabled=false; btn.innerText="PROCESAR VENTA"; 
+        }).registrarVentaPOS(data);
+      });
+      document.addEventListener('DOMContentLoaded', arrancarCartelera);
+    </script>
+  </body>
+</html>

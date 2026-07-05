@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="referrer" content="no-referrer">
+    <title>E-Ticket | Studio 5</title>
+    <style>
+      body { background-color: #0a0a0a; color: white; font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; margin: 0; padding: 0; box-sizing: border-box; overflow-x: hidden; }
+      .logo-top { width: 100%; text-align: center; padding: 20px 0 10px 0; background: #0a0a0a; }
+      .logo-top img { width: 70px; filter: invert(1) brightness(200%); }
+      .eticket-card { width: 100%; min-height: 100vh; background: white; overflow: hidden; display: flex; flex-direction: column; position: relative; border-radius: 0; }
+      @media (min-width: 500px) { body { padding: 20px; } .eticket-card { width: 90%; max-width: 450px; min-height: auto; border-radius: 20px; box-shadow: 0 10px 40px rgba(241,165,28,0.2); margin-top: 10px; margin-bottom: 30px; } }
+      .eticket-header { width: 100%; aspect-ratio: 16/9; background-color: #111; position: relative; overflow: hidden; }
+      .eticket-header img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .ribbon-cortesia { position: absolute; top: 25px; left: -35px; background: #e50914; color: white; padding: 5px 40px; font-weight: 900; font-size: 1rem; transform: rotate(-45deg); z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.5); letter-spacing: 2px; text-transform: uppercase; }
+      .eticket-body { padding: 30px 20px; text-align: center; color: black; display: flex; flex-direction: column; align-items: center; flex-grow: 1; }
+      .cliente-nombre { font-size: 1.6rem; color: black; font-weight: 900; margin: 0 0 10px 0; text-transform: uppercase; word-wrap: break-word; line-height: 1.1; border-bottom: 2px solid #eee; padding-bottom: 12px; width: 100%;}
+      .cliente-entradas { color: #d32f2f; margin: 0 0 20px 0; background: #ffeeee; padding: 8px 25px; border-radius: 20px; display: inline-block; line-height: 1.3;}
+      .cliente-entradas strong { font-size: 1.25rem; font-weight: 900; display: block;}
+      .cliente-entradas span { font-size: 0.85rem; color: #555; font-weight: bold; }
+      .qr-box { width: 240px; height: 240px; margin: 0 auto 15px auto; border: 2px solid #f5f5f5; padding: 10px; border-radius: 15px; box-sizing: border-box; }
+      .qr-box img { width: 100%; height: 100%; display: block; }
+      .ticket-id { font-weight: bold; font-size: 1rem; color: #666; margin: 0; letter-spacing: 1px; }
+      .ticket-fecha { font-size: 1.15rem; margin: 20px 0 0 0; color: #222; font-weight: bold; border-top: 1px dashed #ddd; padding-top: 15px; width: 100%;}
+      .instrucciones { color: #aaa; font-size: 0.95rem; text-align: center; margin-top: 30px; margin-bottom: 20px; width: 100%; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div class="logo-top"><img src="https://i.imgur.com/0z5756T.png"></div>
+    
+    <? if (error !== "") { ?>
+       <h2 style="color:#ff4444; text-align:center; margin-top: 50px;"><?= error ?></h2>
+    <? } else { ?>
+        <div class="eticket-card">
+           <div class="eticket-header">
+               <? if (tipoVenta === "Cortesia") { ?>
+                   <div class="ribbon-cortesia">CORTESÍA</div>
+               <? } ?>
+               <img src="<?= afiche ?>">
+           </div>
+           <div class="eticket-body">
+              <h2 class="cliente-nombre"><?= nombre ?></h2>
+              
+              <div class="cliente-entradas">
+                 <strong>🎟️ <?= cantidad ?> <?= cantidad == 1 ? "Entrada" : "Entradas" ?></strong>
+                 <span><?= desglose ?></span>
+              </div>
+              
+              <p style="color: #F1A51C; font-weight: bold; margin: 5px 0 15px 0; font-size: 1.1rem;">📍 LUGAR: <?= lugar ?></p>
+              
+              <div class="qr-box">
+                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=<?= ticketId ?>&color=000000&bgcolor=ffffff">
+              </div>
+              
+              <p class="ticket-id"><?= ticketId ?></p>
+              <p class="ticket-fecha">📅 <?= fecha ?></p>
+              
+              <p class="instrucciones"><b>Este es tu acceso oficial.</b><br>Muestra esta pantalla en la puerta o tómale una captura para guardarlo.</p>
+           </div>
+        </div>
+    <? } ?>
+  </body>
+</html>

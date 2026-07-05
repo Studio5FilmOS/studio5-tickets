@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Pistas</title>
+    
+    <link rel="icon" type="image/png" href="https://i.imgur.com/Gezz740.png">
+    <link rel="apple-touch-icon" href="https://i.imgur.com/Gezz740.png">
+
+    <style>
+      body {
+        background-color: #111;
+        color: #eee;
+        font-family: sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        text-align: center;
+      }
+      .container {
+        padding: 20px;
+        max-width: 400px;
+      }
+      h2 { color: #f1a51c; margin-bottom: 5px; }
+      p { color: #aaa; margin-bottom: 20px; }
+      
+      /* Selector de Fecha */
+      select {
+        background-color: #333;
+        color: white;
+        border: 2px solid #555;
+        padding: 10px;
+        font-size: 1.1rem;
+        border-radius: 8px;
+        margin-bottom: 30px;
+        width: 100%;
+        text-align: center;
+        outline: none;
+      }
+      select:focus { border-color: #f1a51c; }
+
+      /* EL BOTÓN ROJO GIGANTE */
+      .panic-btn {
+        background-color: #cc0000;
+        color: white;
+        font-size: 1.5rem;
+        font-weight: bold;
+        width: 220px;
+        height: 220px;
+        border-radius: 50%;
+        border: 6px solid #ff4444;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 0 25px rgba(204, 0, 0, 0.6);
+        transition: transform 0.1s, background-color 0.3s;
+        user-select: none;
+      }
+      .panic-btn:active { transform: scale(0.95); }
+      
+      .status-box {
+        margin-top: 30px;
+        padding: 15px;
+        border-radius: 8px;
+        font-size: 1.1em;
+        min-height: 20px;
+      }
+      .success { color: #00ff00; border: 1px solid #00ff00; }
+      .error { color: #ff4444; border: 1px solid #ff4444; }
+      
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <img src="https://i.imgur.com/Gezz740.png" style="width: 60px; margin-bottom: 10px;">
+      <h2>MOMENTO "WOW"</h2>
+      <p>Selecciona la función y espera la señal...</p>
+
+     <select id="fechaSeleccionada">
+        <option value="PRUEBA">🧪 MODO TEST (Solo a mí)</option> <option value="5 de diciembre" selected>5 de diciembre</option>
+        <option value="27 de noviembre">27 de noviembre</option>
+      </select>
+
+          <div id="btn-lanzar" class="panic-btn" onclick="confirmarEnvio()">
+        <span>ENVIAR</span>
+        <span style="font-size: 2rem;">🕵️</span>
+        <span>PISTA</span>
+      </div>
+
+      <div id="status" class="status-box hidden"></div>
+    </div>
+
+    <script>
+      function confirmarEnvio() {
+        const selector = document.getElementById('fechaSeleccionada');
+        const fecha = selector.value;
+
+        // Doble confirmación con la fecha seleccionada
+        if (confirm("⚠️ ¿CONFIRMAR ENVÍO MASIVO?\n\nSe enviará la pista a los asistentes de: " + fecha)) {
+          
+          // Cambiar estado del botón
+          const btn = document.getElementById('btn-lanzar');
+          btn.style.backgroundColor = "#333";
+          btn.style.borderColor = "#555";
+          btn.innerText = "ENVIANDO...";
+          btn.onclick = null; // Bloquear clic
+          selector.disabled = true; // Bloquear selector
+          
+          google.script.run
+            .withSuccessHandler(function(res) {
+               const statusDiv = document.getElementById('status');
+               statusDiv.innerText = res;
+               statusDiv.className = 'status-box success';
+               statusDiv.classList.remove('hidden');
+               btn.style.display = 'none'; // Ocultar botón al finalizar
+            })
+            .withFailureHandler(function(err) {
+               const statusDiv = document.getElementById('status');
+               statusDiv.innerText = "Error: " + err.message;
+               statusDiv.className = 'status-box error';
+               statusDiv.classList.remove('hidden');
+               
+               // Restaurar botón
+               btn.style.backgroundColor = "#cc0000";
+               btn.style.borderColor = "#ff4444";
+               btn.innerHTML = "<span>REINTENTAR</span>";
+               btn.onclick = confirmarEnvio;
+               selector.disabled = false;
+            })
+            .enviarPistaMasiva(fecha); // Enviamos la fecha seleccionada al servidor
+        }
+      }
+    </script>
+  </body>
+</html>
