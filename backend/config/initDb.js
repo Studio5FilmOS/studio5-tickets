@@ -25,6 +25,11 @@ const initDatabase = async () => {
       console.log('Datos semilla e iniciales insertados con éxito.');
     } else {
       console.log('Base de datos ya inicializada. Cargando tablas existentes.');
+      // Asegurar que las credenciales semilla tengan el hash correcto
+      await query(
+        "UPDATE users SET password_hash = '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa' WHERE email IN ('admin@studio5.com', 'staff@studio5.com')"
+      );
+      console.log('Credenciales de administrador y staff verificadas/actualizadas.');
     }
   } catch (err) {
     console.error('Fallo al inicializar base de datos de forma automática:', err);

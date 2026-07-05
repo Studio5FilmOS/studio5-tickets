@@ -1,7 +1,7 @@
 -- 1. INSERTAR USUARIOS DE PRUEBA (Pre-configurados con bcrypt para password: "password123")
 INSERT INTO users (name, email, phone, password_hash, role) VALUES
-('Administrador Studio 5', 'admin@studio5.com', '0999999999', '$2a$10$d.bNn4V58h/R75jLg2dGce0V1lGz8gNnE2J/YnU/Y6r2E3dE2e2q2', 'admin'),
-('Staff Puerta 1', 'staff@studio5.com', '0888888888', '$2a$10$d.bNn4V58h/R75jLg2dGce0V1lGz8gNnE2J/YnU/Y6r2E3dE2e2q2', 'staff');
+('Administrador Studio 5', 'admin@studio5.com', '0999999999', '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa', 'admin'),
+('Staff Puerta 1', 'staff@studio5.com', '0888888888', '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa', 'staff');
 
 -- 2. INSERTAR EVENTO DE MUESTRA 1 (NUMERADO - CON ASASIENTOS)
 INSERT INTO events (id, title, description, venue, banner_url, ticket_template_url, price_adult, price_child, capacity_total, is_single_rate, has_assigned_seats, seating_layout, promo_type, price_promo, promo_deadline, status) VALUES
