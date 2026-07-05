@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Play, ScanBarcode, Flame, ShieldAlert, LogIn, LogOut } from 'lucide-react';
+import { Play, ScanLine, Flame, ShieldAlert, LogIn, LogOut } from 'lucide-react';
 
 // Importar Vistas (Pages)
 import Cartelera from './pages/Cartelera';
@@ -32,7 +32,7 @@ const BottomNavigation = () => {
       {isAuthenticated && (
         <>
           <Link to="/staff/scan" className={`mobile-nav-item ${location.pathname === '/staff/scan' ? 'active' : ''}`}>
-            <ScanBarcode size={20} />
+            <ScanLine size={20} />
             <span>Escáner</span>
           </Link>
           <Link to="/staff/pistas" className={`mobile-nav-item ${location.pathname === '/staff/pistas' ? 'active' : ''}`}>

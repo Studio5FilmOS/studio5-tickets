@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
-import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Image, Trash2, Plus } from 'lucide-react';
+import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('ventas'); // 'ventas' o 'crear'
@@ -348,68 +348,73 @@ const AdminDashboard = () => {
 
   return (
     <div className="fade-in">
-      {/* Selector de Pestañas */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <button 
-          onClick={() => setActiveTab('ventas')} 
-          className={activeTab === 'ventas' ? 'btn-primary' : 'btn-secondary'}
-          style={{ flex: '1', padding: '10px' }}
-        >
-          Panel Contable / Ventas
-        </button>
-        <button 
-          onClick={() => setActiveTab('crear')} 
-          className={activeTab === 'crear' ? 'btn-primary' : 'btn-secondary'}
-          style={{ flex: '1', padding: '10px' }}
-        >
-          Crear Evento
-        </button>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+        <div style={{
+          width: '46px', height: '46px', borderRadius: '14px',
+          background: 'linear-gradient(135deg, rgba(222,184,65,0.2), rgba(222,184,65,0.05))',
+          border: '1px solid rgba(222,184,65,0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+        }}>
+          <ShieldCheck size={22} color="#DEB841" />
+        </div>
+        <div>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>Panel de Administración</h1>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Studio 5 · Sistema de Gestión</p>
+        </div>
+      </div>
+
+      {/* Tabs Premium */}
+      <div style={{
+        display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '14px',
+        padding: '4px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.07)'
+      }}>
+        {[
+          { id: 'ventas', icon: LayoutGrid, label: 'Ventas' },
+          { id: 'crear', icon: PlusCircle, label: 'Nuevo Evento' }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+              padding: '11px 14px', borderRadius: '11px', border: 'none', cursor: 'pointer',
+              fontWeight: '600', fontSize: '0.85rem', transition: 'all 0.25s',
+              background: activeTab === tab.id
+                ? 'linear-gradient(135deg, #DEB841, #b08d2b)'
+                : 'transparent',
+              color: activeTab === tab.id ? '#000' : 'var(--text-muted)',
+              boxShadow: activeTab === tab.id ? '0 4px 12px rgba(222,184,65,0.25)' : 'none'
+            }}
+          >
+            <tab.icon size={16} /> {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* PESTAÑA: PANEL CONTABLE Y VENTAS */}
       {activeTab === 'ventas' && (
         <div className="fade-in">
           {/* Métricas */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(52, 199, 89, 0.1)', borderLeft: '3px solid var(--success)' }}>
-              <div style={{ background: 'var(--success)', padding: '8px', borderRadius: '8px', color: '#000' }}>
-                <DollarSign size={20} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '22px' }}>
+            {[
+              { label: 'Cobrado', value: `$${metrics.revenuePaid.toFixed(2)}`, icon: TrendingUp, color: '#34c759', bg: 'rgba(52,199,89,0.08)', border: 'rgba(52,199,89,0.2)' },
+              { label: 'Pendiente', value: `$${metrics.revenuePending.toFixed(2)}`, icon: DollarSign, color: '#ffcc00', bg: 'rgba(255,204,0,0.08)', border: 'rgba(255,204,0,0.2)' },
+              { label: 'Vendidas', value: metrics.totalTicketsSold, icon: Users, color: '#DEB841', bg: 'rgba(222,184,65,0.08)', border: 'rgba(222,184,65,0.2)' },
+              { label: 'Cortesías', value: metrics.cortesiasCount, icon: Sparkles, color: '#888', bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.1)' },
+            ].map((m, i) => (
+              <div key={i} style={{
+                background: m.bg, border: `1px solid ${m.border}`,
+                borderRadius: '16px', padding: '14px 16px',
+                display: 'flex', flexDirection: 'column', gap: '6px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '600' }}>{m.label}</span>
+                  <m.icon size={15} color={m.color} />
+                </div>
+                <strong style={{ fontSize: '1.3rem', color: m.color, fontWeight: 800, letterSpacing: '-0.5px' }}>{m.value}</strong>
               </div>
-              <div>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase' }}>Ingresos Cobrados</span>
-                <strong style={{ fontSize: '1.15rem', color: 'var(--success)' }}>${metrics.revenuePaid.toFixed(2)}</strong>
-              </div>
-            </div>
-
-            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255, 204, 0, 0.1)', borderLeft: '3px solid var(--warning)' }}>
-              <div style={{ background: 'var(--warning)', padding: '8px', borderRadius: '8px', color: '#000' }}>
-                <DollarSign size={20} />
-              </div>
-              <div>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase' }}>Reservas Pendientes</span>
-                <strong style={{ fontSize: '1.15rem', color: 'var(--warning)' }}>${metrics.revenuePending.toFixed(2)}</strong>
-              </div>
-            </div>
-
-            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(222, 184, 65, 0.1)', borderLeft: '3px solid var(--accent)' }}>
-              <div style={{ background: 'var(--accent)', padding: '8px', borderRadius: '8px', color: '#000' }}>
-                <Users size={20} />
-              </div>
-              <div>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase' }}>Entradas Vendidas</span>
-                <strong style={{ fontSize: '1.15rem', color: '#fff' }}>{metrics.totalTicketsSold}</strong>
-              </div>
-            </div>
-
-            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255, 255, 255, 0.05)', borderLeft: '3px solid #8e8e93' }}>
-              <div style={{ background: '#333', padding: '8px', borderRadius: '8px', color: '#fff' }}>
-                <Sparkles size={20} />
-              </div>
-              <div>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase' }}>Cortesías Emitidas</span>
-                <strong style={{ fontSize: '1.15rem', color: 'var(--accent)' }}>{metrics.cortesiasCount}</strong>
-              </div>
-            </div>
+            ))}
           </div>
 
           {/* Filtros */}
@@ -470,65 +475,105 @@ const AdminDashboard = () => {
           </div>
 
           {/* Listado */}
-          <div className="glass-panel" style={{ padding: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ color: 'var(--accent)', fontSize: '1.1rem' }}>Asistentes y Ventas ({filteredOrders.length})</h3>
-              <button onClick={fetchData} className="btn-secondary" style={{ width: 'auto', padding: '8px 12px' }}>
-                <RefreshCw size={14} />
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '20px', overflow: 'hidden' }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '16px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)'
+            }}>
+              <div>
+                <h3 style={{ color: '#fff', fontSize: '0.95rem', fontWeight: '700' }}>Registro de Ventas</h3>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>{filteredOrders.length} registros</p>
+              </div>
+              <button onClick={fetchData} style={{
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '10px', padding: '8px 10px', cursor: 'pointer', color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem'
+              }}>
+                <RefreshCw size={13} /> Actualizar
               </button>
             </div>
 
             {loadingOrders ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '30px 0' }}>
-                <div className="spinner"></div>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+                <div className="spinner" />
               </div>
             ) : filteredOrders.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No hay ventas que coincidan con los filtros.</p>
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <Users size={32} color="var(--text-muted)" style={{ marginBottom: '10px', opacity: 0.4 }} />
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No hay ventas que coincidan con los filtros.</p>
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {filteredOrders.map((o) => {
-                  const dateFormatted = new Date(o.schedule_time).toLocaleDateString('es-EC', {
-                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                  });
-                  const totalT = parseInt(o.ticket_count_adult) + parseInt(o.ticket_count_child);
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {filteredOrders.map((o, idx) => {
+                  const dateFormatted = o.schedule_time
+                    ? new Date(o.schedule_time).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                    : 'Sin fecha';
+                  const totalT = parseInt(o.ticket_count_adult || 0) + parseInt(o.ticket_count_child || 0);
+                  const statusColor = o.payment_status === 'Pagado' ? '#34c759' : o.payment_status === 'Anulado' ? '#ff3b30' : '#ffcc00';
+                  const statusBg = o.payment_status === 'Pagado' ? 'rgba(52,199,89,0.1)' : o.payment_status === 'Anulado' ? 'rgba(255,59,48,0.1)' : 'rgba(255,204,0,0.1)';
 
                   return (
-                    <div key={o.id} className="glass-card" style={{ fontSize: '0.8rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: 'bold', color: 'var(--accent)' }}>{o.order_num}</span>
-                        <span className={`badge ${
-                          o.payment_status === 'Pagado' ? 'badge-active' : 
-                          o.payment_status === 'Anulado' ? 'badge-inactive' : 'badge-promo'
-                        }`}>
+                    <div key={o.id} style={{
+                      padding: '16px 18px', borderBottom: idx < filteredOrders.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                      transition: 'background 0.2s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      {/* Fila 1: orden + estado */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--accent)', letterSpacing: '0.5px' }}>#{o.order_num}</span>
+                        <span style={{
+                          fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px',
+                          padding: '3px 9px', borderRadius: '6px',
+                          background: statusBg, color: statusColor,
+                          border: `1px solid ${statusColor}33`
+                        }}>
                           {o.payment_status}
                         </span>
                       </div>
 
-                      <p style={{ color: '#fff', fontWeight: '600', marginBottom: '2px' }}>{o.customer_name}</p>
-                      <p style={{ color: 'var(--text-muted)' }}>🎬 {o.event_title} | 📅 {dateFormatted}</p>
-                      <p style={{ color: 'var(--text-muted)' }}>🎟️ Entradas: <b>{totalT}</b> | Asiento: <b>{o.desglose || 'Sin enumerar'}</b></p>
-                      <p style={{ color: 'var(--text-muted)' }}>📞 WhatsApp: <b>{o.customer_whatsapp || 'N/A'}</b> | Email: <b>{o.customer_email || 'N/A'}</b></p>
+                      {/* Fila 2: nombre */}
+                      <p style={{ fontSize: '0.95rem', fontWeight: '700', color: '#fff', marginBottom: '4px' }}>{o.customer_name}</p>
 
-                      <p style={{ color: 'var(--accent)', fontWeight: 'bold', marginTop: '4px' }}>Monto: ${parseFloat(o.amount_total).toFixed(2)} ({o.payment_method})</p>
+                      {/* Fila 3: detalles */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginBottom: '10px', fontSize: '0.77rem', color: 'var(--text-muted)' }}>
+                        <span>🎬 {o.event_title}</span>
+                        <span>📅 {dateFormatted}</span>
+                        <span>🎟️ {totalT} entrada{totalT !== 1 ? 's' : ''}</span>
+                        {o.desglose && <span>🪑 {o.desglose}</span>}
+                      </div>
 
-                      <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '10px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginBottom: '12px', fontSize: '0.77rem', color: 'var(--text-muted)' }}>
+                        <span>📞 {o.customer_whatsapp || 'N/A'}</span>
+                        <span>📧 {o.customer_email || 'N/A'}</span>
+                        <span style={{ color: 'var(--accent)', fontWeight: '700' }}>${parseFloat(o.amount_total || 0).toFixed(2)} · {o.payment_method}</span>
+                      </div>
+
+                      {/* Acciones */}
+                      <div style={{ display: 'flex', gap: '8px' }}>
                         {o.payment_status === 'Pendiente' && (
-                          <button 
+                          <button
                             onClick={() => handleUpdateStatus(o.id, o.payment_status, 'Pagado')}
-                            className="btn-primary" 
-                            style={{ flex: '1', padding: '6px', fontSize: '0.75rem', background: 'var(--success)' }}
+                            style={{
+                              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                              padding: '8px', borderRadius: '10px', border: '1px solid rgba(52,199,89,0.25)', cursor: 'pointer',
+                              background: 'rgba(52,199,89,0.15)', color: '#34c759', fontWeight: '700', fontSize: '0.78rem'
+                            }}
                           >
-                            <Check size={12} /> Registrar Pago
+                            <Check size={13} /> Confirmar Pago
                           </button>
                         )}
-                        
                         {o.payment_status !== 'Anulado' && (
-                          <button 
+                          <button
                             onClick={() => handleUpdateStatus(o.id, o.payment_status, 'Anulado')}
-                            className="btn-secondary" 
-                            style={{ flex: '1', padding: '6px', fontSize: '0.75rem', color: 'var(--error)' }}
+                            style={{
+                              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                              padding: '8px', borderRadius: '10px', border: '1px solid rgba(255,59,48,0.2)', cursor: 'pointer',
+                              background: 'rgba(255,59,48,0.08)', color: '#ff3b30', fontWeight: '700', fontSize: '0.78rem'
+                            }}
                           >
-                            <X size={12} /> Anular Compra
+                            <X size={13} /> Anular
                           </button>
                         )}
                       </div>
@@ -544,7 +589,15 @@ const AdminDashboard = () => {
       {/* PESTAÑA: CREAR NUEVO EVENTO */}
       {activeTab === 'crear' && (
         <div className="glass-panel fade-in">
-          <h3 style={{ color: 'var(--accent)', marginBottom: '15px' }}>Crear Nuevo Evento</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(222,184,65,0.15)', border: '1px solid rgba(222,184,65,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <PlusCircle size={18} color="#DEB841" />
+            </div>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: '1rem', fontWeight: '800' }}>Crear Nuevo Evento</h3>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Completa los datos de la producción</p>
+            </div>
+          </div>
           
           <form onSubmit={handleCreateEvent}>
             <label>Nombre del Evento *</label>

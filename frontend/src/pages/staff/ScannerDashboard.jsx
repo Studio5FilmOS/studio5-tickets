@@ -1,55 +1,104 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
-import { ScanBarcode, AlertTriangle, CheckCircle, XCircle, Users, Check } from 'lucide-react';
+import {
+  ScanLine, CheckCircle2, XCircle, AlertTriangle, Users,
+  Check, RefreshCw, Search, ChevronRight, Camera, ClipboardList,
+  Ticket, UserCheck, Filter, X
+} from 'lucide-react';
 
-const ScannerDashboard = () => {
-  // Estados para manejar el resultado del escaneo
-  const [scanResult, setScanResult] = useState(null); // { status, message, order, tickets }
+/* ================================================================
+   PESTAÑA: ESCÁNER QR
+   ================================================================ */
+const QRScannerTab = () => {
+  const [scanResult, setScanResult] = useState(null);
   const [selectedTicketIds, setSelectedTicketIds] = useState([]);
-  const [isScanning, setIsScanning] = useState(true);
+  const [isScanning, setIsScanning] = useState(false);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
-  const scannerRef = useRef(null);
+  const [scannerReady, setScannerReady] = useState(false);
+  const html5QrCodeRef = useRef(null);
+  const scannerContainerId = 'qr-scanner-viewport';
 
-  useEffect(() => {
-    // Inicializar el escáner QR en el contenedor 'reader'
-    const scanner = new Html5QrcodeScanner(
-      'reader',
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0
-      },
-      false
-    );
-
-    scanner.render(onScanSuccess, onScanFailure);
-    scannerRef.current = scanner;
-
-    return () => {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch(err => console.error('Error al desmontar escáner:', err));
-      }
-    };
-  }, []);
-
-  const onScanSuccess = async (decodedText) => {
-    if (!scannerRef.current) return;
+  const startScanner = useCallback(async () => {
+    if (html5QrCodeRef.current) return;
 
     try {
-      scannerRef.current.pause(true);
-    } catch (e) {
-      console.warn('Fallo al pausar escáner:', e);
-    }
+      const devices = await Html5Qrcode.getCameras();
+      if (!devices || devices.length === 0) {
+        Swal.fire('Sin cámara', 'No se encontró ninguna cámara en este dispositivo.', 'error');
+        return;
+      }
 
+      // Priorizar cámara trasera (environment)
+      let cameraId = devices[devices.length - 1].id; // Generalmente la última es la trasera
+      const backCamera = devices.find(d =>
+        d.label.toLowerCase().includes('back') ||
+        d.label.toLowerCase().includes('trasera') ||
+        d.label.toLowerCase().includes('rear') ||
+        d.label.toLowerCase().includes('environment')
+      );
+      if (backCamera) cameraId = backCamera.id;
+
+      const html5QrCode = new Html5Qrcode(scannerContainerId);
+      html5QrCodeRef.current = html5QrCode;
+
+      await html5QrCode.start(
+        { deviceId: { exact: cameraId } },
+        { fps: 12, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
+        onScanSuccess,
+        () => {} // Silenciar errores de frame
+      );
+
+      setIsScanning(true);
+    } catch (err) {
+      console.error('Error al iniciar cámara:', err);
+      // Fallback: usar constraint de entorno directamente
+      try {
+        const html5QrCode = new Html5Qrcode(scannerContainerId);
+        html5QrCodeRef.current = html5QrCode;
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          { fps: 12, qrbox: { width: 240, height: 240 } },
+          onScanSuccess,
+          () => {}
+        );
+        setIsScanning(true);
+      } catch (fallbackErr) {
+        Swal.fire('Error de Cámara', 'No se pudo acceder a la cámara. Verifica los permisos del navegador.', 'error');
+      }
+    }
+  }, []);
+
+  const stopScanner = useCallback(async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+        html5QrCodeRef.current.clear();
+      } catch (e) {
+        console.warn('Error al detener cámara:', e);
+      }
+      html5QrCodeRef.current = null;
+    }
     setIsScanning(false);
-    
-    // Cargar datos en el servidor
+  }, []);
+
+  useEffect(() => {
+    setScannerReady(true);
+    return () => {
+      stopScanner();
+    };
+  }, [stopScanner]);
+
+  const onScanSuccess = async (decodedText) => {
+    await stopScanner();
+
     Swal.fire({
-      title: 'Cargando datos...',
+      title: 'Verificando QR...',
       allowOutsideClick: false,
-      didOpen: () => { Swal.showLoading(); }
+      background: '#0d0d0f',
+      color: '#f5f5f7',
+      didOpen: () => Swal.showLoading()
     });
 
     try {
@@ -57,199 +106,601 @@ const ScannerDashboard = () => {
       Swal.close();
 
       if (res.data.status === 'ERROR') {
-        Swal.fire('Error', res.data.message, 'error');
-        resetScanner();
+        Swal.fire({
+          title: 'QR No Válido',
+          text: res.data.message,
+          icon: 'error',
+          background: '#0d0d0f',
+          color: '#f5f5f7',
+          confirmButtonColor: '#DEB841'
+        });
+        startScanner();
       } else {
-        // Guardar resultado (OK o ADVERTENCIA por pago pendiente)
         setScanResult(res.data);
-        // Pre-seleccionar todos los tickets que estén activos/disponibles
         const activeIds = res.data.tickets.filter(t => t.status === 'Active').map(t => t.id);
         setSelectedTicketIds(activeIds);
       }
     } catch (err) {
       Swal.close();
-      console.error(err);
-      Swal.fire('Error de red', 'No se pudo conectar con el servidor para validar el QR.', 'error');
-      resetScanner();
+      Swal.fire('Error de Red', 'No se pudo conectar con el servidor.', 'error');
+      startScanner();
     }
   };
 
-  const onScanFailure = (error) => {
-    // Lecturas fallidas continuas se ignoran silenciosamente
-  };
-
-  // Reanudar cámara y limpiar estados
   const resetScanner = () => {
     setScanResult(null);
     setSelectedTicketIds([]);
-    setIsScanning(true);
-    if (scannerRef.current) {
-      try {
-        scannerRef.current.resume();
-      } catch (e) {
-        console.warn('Error al reanudar cámara:', e);
-      }
-    }
+    startScanner();
   };
 
-  // Manejar el check-in (Ingreso parcial / total)
   const handleCheckIn = async () => {
-    if (selectedTicketIds.length === 0) {
-      Swal.fire('Atención', 'Selecciona al menos un boleto para registrar el ingreso.', 'warning');
-      return;
-    }
-
+    if (selectedTicketIds.length === 0) return;
     setIsCheckingIn(true);
     try {
       const res = await api.post('/tickets/check-in', { ticketIds: selectedTicketIds });
-      
       if (res.data.status === 'OK') {
         await Swal.fire({
-          title: 'Ingreso Registrado',
+          title: '✅ Ingreso Confirmado',
           text: res.data.message,
           icon: 'success',
-          timer: 2000,
-          showConfirmButton: false
+          timer: 2200,
+          showConfirmButton: false,
+          background: '#0d0d0f',
+          color: '#f5f5f7'
         });
-        
-        // Volver a activar escaneo automáticamente
         resetScanner();
       } else {
         Swal.fire('Error', res.data.message, 'error');
       }
     } catch (err) {
-      console.error(err);
-      Swal.fire('Error', 'No se pudo realizar el check-in de las entradas.', 'error');
+      Swal.fire('Error', 'No se pudo registrar el ingreso.', 'error');
     } finally {
       setIsCheckingIn(false);
     }
   };
 
-  // Toggle de selección de ticket individual
-  const toggleTicketSelection = (ticketId) => {
-    if (selectedTicketIds.includes(ticketId)) {
-      setSelectedTicketIds(selectedTicketIds.filter(id => id !== ticketId));
-    } else {
-      setSelectedTicketIds([...selectedTicketIds, ticketId]);
-    }
+  const toggleTicket = (id) => {
+    setSelectedTicketIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
   };
 
   return (
-    <div className="glass-panel fade-in" style={{ textAlign: 'center' }}>
-      <h2 style={{ fontSize: '1.4rem', fontWeight: 900, marginBottom: '5px', color: 'var(--accent)' }}>PORTERÍA - ESCÁNER</h2>
-      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '20px' }}>
-        {isScanning ? 'Enfoque el código QR único de la compra' : 'Detalle de ingreso del grupo'}
-      </p>
+    <div>
+      {/* Vista de escaneo */}
+      {!scanResult && (
+        <div style={{ textAlign: 'center' }}>
+          {/* Viewport del escáner */}
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: '340px',
+            margin: '0 auto 24px',
+            borderRadius: '24px',
+            overflow: 'hidden',
+            background: '#000',
+            aspectRatio: '1/1',
+            border: '2px solid rgba(222,184,65,0.3)',
+            boxShadow: '0 0 40px rgba(222,184,65,0.12)'
+          }}>
+            <div id={scannerContainerId} style={{ width: '100%', height: '100%' }} />
 
-      {/* 1. MODO ESCANEO ACTIVO */}
-      <div 
-        style={{ 
-          background: '#fff', borderRadius: '16px', overflow: 'hidden', 
-          maxWidth: '380px', margin: '0 auto 20px', border: '2px solid var(--glass-border)',
-          display: isScanning ? 'block' : 'none'
-        }}
-      >
-        <div id="reader" style={{ width: '100%' }}></div>
-      </div>
+            {/* Overlay de guía si cámara inactiva */}
+            {!isScanning && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(0,0,0,0.85)', gap: '16px'
+              }}>
+                <Camera size={48} color="#DEB841" strokeWidth={1.5} />
+                <p style={{ color: '#ccc', fontSize: '0.85rem' }}>Cámara detenida</p>
+              </div>
+            )}
 
-      {isScanning && (
-        <div style={{ marginTop: '15px', fontSize: '0.8rem', color: 'var(--success)' }}>
-          ● Cámara Activa - Escaneando...
+            {/* Guía de escaneo animada */}
+            {isScanning && (
+              <div style={{
+                position: 'absolute', inset: 0, pointerEvents: 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <div style={{
+                  width: '200px', height: '200px', position: 'relative'
+                }}>
+                  {/* Esquinas del visor */}
+                  {[
+                    { top: 0, left: 0, borderTop: '3px solid #DEB841', borderLeft: '3px solid #DEB841', borderRadius: '4px 0 0 0' },
+                    { top: 0, right: 0, borderTop: '3px solid #DEB841', borderRight: '3px solid #DEB841', borderRadius: '0 4px 0 0' },
+                    { bottom: 0, left: 0, borderBottom: '3px solid #DEB841', borderLeft: '3px solid #DEB841', borderRadius: '0 0 0 4px' },
+                    { bottom: 0, right: 0, borderBottom: '3px solid #DEB841', borderRight: '3px solid #DEB841', borderRadius: '0 0 4px 0' },
+                  ].map((s, i) => (
+                    <div key={i} style={{ position: 'absolute', width: '22px', height: '22px', ...s }} />
+                  ))}
+
+                  {/* Línea de escaneo animada */}
+                  <div style={{
+                    position: 'absolute', left: '10px', right: '10px', height: '2px',
+                    background: 'linear-gradient(90deg, transparent, #DEB841, transparent)',
+                    animation: 'scanLine 2s ease-in-out infinite',
+                    top: '50%'
+                  }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Estado de la cámara */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            padding: '8px 18px', borderRadius: '30px', marginBottom: '20px',
+            background: isScanning ? 'rgba(52,199,89,0.12)' : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${isScanning ? 'rgba(52,199,89,0.3)' : 'rgba(255,255,255,0.1)'}`,
+            fontSize: '0.8rem', color: isScanning ? '#34c759' : '#888'
+          }}>
+            <span style={{
+              width: '7px', height: '7px', borderRadius: '50%',
+              background: isScanning ? '#34c759' : '#555',
+              animation: isScanning ? 'pulse 1.5s ease-in-out infinite' : 'none'
+            }} />
+            {isScanning ? 'Cámara Activa · Escaneando...' : 'Cámara inactiva'}
+          </div>
+
+          {/* Botón iniciar/detener */}
+          <button
+            onClick={isScanning ? stopScanner : startScanner}
+            className={isScanning ? 'btn-secondary' : 'btn-primary'}
+            style={{ maxWidth: '240px', margin: '0 auto' }}
+          >
+            {isScanning ? (
+              <><X size={16} /> Detener Cámara</>
+            ) : (
+              <><Camera size={16} /> Activar Escáner</>
+            )}
+          </button>
         </div>
       )}
 
-      {/* 2. MODO INTERACTIVO (RESULTADO DE ESCANEO DE COMPRA) */}
+      {/* Vista de resultado del QR */}
       {scanResult && (
-        <div className="fade-in" style={{ textAlign: 'left' }}>
-          {/* Tarjeta con detalles de compra */}
-          <div className="glass-card" style={{ marginBottom: '15px', borderLeft: '4px solid var(--accent)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '1.05rem', color: '#fff' }}>{scanResult.order.customer_name}</h3>
-              <span className={`badge ${scanResult.order.payment_status === 'Pagado' ? 'badge-active' : 'badge-promo'}`}>
-                {scanResult.order.payment_status}
-              </span>
-            </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Orden: <b>{scanResult.order.order_num}</b> | Evento: <b>{scanResult.order.event_title}</b>
+        <div className="fade-in">
+          {/* Header de estado */}
+          <div style={{
+            textAlign: 'center', padding: '20px',
+            background: scanResult.status === 'OK'
+              ? 'rgba(52,199,89,0.08)'
+              : 'rgba(255,204,0,0.08)',
+            borderRadius: '20px', marginBottom: '16px',
+            border: `1px solid ${scanResult.status === 'OK' ? 'rgba(52,199,89,0.2)' : 'rgba(255,204,0,0.2)'}`
+          }}>
+            {scanResult.status === 'OK' ? (
+              <CheckCircle2 size={40} color="#34c759" style={{ marginBottom: '8px' }} />
+            ) : (
+              <AlertTriangle size={40} color="#ffcc00" style={{ marginBottom: '8px' }} />
+            )}
+            <h3 style={{ fontSize: '1.1rem', color: '#fff', marginBottom: '4px' }}>
+              {scanResult.order.customer_name}
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              {scanResult.order.event_title}
+            </p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--accent)', marginTop: '4px', fontWeight: '600' }}>
+              Orden #{scanResult.order.order_num}
             </p>
           </div>
 
-          {/* Advertencia si el pago está pendiente */}
+          {/* Advertencia pago pendiente */}
           {scanResult.status === 'ADVERTENCIA' && (
-            <div style={{ 
-              background: 'rgba(255, 204, 0, 0.15)', border: '1px solid var(--warning)', 
-              borderRadius: '12px', padding: '12px', marginBottom: '15px', fontSize: '0.8rem', 
-              color: 'var(--warning)', fontWeight: 'bold'
+            <div style={{
+              background: 'rgba(255,204,0,0.1)', border: '1px solid rgba(255,204,0,0.3)',
+              borderRadius: '14px', padding: '14px', marginBottom: '16px',
+              fontSize: '0.82rem', color: '#ffcc00', fontWeight: '600', textAlign: 'center'
             }}>
-              ⚠️ PAGO PENDIENTE: Cobrar ${parseFloat(scanResult.order.amount_total).toFixed(2)} en puerta antes de permitir acceso.
+              ⚠️ COBRAR ${parseFloat(scanResult.order.amount_total).toFixed(2)} EN PUERTA
             </div>
           )}
 
-          {/* Listado interactivo de boletos / butacas (check-in parcial) */}
-          <h4 style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '10px' }}>
-            Selecciona quiénes ingresan:
-          </h4>
+          {/* Lista de tickets */}
+          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px', fontWeight: '600' }}>
+            Selecciona quiénes ingresan
+          </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
             {scanResult.tickets.map((t) => {
               const isUsed = t.status === 'Used';
-              const labelText = t.seat_label ? `Butaca ${t.seat_label} (${t.ticket_type})` : `Entrada ${t.ticket_type}`;
-              
+              const isSelected = selectedTicketIds.includes(t.id);
+              const label = t.seat_label
+                ? `Butaca ${t.seat_label} · ${t.ticket_type}`
+                : `Entrada ${t.ticket_type}`;
+
               return (
-                <div 
-                  key={t.id} 
-                  onClick={() => !isUsed && toggleTicketSelection(t.id)}
-                  style={{ 
+                <div
+                  key={t.id}
+                  onClick={() => !isUsed && toggleTicket(t.id)}
+                  style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: isUsed ? 'rgba(255,59,48,0.06)' : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${isUsed ? 'rgba(255,59,48,0.1)' : 'var(--glass-border)'}`,
-                    padding: '12px 15px', borderRadius: '12px',
-                    cursor: isUsed ? 'not-allowed' : 'pointer',
-                    opacity: isUsed ? 0.6 : 1
+                    padding: '14px 16px', borderRadius: '14px', cursor: isUsed ? 'default' : 'pointer',
+                    transition: 'all 0.2s ease', opacity: isUsed ? 0.5 : 1,
+                    background: isUsed
+                      ? 'rgba(255,59,48,0.05)'
+                      : isSelected
+                        ? 'rgba(52,199,89,0.08)'
+                        : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${isUsed
+                      ? 'rgba(255,59,48,0.15)'
+                      : isSelected
+                        ? 'rgba(52,199,89,0.25)'
+                        : 'var(--glass-border)'}`,
                   }}
                 >
-                  <span style={{ fontSize: '0.85rem', fontWeight: '600', color: isUsed ? 'var(--text-muted)' : '#fff' }}>
-                    {labelText}
-                  </span>
-                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Ticket size={16} color={isUsed ? '#ff3b30' : isSelected ? '#34c759' : '#888'} />
+                    <span style={{ fontSize: '0.87rem', fontWeight: '600', color: isUsed ? '#666' : '#fff' }}>
+                      {label}
+                    </span>
+                  </div>
+
                   {isUsed ? (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--error)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      Adentro
+                    <span style={{ fontSize: '0.72rem', color: '#ff3b30', fontWeight: '700', background: 'rgba(255,59,48,0.1)', padding: '3px 8px', borderRadius: '6px' }}>
+                      INGRESÓ
                     </span>
                   ) : (
-                    <input 
-                      type="checkbox" 
-                      checked={selectedTicketIds.includes(t.id)}
-                      onChange={() => {}} // Manejado por el onClick del contenedor
-                      style={{ width: '18px', height: '18px', cursor: 'pointer', marginBottom: '0' }}
-                    />
+                    <div style={{
+                      width: '22px', height: '22px', borderRadius: '6px', border: `2px solid ${isSelected ? '#34c759' : '#444'}`,
+                      background: isSelected ? '#34c759' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.2s'
+                    }}>
+                      {isSelected && <Check size={13} color="#000" strokeWidth={3} />}
+                    </div>
                   )}
                 </div>
               );
             })}
           </div>
 
-          {/* Botones de acción del Staff */}
+          {/* Botones de acción */}
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
-              onClick={handleCheckIn} 
+            <button
+              onClick={handleCheckIn}
               disabled={isCheckingIn || selectedTicketIds.length === 0}
-              className="btn-primary" 
-              style={{ flex: '2' }}
+              className="btn-primary"
+              style={{ flex: 2 }}
             >
-              <Check size={18} /> CONFIRMAR INGRESO ({selectedTicketIds.length})
+              <UserCheck size={18} />
+              {isCheckingIn ? 'REGISTRANDO...' : `CONFIRMAR (${selectedTicketIds.length})`}
             </button>
-            
-            <button 
-              onClick={resetScanner} 
-              className="btn-secondary" 
-              style={{ flex: '1' }}
-            >
-              Cancelar
+            <button onClick={resetScanner} className="btn-secondary" style={{ flex: 1 }}>
+              <RefreshCw size={16} /> Nuevo
             </button>
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+/* ================================================================
+   PESTAÑA: REGISTRO MANUAL
+   ================================================================ */
+const ManualRegistryTab = () => {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [expandedOrder, setExpandedOrder] = useState(null);
+
+  const fetchOrders = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/orders');
+      if (res.data.status === 'OK') setOrders(res.data.orders);
+    } catch (err) {
+      Swal.fire('Error', 'No se pudo cargar el registro de asistentes.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchOrders(); }, []);
+
+  const filteredOrders = orders.filter(o => {
+    const matchStatus = filterStatus === 'ALL' || o.payment_status === filterStatus;
+    const q = searchQuery.toLowerCase();
+    const matchQ = !q ||
+      o.customer_name?.toLowerCase().includes(q) ||
+      o.order_num?.toLowerCase().includes(q) ||
+      o.customer_whatsapp?.includes(q) ||
+      o.customer_email?.toLowerCase().includes(q);
+    return matchStatus && matchQ;
+  });
+
+  const handleManualCheckIn = async (orderId, orderNum) => {
+    const { isConfirmed } = await Swal.fire({
+      title: 'Ingreso Manual',
+      text: `¿Registrar manualmente el ingreso de la orden ${orderNum}?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#DEB841',
+      cancelButtonColor: '#333',
+      background: '#0d0d0f',
+      color: '#f5f5f7',
+      confirmButtonText: 'Sí, Ingresar',
+      cancelButtonText: 'Cancelar'
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      // Obtener tickets activos de la orden
+      const res = await api.post('/tickets/scan', { ticketCode: orderId, byOrderId: true });
+      if (res.data.status !== 'ERROR') {
+        const activeIds = res.data.tickets.filter(t => t.status === 'Active').map(t => t.id);
+        if (activeIds.length === 0) {
+          Swal.fire('Aviso', 'Todos los tickets de esta orden ya han ingresado.', 'info');
+          return;
+        }
+        const checkinRes = await api.post('/tickets/check-in', { ticketIds: activeIds });
+        if (checkinRes.data.status === 'OK') {
+          Swal.fire({
+            title: 'Ingreso Registrado',
+            text: checkinRes.data.message,
+            icon: 'success',
+            timer: 2000,
+            showConfirmButton: false,
+            background: '#0d0d0f',
+            color: '#f5f5f7'
+          });
+          fetchOrders();
+        }
+      } else {
+        Swal.fire('Error', res.data.message, 'error');
+      }
+    } catch (err) {
+      Swal.fire('Error', 'No se pudo procesar el ingreso manual.', 'error');
+    }
+  };
+
+  const statusBadge = (status) => {
+    const map = {
+      'Pagado': { bg: 'rgba(52,199,89,0.12)', color: '#34c759', border: 'rgba(52,199,89,0.25)' },
+      'Pendiente': { bg: 'rgba(255,204,0,0.12)', color: '#ffcc00', border: 'rgba(255,204,0,0.25)' },
+      'Cortesía': { bg: 'rgba(222,184,65,0.12)', color: '#DEB841', border: 'rgba(222,184,65,0.25)' },
+      'Anulado': { bg: 'rgba(255,59,48,0.12)', color: '#ff3b30', border: 'rgba(255,59,48,0.25)' },
+    };
+    const style = map[status] || { bg: 'rgba(255,255,255,0.05)', color: '#888', border: 'rgba(255,255,255,0.1)' };
+    return (
+      <span style={{
+        fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px',
+        padding: '3px 9px', borderRadius: '6px',
+        background: style.bg, color: style.color, border: `1px solid ${style.border}`
+      }}>
+        {status}
+      </span>
+    );
+  };
+
+  return (
+    <div>
+      {/* Buscador */}
+      <div style={{ position: 'relative', marginBottom: '12px' }}>
+        <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Buscar por nombre, orden, WhatsApp..."
+          style={{ paddingLeft: '42px', marginBottom: '0', padding: '12px 14px 12px 42px' }}
+        />
+      </div>
+
+      {/* Filtros de estado */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {['ALL', 'Pagado', 'Pendiente', 'Cortesía', 'Anulado'].map(s => (
+          <button
+            key={s}
+            onClick={() => setFilterStatus(s)}
+            style={{
+              padding: '6px 14px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600',
+              cursor: 'pointer', border: '1px solid',
+              background: filterStatus === s ? 'var(--accent)' : 'transparent',
+              color: filterStatus === s ? '#000' : 'var(--text-muted)',
+              borderColor: filterStatus === s ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
+              transition: 'all 0.2s'
+            }}
+          >
+            {s === 'ALL' ? 'Todos' : s}
+          </button>
+        ))}
+        <button onClick={fetchOrders} style={{
+          marginLeft: 'auto', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '20px', padding: '6px 12px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem'
+        }}>
+          <RefreshCw size={13} /> Actualizar
+        </button>
+      </div>
+
+      {/* Contador */}
+      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+        {filteredOrders.length} asistente{filteredOrders.length !== 1 ? 's' : ''} encontrado{filteredOrders.length !== 1 ? 's' : ''}
+      </p>
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+          <div className="spinner" />
+        </div>
+      ) : filteredOrders.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+          <Users size={32} style={{ marginBottom: '12px', opacity: 0.4 }} />
+          <p style={{ fontSize: '0.85rem' }}>No se encontraron registros.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {filteredOrders.map(o => {
+            const isExpanded = expandedOrder === o.id;
+            const totalT = parseInt(o.ticket_count_adult || 0) + parseInt(o.ticket_count_child || 0);
+            const dateStr = o.schedule_time
+              ? new Date(o.schedule_time).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+              : 'Sin fecha';
+
+            return (
+              <div
+                key={o.id}
+                style={{
+                  background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)',
+                  borderRadius: '16px', overflow: 'hidden', transition: 'all 0.3s'
+                }}
+              >
+                {/* Fila principal */}
+                <div
+                  onClick={() => setExpandedOrder(isExpanded ? null : o.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '14px 16px', cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      {statusBadge(o.payment_status)}
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>
+                        #{o.order_num}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '0.9rem', fontWeight: '700', color: '#fff', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {o.customer_name}
+                    </p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      🎟️ {totalT} entrada{totalT !== 1 ? 's' : ''} · 📅 {dateStr}
+                    </p>
+                  </div>
+                  <ChevronRight
+                    size={18}
+                    color="var(--text-muted)"
+                    style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}
+                  />
+                </div>
+
+                {/* Detalles expandidos */}
+                {isExpanded && (
+                  <div className="fade-in" style={{
+                    borderTop: '1px solid rgba(255,255,255,0.06)',
+                    padding: '14px 16px', background: 'rgba(0,0,0,0.3)'
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px', fontSize: '0.78rem' }}>
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>📞 WhatsApp</span>
+                        <span style={{ color: '#fff', fontWeight: '600' }}>{o.customer_whatsapp || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>📧 Email</span>
+                        <span style={{ color: '#fff', fontWeight: '600' }}>{o.customer_email || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>🎬 Evento</span>
+                        <span style={{ color: '#fff', fontWeight: '600' }}>{o.event_title}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>💰 Monto</span>
+                        <span style={{ color: 'var(--accent)', fontWeight: '700' }}>${parseFloat(o.amount_total || 0).toFixed(2)}</span>
+                      </div>
+                      {o.desglose && (
+                        <div style={{ gridColumn: '1/-1' }}>
+                          <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>🪑 Butacas</span>
+                          <span style={{ color: '#fff', fontWeight: '600' }}>{o.desglose}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {o.payment_status !== 'Anulado' && (
+                      <button
+                        onClick={() => handleManualCheckIn(o.id, o.order_num)}
+                        className="btn-primary"
+                        style={{ padding: '10px', fontSize: '0.82rem' }}
+                      >
+                        <UserCheck size={15} /> Registrar Ingreso Manual
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ================================================================
+   COMPONENTE PRINCIPAL
+   ================================================================ */
+const ScannerDashboard = () => {
+  const [activeTab, setActiveTab] = useState('scanner');
+
+  return (
+    <div className="fade-in" style={{ paddingBottom: '10px' }}>
+      {/* Animación de línea de escaneo */}
+      <style>{`
+        @keyframes scanLine {
+          0%   { top: 10%; }
+          50%  { top: 85%; }
+          100% { top: 10%; }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%       { opacity: 0.6; transform: scale(0.85); }
+        }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: '54px', height: '54px', borderRadius: '16px',
+          background: 'linear-gradient(135deg, rgba(222,184,65,0.2), rgba(222,184,65,0.05))',
+          border: '1px solid rgba(222,184,65,0.3)', marginBottom: '12px'
+        }}>
+          <ScanLine size={26} color="#DEB841" />
+        </div>
+        <h2 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fff', letterSpacing: '0.5px' }}>
+          Control de Portería
+        </h2>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+          Studio 5 · Sistema de Acceso
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div style={{
+        display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '14px',
+        padding: '4px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.07)'
+      }}>
+        {[
+          { id: 'scanner', icon: Camera, label: 'Escáner QR' },
+          { id: 'manual', icon: ClipboardList, label: 'Registro Manual' }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+              padding: '11px 14px', borderRadius: '11px', border: 'none', cursor: 'pointer',
+              fontWeight: '600', fontSize: '0.85rem', transition: 'all 0.25s',
+              background: activeTab === tab.id
+                ? 'linear-gradient(135deg, #DEB841, #b08d2b)'
+                : 'transparent',
+              color: activeTab === tab.id ? '#000' : 'var(--text-muted)',
+              boxShadow: activeTab === tab.id ? '0 4px 12px rgba(222,184,65,0.25)' : 'none'
+            }}
+          >
+            <tab.icon size={16} /> {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Contenido de tabs */}
+      <div key={activeTab} className="fade-in">
+        {activeTab === 'scanner' ? <QRScannerTab /> : <ManualRegistryTab />}
+      </div>
     </div>
   );
 };
