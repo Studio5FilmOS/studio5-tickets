@@ -26,8 +26,9 @@ const initDatabase = async () => {
     } else {
       console.log('Base de datos ya inicializada. Cargando tablas existentes.');
       // Asegurar que las credenciales semilla tengan el hash correcto
+      // Contraseña: Studio5Admin2026!
       await query(
-        "UPDATE users SET password_hash = '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa' WHERE email IN ('admin@studio5.com', 'staff@studio5.com')"
+        "UPDATE users SET password_hash = '$2a$10$pQkAJlbvbPvPE1Uk2D0MFOVl3dAtcXCFN9ICL2wCScNiDXZdm4oRK' WHERE email IN ('admin@studio5.com', 'staff@studio5.com')"
       );
       console.log('Credenciales de administrador y staff verificadas/actualizadas.');
 
