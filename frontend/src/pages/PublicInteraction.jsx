@@ -4,6 +4,16 @@ import api from '../services/api';
 import Swal from 'sweetalert2';
 import { Sparkles, HelpCircle, AlertCircle, Compass } from 'lucide-react';
 
+const getImageUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const backendUrl = apiUrl.replace(/\/api$/, '');
+  return `${backendUrl}${url}`;
+};
+
 const PublicInteraction = () => {
   const { scheduleId } = useParams();
   const [eventData, setEventData] = useState(null);
@@ -115,7 +125,7 @@ const PublicInteraction = () => {
       {eventData && (
         <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '0', overflow: 'hidden', marginBottom: '20px' }}>
           <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9' }}>
-            <img src={eventData.banner_url} alt={eventData.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={getImageUrl(eventData.banner_url)} alt={eventData.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             <div style={{ position: 'absolute', bottom: '0', left: '0', right: '0', background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)', padding: '15px' }}>
               <span className="badge badge-promo" style={{ marginBottom: '5px' }}>En Vivo</span>
               <h2 style={{ fontSize: '1.2rem', color: '#fff', fontWeight: 'bold', textTransform: 'uppercase' }}>{eventData.title}</h2>

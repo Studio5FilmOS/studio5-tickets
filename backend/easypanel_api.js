@@ -1,122 +1,206 @@
 /**
- * Reset admin password and verify login
+ * Trigger redeploy de studio5-tickets en Easypanel
+ * via el endpoint correcto de deploy
  */
+const http = require('http');
 const https = require('https');
-const bcrypt = require('bcryptjs');
 
-const httpsReq = (hostname, path, method = 'GET', body = null, token = null) => new Promise((resolve) => {
-  const opts = {
-    hostname, path, method, rejectUnauthorized: false,
-    headers: { 'Content-Type': 'application/json' }
-  };
-  if (body) opts.headers['Content-Length'] = Buffer.byteLength(body);
-  if (token) opts.headers['Authorization'] = `Bearer ${token}`;
-  
-  const r = https.request(opts, (res) => {
+const HOST = '72.62.170.115';
+const PORT_EP = 3000;
+const TOKEN = 'cmr7cgrii001o07t65w0j1884';
+
+const trpcGet = (procedure, input = {}) => new Promise((resolve) => {
+  const path = `/api/trpc/${procedure}?input=${encodeURIComponent(JSON.stringify({ json: input }))}&batch=1`;
+  const r = http.request({ hostname: HOST, port: PORT_EP, path, method: 'GET',
+    headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }
+  }, (res) => {
     let d = ''; res.on('data', c => d += c);
     res.on('end', () => {
-      try { resolve({ status: res.statusCode, body: JSON.parse(d) }); }
-      catch { resolve({ status: res.statusCode, body: null, raw: d.slice(0, 300) }); }
+      try { resolve({ status: res.statusCode, data: JSON.parse(d) }); }
+      catch { resolve({ status: res.statusCode, data: null, raw: d.slice(0, 600) }); }
     });
   });
-  r.on('error', e => resolve({ status: 0, body: null, raw: e.message }));
-  r.setTimeout(10000, () => { r.destroy(); resolve({ status: 0, body: null, raw: 'timeout' }); });
-  if (body) r.write(body);
+  r.on('error', e => resolve({ status: 0, data: null, raw: e.message }));
+  r.setTimeout(15000, () => { r.destroy(); resolve({ status: 0, data: null, raw: 'timeout' }); });
   r.end();
 });
 
-const BASE = 'ticket.studio5film.com';
+const trpcPost = (procedure, input) => new Promise((resolve) => {
+  const bodyStr = JSON.stringify({ "0": { json: input } });
+  const path = `/api/trpc/${procedure}?batch=1`;
+  const r = http.request({ hostname: HOST, port: PORT_EP, path, method: 'POST',
+    headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyStr) }
+  }, (res) => {
+    let d = ''; res.on('data', c => d += c);
+    res.on('end', () => {
+      try { resolve({ status: res.statusCode, data: JSON.parse(d) }); }
+      catch { resolve({ status: res.statusCode, data: null, raw: d.slice(0, 600) }); }
+    });
+  });
+  r.on('error', e => resolve({ status: 0, data: null, raw: e.message }));
+  r.setTimeout(30000, () => { r.destroy(); resolve({ status: 0, data: null, raw: 'timeout' }); });
+  r.write(bodyStr);
+  r.end();
+});
+
+const extract = (r) => {
+  if (Array.isArray(r.data)) return r.data[0]?.result?.data?.json ?? r.data[0]?.result?.data ?? r.data[0];
+  return r.data;
+};
+
+const getFile = (path) => new Promise(resolve => {
+  const r = http.request({ hostname: HOST, port: PORT_EP, path, method: 'GET' }, res => {
+    let d = ''; res.on('data', c => d += c); res.on('end', () => resolve(d));
+  });
+  r.on('error', () => resolve(''));
+  r.setTimeout(30000, () => { r.destroy(); resolve(''); });
+  r.end();
+});
 
 async function main() {
-  // El initDb.js resetea la contraseña a un hash hardcodeado cada vez que inicia
-  // El hash es: $2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa
-  // Vamos a descubrir qué contraseña genera ese hash
+  // Extraer el procedure de deploy del bundle JS
+  const html = await getFile('/');
+  const jsMatch = html.match(/src="(\/assets\/index-[^"]+\.js)"/);
   
-  console.log('🔐 Verificando hash de contraseña del admin...\n');
+  let deployProcedure = null;
+  let deployInput = null;
   
-  const targetHash = '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa';
-  
-  // Lista de contraseñas a probar
-  const passwords = [
-    'Admin2025!',
-    'admin2025',
-    'Studio5Admin2026!',
-    'studio5admin',
-    'Studio5!',
-    'studio5',
-    'admin',
-    'Admin1234',
-    'Studio5Admin!',
-    'Admin@Studio5',
-    'studio52025',
-    'Studio52025!',
-    'admin123',
-    'password',
-    'Studio5Film2025',
-    'Studio5Film!',
-    'Admin2024!',
-    'admin@studio5',
-    '12345678',
-    'Clave1234',
-  ];
-  
-  console.log(`Probando ${passwords.length} contraseñas contra hash:\n${targetHash}\n`);
-  
-  let found = null;
-  for (const pwd of passwords) {
-    const match = await bcrypt.compare(pwd, targetHash);
-    if (match) {
-      found = pwd;
-      console.log(`✅ ¡CONTRASEÑA ENCONTRADA: "${pwd}"`);
-      break;
+  if (jsMatch) {
+    const js = await getFile(jsMatch[1]);
+    
+    // Buscar el procedure exacto de deploy
+    // Del contexto anterior vimos: deployService.useMutation + projectName + serviceName
+    // También vimos references a "deployment" type en actions.listActions
+    
+    // Buscar todos los useMutation relacionados con "deploy"
+    const deployMutations = [];
+    for (const m of js.matchAll(/I\.([a-zA-Z.]+)\.useMutation\b[^)]*?onSuccess[^}]*?deployed/g)) {
+      deployMutations.push(m[1]);
+    }
+    
+    // Buscar el handler de deploy del botón
+    const deployBtnIdx = js.indexOf('deployService');
+    if (deployBtnIdx !== -1) {
+      const ctx = js.substring(Math.max(0, deployBtnIdx - 300), deployBtnIdx + 500);
+      console.log('📍 Contexto de deployService:');
+      console.log(ctx.replace(/[^\x20-\x7E]/g, '.').slice(0, 600));
+      
+      // Extraer el procedure completo
+      const procMatch = ctx.match(/I\.([\w.]+\.deployService)/);
+      if (procMatch) {
+        deployProcedure = procMatch[1];
+        console.log(`\n✅ Deploy procedure: ${deployProcedure}`);
+      }
+    }
+    
+    // También buscar "runDeployment" o similar
+    const patterns = ['runDeployment', 'triggerDeploy', 'startDeploy', 'buildService', 'redeployService'];
+    for (const pattern of patterns) {
+      const idx = js.indexOf(pattern);
+      if (idx !== -1) {
+        const ctx = js.substring(Math.max(0, idx - 200), idx + 300);
+        console.log(`\n📍 Contexto de "${pattern}":`);
+        console.log(ctx.replace(/[^\x20-\x7E]/g, '.').slice(0, 400));
+      }
+    }
+    
+    // Buscar el token de webhook o el endpoint /api/deploy
+    const webhookIdx = js.indexOf('token');
+    const webhookCtxs = [];
+    let idx = 0;
+    while ((idx = js.indexOf('token', idx)) !== -1) {
+      const ctx = js.substring(Math.max(0, idx - 50), idx + 150);
+      if (ctx.includes('deploy') || ctx.includes('webhook') || ctx.includes('/api/')) {
+        webhookCtxs.push(ctx.replace(/[^\x20-\x7E]/g, '.'));
+      }
+      idx++;
+      if (webhookCtxs.length >= 5) break;
+    }
+    
+    if (webhookCtxs.length > 0) {
+      console.log('\n🔑 Contextos con "token" y "deploy/webhook":');
+      webhookCtxs.slice(0, 3).forEach(c => console.log('  ' + c.slice(0, 200)));
     }
   }
   
-  if (!found) {
-    console.log('❌ Contraseña no encontrada en la lista de prueba.');
-    console.log('\n🔄 El hash hardcodeado en initDb.js no coincide con contraseñas comunes.');
-    console.log('   Vamos a generar un nuevo hash y actualizar vía la API...');
+  // El servicio studio5-tickets tiene un "token" en su configuración
+  // Ese token se usa para disparar deploys via webhook
+  // Vamos a obtenerlo
+  console.log('\n\n📋 Obteniendo token de deploy del servicio...');
+  const allRes = await trpcGet('projects.listProjectsAndServices', {});
+  const allData = extract(allRes);
+  const tickets = allData?.services?.find(s => s.name === 'studio5-tickets');
+  
+  if (tickets) {
+    console.log(`Token del servicio: ${tickets.token}`);
     
-    // Generar hash de nueva contraseña
-    const newPassword = 'Studio5Admin2026!';
-    const newHash = await bcrypt.hash(newPassword, 10);
-    console.log(`\n📝 Nueva contraseña: "${newPassword}"`);
-    console.log(`   Nuevo hash: ${newHash}`);
+    // El webhook endpoint de Easypanel es típicamente:
+    // POST /api/webhooks/deploy/:token
+    // o GET/POST /api/deploy/:token
     
-    // Intentar hacer login con la nueva contraseña para verificar
-    console.log('\n🔐 Intentando cambiar contraseña via change-password endpoint...');
+    const deployToken = tickets.token;
     
-    // Primero hacer login con admin para obtener token (si tenemos una forma)
-    // En el backend existe un endpoint de cambio de contraseña
+    // Intentar varios formatos de webhook de deploy
+    const webhookAttempts = [
+      `http://${HOST}:${PORT_EP}/api/webhooks/deploy/${deployToken}`,
+      `http://${HOST}:${PORT_EP}/api/deploy/${deployToken}`,
+      `http://${HOST}:${PORT_EP}/webhook/${deployToken}`,
+      `http://${HOST}:${PORT_EP}/api/projects/studio5/services/studio5-tickets/deploy`,
+    ];
     
-    // Opción: crear un endpoint temporal de reset o usar initDb directamente
-    // Ya que initDb.js actualiza el hash en cada restart, necesitamos cambiar ese hash
+    console.log('\n🚀 Intentando disparar deploy via webhook token...');
     
-    console.log('\n💡 SOLUCIÓN: Actualizar el hash hardcodeado en initDb.js con el nuevo hash');
-    console.log(`   Cambiar en initDb.js la línea del UPDATE con el hash: ${newHash}`);
-    console.log(`   Contraseña resultante: "${newPassword}"`);
+    for (const url of webhookAttempts) {
+      const parsed = new URL(url);
+      const result = await new Promise(resolve => {
+        const r = http.request({
+          hostname: parsed.hostname,
+          port: parsed.port,
+          path: parsed.pathname + parsed.search,
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'Content-Length': 2 }
+        }, (res) => {
+          let d = ''; res.on('data', c => d += c);
+          res.on('end', () => resolve({ status: res.statusCode, body: d.slice(0, 200) }));
+        });
+        r.on('error', e => resolve({ status: 0, body: e.message }));
+        r.setTimeout(8000, () => { r.destroy(); resolve({ status: 0, body: 'timeout' }); });
+        r.write('{}');
+        r.end();
+      });
+      
+      const isHtml = result.body.includes('<!doctype');
+      const icon = result.status >= 200 && result.status < 300 && !isHtml ? '✅' : result.status === 404 ? '❌' : '⚠️';
+      console.log(`  ${icon} POST ${parsed.pathname} → ${result.status}: ${isHtml ? '[HTML]' : result.body.slice(0, 100)}`);
+      
+      if (result.status >= 200 && result.status < 300 && !isHtml) {
+        console.log('  🎉 Deploy disparado!');
+        break;
+      }
+    }
     
-    return { newPassword, newHash };
+    // Intentar también con el procedure services.compose.deployService
+    console.log('\n🔄 Intentando services.compose.deployService...');
+    const deployRes = await trpcPost('services.compose.deployService', {
+      projectName: 'studio5',
+      serviceName: 'studio5-tickets'
+    });
+    const deployData = extract(deployRes);
+    console.log(`  → ${deployRes.status}: ${JSON.stringify(deployData || deployRes.raw?.slice(0, 200))}`);
   }
   
-  // Probar login con la contraseña encontrada
-  console.log('\n\n🔐 Verificando login en producción...');
-  const loginRes = await httpsReq(BASE, '/api/auth/login', 'POST', 
-    JSON.stringify({ email: 'admin@studio5.com', password: found })
-  );
-  console.log(`  Login resultado: ${loginRes.status}`);
-  if (loginRes.body) console.log(`  Response: ${JSON.stringify(loginRes.body).slice(0, 300)}`);
-  
-  if (loginRes.status === 200 && loginRes.body?.token) {
-    console.log(`\n  ✅ Login exitoso! Token: ${loginRes.body.token.slice(0, 30)}...`);
-    
-    // También probar staff
-    const staffLogin = await httpsReq(BASE, '/api/auth/login', 'POST',
-      JSON.stringify({ email: 'staff@studio5.com', password: found })
-    );
-    console.log(`\n  Staff login: ${staffLogin.status}`);
-    if (staffLogin.body) console.log(`  Staff: ${JSON.stringify(staffLogin.body).slice(0, 200)}`);
-  }
+  // Finalmente verificar si la app ya tiene el nuevo código
+  console.log('\n\n🌐 Verificando app en producción...');
+  const appRes = await new Promise(resolve => {
+    const r = https.request({ hostname: 'ticket.studio5film.com', path: '/health', method: 'GET', rejectUnauthorized: false }, (res) => {
+      let d = ''; res.on('data', c => d += c);
+      res.on('end', () => resolve({ status: res.statusCode, body: d.slice(0, 300) }));
+    });
+    r.on('error', e => resolve({ status: 0, body: e.message }));
+    r.setTimeout(8000, () => { r.destroy(); resolve({ status: 0, body: 'timeout' }); });
+    r.end();
+  });
+  console.log(`  /health → ${appRes.status}: ${appRes.body}`);
 }
 
 main().catch(e => console.error('Error:', e.message));

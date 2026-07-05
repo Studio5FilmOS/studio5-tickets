@@ -17,11 +17,22 @@ const QRScannerTab = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [scannerReady, setScannerReady] = useState(false);
+  const [cameras, setCameras] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState('');
   const html5QrCodeRef = useRef(null);
   const scannerContainerId = 'qr-scanner-viewport';
 
-  const startScanner = useCallback(async () => {
-    if (html5QrCodeRef.current) return;
+  const startScanner = useCallback(async (cameraIdToUse) => {
+    // Si ya existe un scanner corriendo, detenerlo primero
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+        html5QrCodeRef.current.clear();
+      } catch (e) {
+        console.warn('Error al detener cámara previa:', e);
+      }
+      html5QrCodeRef.current = null;
+    }
 
     try {
       const devices = await Html5Qrcode.getCameras();
@@ -29,23 +40,27 @@ const QRScannerTab = () => {
         Swal.fire('Sin cámara', 'No se encontró ninguna cámara en este dispositivo.', 'error');
         return;
       }
+      setCameras(devices);
 
-      // Priorizar cámara trasera (environment)
-      let cameraId = devices[devices.length - 1].id; // Generalmente la última es la trasera
-      const backCamera = devices.find(d =>
-        d.label.toLowerCase().includes('back') ||
-        d.label.toLowerCase().includes('trasera') ||
-        d.label.toLowerCase().includes('rear') ||
-        d.label.toLowerCase().includes('environment')
-      );
-      if (backCamera) cameraId = backCamera.id;
+      let targetCameraId = cameraIdToUse || selectedCameraId;
+      if (!targetCameraId) {
+        // Priorizar cámara trasera (environment)
+        const backCamera = devices.find(d =>
+          d.label.toLowerCase().includes('back') ||
+          d.label.toLowerCase().includes('trasera') ||
+          d.label.toLowerCase().includes('rear') ||
+          d.label.toLowerCase().includes('environment')
+        );
+        targetCameraId = backCamera ? backCamera.id : devices[devices.length - 1].id;
+        setSelectedCameraId(targetCameraId);
+      }
 
       const html5QrCode = new Html5Qrcode(scannerContainerId);
       html5QrCodeRef.current = html5QrCode;
 
       await html5QrCode.start(
-        { deviceId: { exact: cameraId } },
-        { fps: 12, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
+        { deviceId: { exact: targetCameraId } },
+        { fps: 15, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
         onScanSuccess,
         () => {} // Silenciar errores de frame
       );
@@ -53,13 +68,13 @@ const QRScannerTab = () => {
       setIsScanning(true);
     } catch (err) {
       console.error('Error al iniciar cámara:', err);
-      // Fallback: usar constraint de entorno directamente
+      // Fallback: usar facingMode 'environment' directamente
       try {
         const html5QrCode = new Html5Qrcode(scannerContainerId);
         html5QrCodeRef.current = html5QrCode;
         await html5QrCode.start(
           { facingMode: 'environment' },
-          { fps: 12, qrbox: { width: 240, height: 240 } },
+          { fps: 15, qrbox: { width: 240, height: 240 } },
           onScanSuccess,
           () => {}
         );
@@ -68,7 +83,13 @@ const QRScannerTab = () => {
         Swal.fire('Error de Cámara', 'No se pudo acceder a la cámara. Verifica los permisos del navegador.', 'error');
       }
     }
-  }, []);
+  }, [selectedCameraId]);
+
+  const handleCameraChange = async (e) => {
+    const newId = e.target.value;
+    setSelectedCameraId(newId);
+    await startScanner(newId);
+  };
 
   const stopScanner = useCallback(async () => {
     if (html5QrCodeRef.current) {
@@ -85,10 +106,12 @@ const QRScannerTab = () => {
 
   useEffect(() => {
     setScannerReady(true);
+    // Iniciar cámara automática al montar
+    startScanner();
     return () => {
       stopScanner();
     };
-  }, [stopScanner]);
+  }, []); // Solo al montar
 
   const onScanSuccess = async (decodedText) => {
     await stopScanner();
@@ -170,6 +193,33 @@ const QRScannerTab = () => {
       {/* Vista de escaneo */}
       {!scanResult && (
         <div style={{ textAlign: 'center' }}>
+          {/* Selector de cámara premium */}
+          {cameras.length > 1 && (
+            <div style={{ maxWidth: '280px', margin: '0 auto 20px auto', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+              <label style={{ fontSize: '0.68rem', color: 'var(--accent)', fontWeight: 'bold' }}>📸 Cambiar Dispositivo / Lente</label>
+              <select 
+                value={selectedCameraId} 
+                onChange={handleCameraChange}
+                style={{ 
+                  padding: '10px 14px', 
+                  fontSize: '0.82rem', 
+                  borderRadius: '12px', 
+                  background: 'rgba(255,255,255,0.03)', 
+                  border: '1px solid var(--glass-border)', 
+                  color: '#fff',
+                  cursor: 'pointer',
+                  marginBottom: '0'
+                }}
+              >
+                {cameras.map((cam) => (
+                  <option key={cam.id} value={cam.id} style={{ background: '#111', color: '#fff' }}>
+                    {cam.label || `Cámara ${cam.id.slice(0,6)}...`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Viewport del escáner */}
           <div style={{
             position: 'relative',
@@ -180,8 +230,8 @@ const QRScannerTab = () => {
             overflow: 'hidden',
             background: '#000',
             aspectRatio: '1/1',
-            border: '2px solid rgba(222,184,65,0.3)',
-            boxShadow: '0 0 40px rgba(222,184,65,0.12)'
+            border: '2px solid rgba(222,184,65,0.4)',
+            boxShadow: '0 0 50px rgba(222,184,65,0.18)'
           }}>
             <div id={scannerContainerId} style={{ width: '100%', height: '100%' }} />
 
@@ -242,12 +292,12 @@ const QRScannerTab = () => {
               background: isScanning ? '#34c759' : '#555',
               animation: isScanning ? 'pulse 1.5s ease-in-out infinite' : 'none'
             }} />
-            {isScanning ? 'Cámara Activa · Escaneando...' : 'Cámara inactiva'}
+            {isScanning ? 'Lector de QR en Línea' : 'Cámara Apagada'}
           </div>
 
           {/* Botón iniciar/detener */}
           <button
-            onClick={isScanning ? stopScanner : startScanner}
+            onClick={isScanning ? stopScanner : () => startScanner()}
             className={isScanning ? 'btn-secondary' : 'btn-primary'}
             style={{ maxWidth: '240px', margin: '0 auto' }}
           >

@@ -3,6 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { MapPin, Clock, ChevronRight, Ticket, Flame, Star } from 'lucide-react';
 
+const getImageUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const backendUrl = apiUrl.replace(/\/api$/, '');
+  return `${backendUrl}${url}`;
+};
+
 const Cartelera = () => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -167,7 +177,7 @@ const Cartelera = () => {
                 {/* Imagen / Banner */}
                 <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', overflow: 'hidden' }}>
                   <img
-                    src={evt.banner_url}
+                    src={getImageUrl(evt.banner_url)}
                     alt={evt.title}
                     style={{
                       width: '100%', height: '100%', objectFit: 'cover',

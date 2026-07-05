@@ -4,7 +4,17 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Swal from 'sweetalert2';
 import html2canvas from 'html2canvas';
-import { ChevronLeft, Download, Send, Armchair, CreditCard } from 'lucide-react';
+import { ChevronLeft, Download, Send, Armchair, CreditCard, Calendar } from 'lucide-react';
+
+const getImageUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const backendUrl = apiUrl.replace(/\/api$/, '');
+  return `${backendUrl}${url}`;
+};
 
 const DetalleObra = () => {
   const { id } = useParams();
@@ -34,12 +44,10 @@ const DetalleObra = () => {
   // Para eventos numerados
   const [selectedSeats, setSelectedSeats] = useState([]);
 
-  // Estados de Payphone (Simulación Tarjeta)
+  // Estados de Payphone
   const [showPayphoneModal, setShowPayphoneModal] = useState(false);
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [cardHolder, setCardHolder] = useState('');
+  const [payphoneToken, setPayphoneToken] = useState('');
+  const [isPayphoneScriptLoaded, setIsPayphoneScriptLoaded] = useState(false);
 
   // Estados del Resultado (Éxito)
   const [successData, setSuccessData] = useState(null);
@@ -69,6 +77,85 @@ const DetalleObra = () => {
     fetchEvent();
   }, [id, isStaff]);
 
+  // Cargar configuración de Payphone y script SDK
+  useEffect(() => {
+    const fetchPayphoneConfig = async () => {
+      try {
+        const res = await api.get('/config/payphone');
+        if (res.data.status === 'OK') {
+          setPayphoneToken(res.data.token);
+        }
+      } catch (err) {
+        console.warn('No se pudo obtener el token de Payphone:', err);
+      }
+    };
+    fetchPayphoneConfig();
+
+    const scriptId = 'payphone-script';
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://pay.payphonetodoesposible.com/api/button/v2/payphone-button.js';
+      script.async = true;
+      script.onload = () => setIsPayphoneScriptLoaded(true);
+      document.body.appendChild(script);
+    } else {
+      setIsPayphoneScriptLoaded(true);
+    }
+  }, []);
+
+  // Renderizar el botón/cajita de pagos oficial de Payphone
+  useEffect(() => {
+    if (!showPayphoneModal || !isPayphoneScriptLoaded || !payphoneToken) return;
+
+    const timer = setTimeout(() => {
+      const element = document.getElementById('payphone-element');
+      if (!element) return;
+      
+      element.innerHTML = '';
+
+      const uniqueClientTxId = `TX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`.substring(0, 20);
+
+      try {
+        if (window.payphone && window.payphone.Button) {
+          window.payphone.Button({
+            token: payphoneToken,
+            btnHorizontal: true,
+            btnCard: true,
+            createOrder: function (actions) {
+              return actions.prepare({
+                amount: Math.round(calculateTotal() * 100), // en centavos
+                amountWithoutTax: Math.round(calculateTotal() * 100),
+                currency: "USD",
+                clientTransactionId: uniqueClientTxId
+              });
+            },
+            onAuthorize: function (actions) {
+              Swal.fire({
+                title: 'Pago Autorizado',
+                text: 'Registrando tu entrada con el servidor...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+              });
+
+              submitOrderToServer(actions.id, uniqueClientTxId);
+            },
+            onError: function(err) {
+              console.error('Payphone SDK Error:', err);
+              Swal.fire('Error de Pago', 'Hubo un inconveniente al procesar tu tarjeta. Intenta nuevamente.', 'error');
+            }
+          }).render("#payphone-element");
+        } else {
+          console.error('Payphone SDK no está disponible en window.payphone');
+        }
+      } catch (err) {
+        console.error('Error al inicializar Payphone Button:', err);
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [showPayphoneModal, isPayphoneScriptLoaded, payphoneToken]);
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '50px 0' }}>
@@ -92,6 +179,11 @@ const DetalleObra = () => {
 
   const handleScheduleChange = (e) => {
     setScheduleId(e.target.value);
+    setSelectedSeats([]);
+  };
+
+  const handleScheduleSelect = (id) => {
+    setScheduleId(id);
     setSelectedSeats([]);
   };
 
@@ -142,7 +234,7 @@ const DetalleObra = () => {
   };
 
   // Enviar orden al servidor
-  const submitOrderToServer = async (payphoneTxId = null) => {
+  const submitOrderToServer = async (payphoneTxId = null, clientTxId = null) => {
     setIsProcessing(true);
 
     let met = metodoPago;
@@ -169,7 +261,8 @@ const DetalleObra = () => {
       metodoPago: met,
       banco: bankName,
       numTransaccion: refNum,
-      seat_labels: event.has_assigned_seats ? selectedSeats : null
+      seat_labels: event.has_assigned_seats ? selectedSeats : null,
+      clientTxId: clientTxId
     };
 
     try {
@@ -212,77 +305,7 @@ const DetalleObra = () => {
   };
 
   // Simulación de transacción Payphone
-  const handlePayphonePaymentSubmit = (e) => {
-    e.preventDefault();
-    if (cardNumber.length < 16 || cardExpiry.length < 5 || cardCvv.length < 3 || !cardHolder) {
-      Swal.fire('Datos Incompletos', 'Por favor ingresa datos de tarjeta válidos.', 'warning');
-      return;
-    }
 
-    Swal.fire({
-      title: 'Procesando Tarjeta...',
-      text: 'Conectando con el servidor seguro de Payphone',
-      allowOutsideClick: false,
-      didOpen: () => { Swal.showLoading(); }
-    });
-
-    setTimeout(() => {
-      // Simular la devolución de un ID de transacción aprobado por Payphone
-      const simulatedTxId = Math.floor(1000000 + Math.random() * 9000000).toString();
-      Swal.close();
-      submitOrderToServer(simulatedTxId);
-    }, 2000);
-  };
-
-  const descargarTicket = (tCode) => {
-    const element = document.getElementById(`export-ticket-${tCode}`);
-    if (!element) return;
-    
-    Swal.fire({
-      title: 'Generando Ticket...',
-      allowOutsideClick: false,
-      didOpen: () => { Swal.showLoading(); }
-    });
-
-    setTimeout(() => {
-      html2canvas(element, { scale: 2, useCORS: true, logging: false }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = `Ticket_${tCode}.jpg`;
-        link.href = canvas.toDataURL('image/jpeg', 1.0);
-        link.click();
-        Swal.close();
-      }).catch(err => {
-        console.error(err);
-        Swal.fire('Error', 'No se pudo generar la imagen del ticket.', 'error');
-      });
-    }, 500);
-  };
-
-  // Formateadores automáticos de tarjeta
-  const formatCardNumber = (value) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = (matches && matches[0]) || '';
-    const parts = [];
-
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
-
-    if (parts.length > 0) {
-      return parts.join(' ');
-    } else {
-      return v;
-    }
-  };
-
-  const formatCardExpiry = (value) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    if (v.length >= 2) {
-      return `${v.substring(0, 2)}/${v.substring(2, 4)}`;
-    }
-    return v;
-  };
 
   if (successData) {
     const { order, tickets, schedule_time } = successData;
@@ -311,7 +334,7 @@ const DetalleObra = () => {
           >
             <div style={{ 
               width: '100%', height: '100%', 
-              backgroundImage: `url(${event.ticket_template_url || event.banner_url})`,
+              backgroundImage: `url(${getImageUrl(event.ticket_template_url || event.banner_url)})`,
               backgroundSize: 'cover', backgroundPosition: 'center'
             }}></div>
             <div style={{ 
@@ -506,19 +529,71 @@ const DetalleObra = () => {
           </div>
         </div>
 
-        <label>Función</label>
-        <select value={scheduleId} onChange={handleScheduleChange}>
+        <label>Selecciona una Función *</label>
+        <div style={{ 
+          display: 'flex', 
+          gap: '10px', 
+          overflowX: 'auto', 
+          padding: '5px 0 15px 0', 
+          scrollbarWidth: 'thin',
+          marginBottom: '15px'
+        }}>
           {event.schedules.map((sch) => {
-            const dateFormatted = new Date(sch.schedule_time).toLocaleDateString('es-EC', {
-              day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-            });
+            const dateObj = new Date(sch.schedule_time);
+            const dayName = dateObj.toLocaleDateString('es-EC', { weekday: 'short' });
+            const dayNum = dateObj.toLocaleDateString('es-EC', { day: 'numeric' });
+            const monthName = dateObj.toLocaleDateString('es-EC', { month: 'short' });
+            const timeStr = dateObj.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
+            
+            const isSelected = sch.id === scheduleId;
+            const isSoldOut = sch.available_capacity <= 0;
+            
             return (
-              <option key={sch.id} value={sch.id}>
-                {dateFormatted} {!event.has_assigned_seats && `(${sch.available_capacity} asientos)`}
-              </option>
+              <button
+                key={sch.id}
+                type="button"
+                onClick={() => !isSoldOut && handleScheduleSelect(sch.id)}
+                disabled={isSoldOut}
+                style={{
+                  flex: '0 0 auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '12px 18px',
+                  borderRadius: '16px',
+                  cursor: isSoldOut ? 'not-allowed' : 'pointer',
+                  background: isSelected 
+                    ? 'rgba(222,184,65,0.15)' 
+                    : isSoldOut 
+                      ? 'rgba(255,59,48,0.02)' 
+                      : 'rgba(255,255,255,0.03)',
+                  border: `2px solid ${isSelected 
+                    ? 'var(--accent)' 
+                    : isSoldOut 
+                      ? 'rgba(255,59,48,0.15)' 
+                      : 'var(--glass-border)'}`,
+                  color: isSelected ? '#fff' : isSoldOut ? 'rgba(255,59,48,0.4)' : 'var(--text-primary)',
+                  boxShadow: isSelected ? '0 0 15px rgba(222,184,65,0.2)' : 'none',
+                  transition: 'var(--transition-smooth)'
+                }}
+              >
+                <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: isSelected ? 'var(--accent)' : 'var(--text-muted)', fontWeight: 'bold' }}>
+                  {dayName}
+                </span>
+                <span style={{ fontSize: '1.2rem', fontWeight: 800, margin: '2px 0' }}>
+                  {dayNum} {monthName}
+                </span>
+                <span style={{ fontSize: '0.78rem', fontWeight: '600' }}>
+                  🕒 {timeStr}
+                </span>
+                <span style={{ fontSize: '0.62rem', marginTop: '4px', opacity: 0.8, color: isSoldOut ? 'var(--error)' : 'var(--success)', fontWeight: 'bold' }}>
+                  {isSoldOut ? 'AGOTADO' : `${sch.available_capacity} disp.`}
+                </span>
+              </button>
             );
           })}
-        </select>
+        </div>
 
         {/* Asientos Numerados */}
         {event.has_assigned_seats && (
@@ -597,7 +672,7 @@ const DetalleObra = () => {
         </button>
       </form>
 
-      {/* --- MODAL / OVERLAY DE SIMULACIÓN DE CHECKOUT DE PAYPHONE --- */}
+      {/* --- MODAL / OVERLAY DE CHECKOUT DE PAYPHONE REAL --- */}
       {showPayphoneModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -605,96 +680,34 @@ const DetalleObra = () => {
           display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000,
           padding: '15px'
         }} className="fade-in">
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '380px', border: '2px solid rgba(3,169,244,0.3)' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '380px', border: '2px solid rgba(222,184,65,0.3)', padding: '25px' }}>
             <div style={{ textAlign: 'center', marginBottom: '20px' }}>
               <img src="https://i.imgur.com/Gezz740.png" style={{ width: '40px', marginBottom: '10px', filter: 'hue-rotate(190deg)' }} alt="Payphone" />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--accent-secondary)', letterSpacing: '1px' }}>PAYPHONE CHECKOUT</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Conexión segura de tarjetas de crédito/débito</p>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--accent)', letterSpacing: '1px' }}>PAYPHONE CHECKOUT</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Procesamiento seguro de tarjetas de crédito y débito</p>
             </div>
 
-            {/* Simulación Gráfica de Tarjeta de Crédito */}
-            <div style={{
-              background: 'linear-gradient(135deg, #0288d1 0%, #005682 100%)',
-              borderRadius: '12px', padding: '15px', color: '#fff',
-              boxShadow: '0 8px 16px rgba(0,0,0,0.4)', marginBottom: '20px',
-              fontFamily: 'monospace', position: 'relative', overflow: 'hidden'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <CreditCard size={32} />
-                <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Payphone</span>
-              </div>
-              
-              <div style={{ fontSize: '1.15rem', letterSpacing: '2px', marginBottom: '15px' }}>
-                {cardNumber || '•••• •••• •••• ••••'}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem' }}>
-                <div>
-                  <span style={{ color: '#b3e5fc', display: 'block', fontSize: '0.55rem' }}>TARJETAHABIENTE</span>
-                  <span>{cardHolder.toUpperCase() || 'NOMBRE APELLIDO'}</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ color: '#b3e5fc', display: 'block', fontSize: '0.55rem' }}>EXPIRA</span>
-                  <span>{cardExpiry || 'MM/YY'}</span>
-                </div>
-              </div>
+            {/* Elemento de renderizado para el botón de Payphone */}
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '12px', border: '1px dashed var(--glass-border)', textAlign: 'center', minHeight: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              {!isPayphoneScriptLoaded ? (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cargando pasarela de pagos...</div>
+              ) : !payphoneToken ? (
+                <div style={{ fontSize: '0.8rem', color: 'var(--error)' }}>Error al obtener credenciales de pago.</div>
+              ) : (
+                <div id="payphone-element" style={{ width: '100%' }}></div>
+              )}
             </div>
 
-            {/* Formulario de Pago */}
-            <form onSubmit={handlePayphonePaymentSubmit}>
-              <label style={{ fontSize: '0.65rem' }}>Número de Tarjeta</label>
-              <input 
-                type="text" 
-                maxLength="19"
-                value={cardNumber} 
-                onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                placeholder="4000 1234 5678 9010" 
-                required 
-              />
-
-              <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem' }}>Fecha Expiración</label>
-                  <input 
-                    type="text" 
-                    maxLength="5"
-                    value={cardExpiry} 
-                    onChange={(e) => setCardExpiry(formatCardExpiry(e.target.value))}
-                    placeholder="MM/YY" 
-                    required 
-                  />
-                </div>
-                <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem' }}>CVV / CVC</label>
-                  <input 
-                    type="password" 
-                    maxLength="4"
-                    value={cardCvv} 
-                    onChange={(e) => setCardCvv(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="123" 
-                    required 
-                  />
-                </div>
-              </div>
-
-              <label style={{ fontSize: '0.65rem' }}>Nombre en Tarjeta</label>
-              <input 
-                type="text" 
-                value={cardHolder} 
-                onChange={(e) => setCardHolder(e.target.value)}
-                placeholder="JUAN PEREZ" 
-                required 
-              />
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                <button type="submit" className="btn-primary" style={{ flex: '2', background: 'var(--accent-secondary)', color: '#fff', boxShadow: 'none' }}>
-                  Confirmar ${calculateTotal().toFixed(2)}
-                </button>
-                <button type="button" onClick={() => setShowPayphoneModal(false)} className="btn-secondary" style={{ flex: '1' }}>
-                  Cancelar
-                </button>
-              </div>
-            </form>
+            <div style={{ marginTop: '20px' }}>
+              <button 
+                type="button" 
+                onClick={() => setShowPayphoneModal(false)} 
+                className="btn-secondary" 
+                style={{ width: '100%' }}
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

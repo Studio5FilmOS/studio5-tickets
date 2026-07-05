@@ -51,6 +51,14 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Ruta para obtener la configuración pública de Payphone
+app.get('/api/config/payphone', (req, res) => {
+  res.json({
+    status: 'OK',
+    token: process.env.PAYPHONE_TOKEN || ''
+  });
+});
+
 // Importar Rutas
 const authRoutes = require('./routes/authRoutes');
 const eventRoutes = require('./routes/eventRoutes');

@@ -5,6 +5,16 @@ import Swal from 'sweetalert2';
 import html2canvas from 'html2canvas';
 import { MapPin, Calendar, CheckCircle, ShieldAlert, Sparkles, Download, Send } from 'lucide-react';
 
+const getImageUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const backendUrl = apiUrl.replace(/\/api$/, '');
+  return `${backendUrl}${url}`;
+};
+
 const BoletoView = () => {
   const { code } = useParams();
   const [ticket, setTicket] = useState(null);
@@ -163,7 +173,7 @@ const BoletoView = () => {
         >
           <div style={{ 
             width: '100%', height: '100%', 
-            backgroundImage: `url(${ticket.ticket_template_url || ticket.banner_url})`,
+            backgroundImage: `url(${getImageUrl(ticket.ticket_template_url || ticket.banner_url)})`,
             backgroundSize: 'cover', backgroundPosition: 'center'
           }}></div>
           <div style={{ 
@@ -193,7 +203,7 @@ const BoletoView = () => {
       }}>
         <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#111' }}>
           <img 
-            src={ticket.banner_url} 
+            src={getImageUrl(ticket.banner_url)} 
             alt={ticket.event_title} 
             style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
           />

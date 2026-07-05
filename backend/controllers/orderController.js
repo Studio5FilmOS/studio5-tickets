@@ -3,7 +3,7 @@ const { sendTicketEmail } = require('../services/emailService');
 const https = require('https');
 
 // Helper para verificar transacciones con Payphone (Ecuador)
-const verifyPayphoneTransaction = (transactionId, orderNum) => {
+const verifyPayphoneTransaction = (transactionId, clientTxId) => {
   return new Promise((resolve, reject) => {
     const payphoneToken = process.env.PAYPHONE_TOKEN;
     const payphoneEnv = process.env.PAYPHONE_ENV || 'sandbox';
@@ -11,17 +11,17 @@ const verifyPayphoneTransaction = (transactionId, orderNum) => {
     // Si no hay token configurado, simulamos la aprobación para facilitar pruebas locales
     if (!payphoneToken || payphoneToken === 'tu_token_de_desarrollador_payphone') {
       console.log('----- PAYPHONE SIMULATION -----');
-      console.log(`Verificando TxId: ${transactionId} para la orden: ${orderNum}`);
+      console.log(`Verificando TxId: ${transactionId} para la transacción: ${clientTxId}`);
       console.log('Aprobando de forma simulada (sin credenciales .env)');
       console.log('-------------------------------');
       return resolve(true);
     }
 
-    const host = payphoneEnv === 'production' ? 'pay.payphone.app' : 'sandbox.payphone.app';
+    const host = payphoneEnv === 'production' ? 'pay.payphone.app' : 'pay.payphonetodoesposible.com';
     const path = '/api/button/V2/Confirm';
     const payload = JSON.stringify({
-      id: parseInt(transactionId),
-      clientTxId: orderNum
+      id: parseInt(transactionId) || 0,
+      clientTxId: clientTxId
     });
 
     const options = {
@@ -76,7 +76,7 @@ exports.createOrder = async (req, res) => {
   const {
     idEvento, fecha: scheduleId, nombre, email, whatsapp,
     cantAdultos, cantNinos, tipoVenta, metodoPago, banco, numTransaccion,
-    seat_labels
+    seat_labels, clientTxId
   } = req.body;
 
   // Validación de campos básicos
@@ -228,7 +228,7 @@ exports.createOrder = async (req, res) => {
       }
 
       // Validar transacción en la API oficial de Payphone
-      const isApproved = await verifyPayphoneTransaction(numTransaccion, orderNum);
+      const isApproved = await verifyPayphoneTransaction(numTransaccion, clientTxId || orderNum);
       if (!isApproved) {
         await client.query('ROLLBACK');
         client.release();

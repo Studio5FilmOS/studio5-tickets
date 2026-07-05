@@ -98,61 +98,141 @@ const PrivateRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
+const Sidebar = () => {
+  const { user, isAuthenticated, logout } = useAuth();
+  const location = useLocation();
+
+  // No mostrar barra lateral en e-tickets ni en interactividad pública
+  if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/interaccion/')) {
+    return null;
+  }
+
+  return (
+    <aside className="desktop-sidebar">
+      <div className="sidebar-top">
+        <Link to="/" className="sidebar-logo">
+          <img src="https://i.imgur.com/0z5756T.png" alt="Studio 5 Logo" />
+          <span>STUDIO 5</span>
+        </Link>
+
+        <nav className="sidebar-menu">
+          <Link to="/" className={`sidebar-item ${location.pathname === '/' ? 'active' : ''}`}>
+            <Play size={18} />
+            <span>Cartelera</span>
+          </Link>
+
+          {isAuthenticated && (
+            <>
+              <Link to="/staff/scan" className={`sidebar-item ${location.pathname === '/staff/scan' ? 'active' : ''}`}>
+                <ScanLine size={18} />
+                <span>Escáner QR</span>
+              </Link>
+              <Link to="/staff/pistas" className={`sidebar-item ${location.pathname === '/staff/pistas' ? 'active' : ''}`}>
+                <Flame size={18} />
+                <span>Momento Wow</span>
+              </Link>
+            </>
+          )}
+
+          {isAuthenticated && user.role === 'admin' && (
+            <Link to="/admin" className={`sidebar-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
+              <ShieldAlert size={18} />
+              <span>Administración</span>
+            </Link>
+          )}
+
+          {isAuthenticated ? (
+            <button onClick={logout} className="sidebar-item" style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}>
+              <LogOut size={18} />
+              <span>Cerrar Sesión</span>
+            </button>
+          ) : (
+            <Link to="/login" className={`sidebar-item ${location.pathname === '/login' ? 'active' : ''}`}>
+              <LogIn size={18} />
+              <span>Iniciar Sesión</span>
+            </Link>
+          )}
+        </nav>
+      </div>
+
+      {isAuthenticated && (
+        <div className="sidebar-user">
+          <div className="sidebar-avatar">
+            {user.name ? user.name.charAt(0) : 'U'}
+          </div>
+          <div className="sidebar-user-info">
+            <span className="sidebar-user-name">{user.name}</span>
+            <span className="sidebar-user-role">{user.role}</span>
+          </div>
+        </div>
+      )}
+    </aside>
+  );
+};
+
 const App = () => {
   return (
     <AuthProvider>
       <Router>
-        <div style={{ maxWidth: '600px', margin: '0 auto', padding: '15px' }}>
-          
-          <header style={{ display: 'flex', justifyContent: 'center', padding: '15px 0 20px' }}>
-            <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <img 
-                src="https://i.imgur.com/0z5756T.png" 
-                style={{ width: '45px', filter: 'invert(1)' }} 
-                alt="Studio 5 Logo" 
-              />
-              <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fff', letterSpacing: '2px' }}>STUDIO 5</span>
-            </Link>
-          </header>
+        <div className="app-layout">
+          {/* Sidebar para pantallas grandes */}
+          <Sidebar />
 
-          <Routes>
-            <Route path="/" element={<Cartelera />} />
-            <Route path="/evento/:id" element={<DetalleObra />} />
-            <Route path="/boleto/:code" element={<BoletoView />} />
-            <Route path="/login" element={<Login />} />
-            
-            {/* NUEVA RUTA PÚBLICA PARA QR DE SALA */}
-            <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
+          <div className="app-main-content">
+            {/* Cabecera superior exclusiva para móviles */}
+            <header className="mobile-header">
+              <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <img 
+                  src="https://i.imgur.com/0z5756T.png" 
+                  style={{ width: '45px', filter: 'invert(1)' }} 
+                  alt="Studio 5 Logo" 
+                />
+                <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fff', letterSpacing: '2px' }}>STUDIO 5</span>
+              </Link>
+            </header>
 
-            {/* Rutas Protegidas del Staff */}
-            <Route 
-              path="/staff/scan" 
-              element={
-                <PrivateRoute allowedRoles={['staff', 'admin']}>
-                  <ScannerDashboard />
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/staff/pistas" 
-              element={
-                <PrivateRoute allowedRoles={['staff', 'admin']}>
-                  <MomentoWow />
-                </PrivateRoute>
-              } 
-            />
+            <div className="app-page-wrapper">
+              <Routes>
+                <Route path="/" element={<Cartelera />} />
+                <Route path="/evento/:id" element={<DetalleObra />} />
+                <Route path="/boleto/:code" element={<BoletoView />} />
+                <Route path="/login" element={<Login />} />
+                
+                {/* NUEVA RUTA PÚBLICA PARA QR DE SALA */}
+                <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
 
-            {/* Rutas Protegidas de Administración */}
-            <Route 
-              path="/admin" 
-              element={
-                <PrivateRoute allowedRoles={['admin']}>
-                  <AdminDashboard />
-                </PrivateRoute>
-              } 
-            />
-          </Routes>
+                {/* Rutas Protegidas del Staff */}
+                <Route 
+                  path="/staff/scan" 
+                  element={
+                    <PrivateRoute allowedRoles={['staff', 'admin']}>
+                      <ScannerDashboard />
+                    </PrivateRoute>
+                  } 
+                />
+                <Route 
+                  path="/staff/pistas" 
+                  element={
+                    <PrivateRoute allowedRoles={['staff', 'admin']}>
+                      <MomentoWow />
+                    </PrivateRoute>
+                  } 
+                />
 
+                {/* Rutas Protegidas de Administración */}
+                <Route 
+                  path="/admin" 
+                  element={
+                    <PrivateRoute allowedRoles={['admin']}>
+                      <AdminDashboard />
+                    </PrivateRoute>
+                  } 
+                />
+              </Routes>
+            </div>
+          </div>
+
+          {/* Barra de navegación inferior móvil */}
           <BottomNavigation />
         </div>
       </Router>

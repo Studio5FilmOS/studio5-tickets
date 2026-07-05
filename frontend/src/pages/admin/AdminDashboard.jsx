@@ -18,14 +18,19 @@ const AdminDashboard = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [venue, setVenue] = useState('');
-  const [bannerUrl, setBannerUrl] = useState(''); // Contendrá el string Base64 comprimido
-  const [ticketTemplateUrl, setTicketTemplateUrl] = useState(''); // Contendrá el string Base64 comprimido
+  const [bannerUrl, setBannerUrl] = useState(''); // Contendrá la ruta en el servidor (ej: /uploads/banners/...)
+  const [ticketTemplateUrl, setTicketTemplateUrl] = useState(''); // Contendrá la ruta en el servidor (ej: /uploads/tickets/...)
+  const [bannerCompressInfo, setBannerCompressInfo] = useState('');
+  const [ticketCompressInfo, setTicketCompressInfo] = useState('');
   const [priceAdult, setPriceAdult] = useState(15.00);
   const [priceChild, setPriceChild] = useState(7.50);
   const [capacityTotal, setCapacityTotal] = useState(12);
   const [isSingleRate, setIsSingleRate] = useState(false);
   const [hasAssignedSeats, setHasAssignedSeats] = useState(true);
-  const [seatingLayoutStr, setSeatingLayoutStr] = useState('A1, A2, A3, A4, B1, B2, B3, B4, C1, C2, C3, C4');
+  const [startRow, setStartRow] = useState('A');
+  const [endRow, setEndRow] = useState('C');
+  const [seatsPerRow, setSeatsPerRow] = useState(4);
+  const [seatingLayoutList, setSeatingLayoutList] = useState(['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4']);
   const [promoType, setPromoType] = useState('Ninguna'); // Ninguna, Preventa, 2x1
   const [pricePromo, setPricePromo] = useState(0.00);
   const [promoDeadline, setPromoDeadline] = useState('');
@@ -35,6 +40,17 @@ const AdminDashboard = () => {
   // Estados nuevos para el selector dinámico de fechas
   const [schedulesList, setSchedulesList] = useState([]);
   const [tempSchedule, setTempSchedule] = useState('');
+
+  // Resolver URLs relativas de imágenes
+  const getImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    const backendUrl = apiUrl.replace(/\/api$/, '');
+    return `${backendUrl}${url}`;
+  };
 
   // Helper para comprimir imágenes del lado del cliente
   const compressImage = (file) => {
@@ -93,24 +109,43 @@ const AdminDashboard = () => {
 
     Swal.fire({
       title: 'Procesando imagen...',
-      text: 'Aplicando compresión inteligente',
+      text: 'Aplicando compresión inteligente y subiendo al servidor',
       allowOutsideClick: false,
       didOpen: () => { Swal.showLoading(); }
     });
 
     try {
       const base64Compressed = await compressImage(file);
+      
+      // Calcular tamaños para mostrar la métrica de compresión
+      const originalSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      const base64Length = base64Compressed.length - (base64Compressed.indexOf(',') + 1);
+      const compressedSizeKB = (Math.ceil(base64Length * 3 / 4) / 1024).toFixed(0);
+      const reduction = Math.round((1 - (Math.ceil(base64Length * 3 / 4) / file.size)) * 100);
+      
+      const compressMetrics = `Optimizado: ${originalSizeMB}MB → ${compressedSizeKB}KB (-${reduction}%)`;
+
+      // Subir al servidor usando el endpoint /events/upload
+      const uploadRes = await api.post('/events/upload', { image: base64Compressed, type: target });
+      
       Swal.close();
 
-      if (target === 'banner') {
-        setBannerUrl(base64Compressed);
-      } else if (target === 'ticket') {
-        setTicketTemplateUrl(base64Compressed);
+      if (uploadRes.data.status === 'OK') {
+        const fileUrl = uploadRes.data.url;
+        if (target === 'banner') {
+          setBannerUrl(fileUrl);
+          setBannerCompressInfo(compressMetrics);
+        } else if (target === 'ticket') {
+          setTicketTemplateUrl(fileUrl);
+          setTicketCompressInfo(compressMetrics);
+        }
+      } else {
+        throw new Error(uploadRes.data.message || 'Error al guardar archivo.');
       }
     } catch (err) {
       console.error(err);
       Swal.close();
-      Swal.fire('Error', 'Ocurrió un error al procesar la imagen.', 'error');
+      Swal.fire('Error', err.message || 'Ocurrió un error al procesar la imagen.', 'error');
     }
   };
 
@@ -160,6 +195,200 @@ const AdminDashboard = () => {
     fetchData();
   }, [activeTab]);
 
+  // Generar cuadrícula de asientos de la A a la Z
+  const generateGrid = () => {
+    const start = startRow.trim().toUpperCase().charCodeAt(0);
+    const end = endRow.trim().toUpperCase().charCodeAt(0);
+    const numSeats = parseInt(seatsPerRow) || 0;
+
+    if (start < 65 || start > 90 || end < 65 || end > 90 || start > end) {
+      Swal.fire('Error', 'Las filas deben ir de la A a la Z, y la fila inicial no puede ser posterior a la final.', 'error');
+      return;
+    }
+    if (numSeats <= 0 || numSeats > 50) {
+      Swal.fire('Error', 'El número de asientos por fila debe estar entre 1 y 50.', 'error');
+      return;
+    }
+
+    const newLayout = [];
+    for (let r = start; r <= end; r++) {
+      const rowChar = String.fromCharCode(r);
+      for (let s = 1; s <= numSeats; s++) {
+        newLayout.push(`${rowChar}${s}`);
+      }
+    }
+    setSeatingLayoutList(newLayout);
+  };
+
+  // Activar/desactivar butaca individual en el editor interactivo
+  const toggleSeatLayout = (seatLabel) => {
+    if (seatingLayoutList.includes(seatLabel)) {
+      setSeatingLayoutList(seatingLayoutList.filter(s => s !== seatLabel));
+    } else {
+      setSeatingLayoutList([...seatingLayoutList, seatLabel].sort((a, b) => {
+        const matchA = a.match(/^([A-Z]+)(\d+)$/);
+        const matchB = b.match(/^([A-Z]+)(\d+)$/);
+        if (!matchA || !matchB) return a.localeCompare(b);
+        const rowA = matchA[1];
+        const rowB = matchB[1];
+        const numA = parseInt(matchA[2]);
+        const numB = parseInt(matchB[2]);
+        if (rowA !== rowB) return rowA.localeCompare(rowB);
+        return numA - numB;
+      }));
+    }
+  };
+
+  // Cargar croquis y enviarlo a OpenRouter para procesarlo con IA
+  const handleAIScanLayout = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    Swal.fire({
+      title: 'Analizando croquis con IA...',
+      text: 'Extrayendo listado de asientos con Gemini',
+      allowOutsideClick: false,
+      didOpen: () => { Swal.showLoading(); }
+    });
+
+    try {
+      const base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const response = await api.post('/events/parse-seating-layout', { image: base64Data });
+      Swal.close();
+
+      if (response.data.status === 'OK') {
+        setSeatingLayoutList(response.data.seats);
+        Swal.fire('Éxito', `Plano importado con éxito. Se detectaron ${response.data.seats.length} asientos.`, 'success');
+      } else {
+        throw new Error(response.data.message || 'Error en la respuesta de la IA.');
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.close();
+      Swal.fire('Error de IA', err.response?.data?.message || err.message || 'No se pudo escanear el plano. Asegúrate de configurar la clave de OpenRouter en el servidor.', 'error');
+    }
+  };
+
+  // Renderizar la cuadrícula interactiva
+  const renderInteractiveGrid = () => {
+    let endCharCode = 65; // A
+    let maxSeatNum = 1;
+    
+    if (seatingLayoutList.length > 0) {
+      seatingLayoutList.forEach(seat => {
+        const match = seat.match(/^([A-Z]+)(\d+)$/);
+        if (match) {
+          const rowChar = match[1];
+          const seatNum = parseInt(match[2]);
+          const charCode = rowChar.charCodeAt(0);
+          if (charCode > endCharCode) endCharCode = charCode;
+          if (seatNum > maxSeatNum) maxSeatNum = seatNum;
+        }
+      });
+    } else {
+      endCharCode = endRow.toUpperCase().charCodeAt(0);
+      maxSeatNum = parseInt(seatsPerRow) || 1;
+    }
+    
+    const start = 'A'.charCodeAt(0);
+    const end = String.fromCharCode(endCharCode).charCodeAt(0);
+    
+    const allRows = [];
+    for (let r = start; r <= end; r++) {
+      const rowChar = String.fromCharCode(r);
+      const rowSeats = [];
+      for (let s = 1; s <= maxSeatNum; s++) {
+        rowSeats.push(`${rowChar}${s}`);
+      }
+      allRows.push({ rowName: rowChar, seats: rowSeats });
+    }
+
+    return (
+      <div style={{ 
+        background: 'rgba(0,0,0,0.3)', 
+        border: '1px solid var(--glass-border)', 
+        padding: '24px 15px', 
+        borderRadius: '16px', 
+        margin: '15px 0 25px 0', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        gap: '12px' 
+      }}>
+        <div style={{ 
+          width: '70%', 
+          height: '4px', 
+          background: 'var(--accent-glow)', 
+          margin: '0 auto 10px auto', 
+          borderRadius: '2px', 
+          boxShadow: '0 0 10px var(--accent-glow)', 
+          textAlign: 'center', 
+          fontSize: '0.65rem', 
+          color: 'var(--accent)', 
+          textTransform: 'uppercase', 
+          letterSpacing: '2px', 
+          paddingTop: '8px',
+          marginBottom: '20px'
+        }}>
+          Escenario / Pantalla
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', overflowX: 'auto', padding: '10px 0' }}>
+          {allRows.map(row => (
+            <div key={row.rowName} style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', width: '15px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                {row.rowName}
+              </span>
+              {row.seats.map(seat => {
+                const isActive = seatingLayoutList.includes(seat);
+                return (
+                  <button
+                    key={seat}
+                    type="button"
+                    onClick={() => toggleSeatLayout(seat)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      transition: 'all 0.15s'
+                    }}
+                    title={`Butaca ${seat} - ${isActive ? 'Activa' : 'Inactiva/Pasillo'}`}
+                  >
+                    <Armchair size={22} color={isActive ? 'var(--accent)' : 'var(--text-muted)'} style={{ transform: isActive ? 'scale(1.1)' : 'none', opacity: isActive ? 1 : 0.2 }} />
+                    <span style={{ fontSize: '0.55rem', color: isActive ? '#fff' : 'rgba(255,255,255,0.15)', marginTop: '2px', fontWeight: 'bold' }}>
+                      {seat}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '12px', fontSize: '0.7rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Armchair size={13} color="var(--accent)" />
+            <span>Activa ({seatingLayoutList.length})</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Armchair size={13} color="var(--text-muted)" style={{ opacity: 0.3 }} />
+            <span>Pasillo / Pasadizo</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Actualizar estado de pago
   const handleUpdateStatus = async (orderId, currentStatus, newStatus) => {
     if (currentStatus === newStatus) return;
@@ -201,9 +430,9 @@ const AdminDashboard = () => {
     let layoutArray = null;
     let actualCapacity = parseInt(capacityTotal);
     
-    if (hasAssignedSeats && seatingLayoutStr) {
-      layoutArray = seatingLayoutStr.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
-      actualCapacity = layoutArray.length;
+    if (hasAssignedSeats) {
+      layoutArray = seatingLayoutList;
+      actualCapacity = seatingLayoutList.length;
     }
 
     const payload = {
@@ -240,7 +469,10 @@ const AdminDashboard = () => {
         setCapacityTotal(12);
         setIsSingleRate(false);
         setHasAssignedSeats(true);
-        setSeatingLayoutStr('A1, A2, A3, A4, B1, B2, B3, B4, C1, C2, C3, C4');
+        setStartRow('A');
+        setEndRow('C');
+        setSeatsPerRow(4);
+        setSeatingLayoutList(['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4']);
         setPromoType('Ninguna');
         setPricePromo(0);
         setPromoDeadline('');
@@ -615,10 +847,10 @@ const AdminDashboard = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--glass-border)', padding: '20px', borderRadius: '12px' }}>
                 {bannerUrl ? (
                   <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden' }}>
-                    <img src={bannerUrl} alt="Banner Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={getImageUrl(bannerUrl)} alt="Banner Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <button 
                       type="button" 
-                      onClick={() => setBannerUrl('')} 
+                      onClick={() => { setBannerUrl(''); setBannerCompressInfo(''); }} 
                       style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,59,48,0.9)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}
                     >
                       <Trash2 size={16} />
@@ -636,6 +868,11 @@ const AdminDashboard = () => {
                     />
                   </label>
                 )}
+                {bannerUrl && bannerCompressInfo && (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--success)', fontWeight: '700', background: 'rgba(52,199,89,0.08)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(52,199,89,0.2)' }}>
+                    {bannerCompressInfo}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -645,10 +882,10 @@ const AdminDashboard = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--glass-border)', padding: '20px', borderRadius: '12px' }}>
                 {ticketTemplateUrl ? (
                   <div style={{ position: 'relative', width: '100%', height: '100px', borderRadius: '8px', overflow: 'hidden' }}>
-                    <img src={ticketTemplateUrl} alt="Ticket Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={getImageUrl(ticketTemplateUrl)} alt="Ticket Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <button 
                       type="button" 
-                      onClick={() => setTicketTemplateUrl('')} 
+                      onClick={() => { setTicketTemplateUrl(''); setTicketCompressInfo(''); }} 
                       style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,59,48,0.9)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}
                     >
                       <Trash2 size={16} />
@@ -665,6 +902,11 @@ const AdminDashboard = () => {
                       style={{ display: 'none' }} 
                     />
                   </label>
+                )}
+                {ticketTemplateUrl && ticketCompressInfo && (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--success)', fontWeight: '700', background: 'rgba(52,199,89,0.08)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(52,199,89,0.2)' }}>
+                    {ticketCompressInfo}
+                  </div>
                 )}
               </div>
             </div>
@@ -684,18 +926,81 @@ const AdminDashboard = () => {
             </div>
 
             {hasAssignedSeats ? (
-              <div className="fade-in" style={{ background: 'rgba(222,184,65,0.02)', border: '1px solid var(--accent-glow)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
-                <label>Plano de Asientos (Butacas separadas por comas) *</label>
-                <textarea 
-                  value={seatingLayoutStr} 
-                  onChange={(e) => setSeatingLayoutStr(e.target.value)} 
-                  placeholder="Ej: A1, A2, A3, B1, B2, B3" 
-                  rows="2"
-                  required={hasAssignedSeats}
-                />
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '-5px' }}>
+              <div className="fade-in" style={{ background: 'rgba(222,184,65,0.02)', border: '1px solid var(--accent-glow)', padding: '18px', borderRadius: '16px', marginBottom: '15px' }}>
+                <h4 style={{ fontSize: '0.85rem', color: 'var(--accent)', textTransform: 'uppercase', marginBottom: '15px', letterSpacing: '0.5px', fontWeight: 'bold' }}>
+                  Configuración del Mapa de Asientos
+                </h4>
+                
+                {/* Generador Rápido por Rangos */}
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '15px' }}>
+                  <div style={{ flex: '1', minWidth: '80px' }}>
+                    <label style={{ fontSize: '0.65rem' }}>Fila Inicial</label>
+                    <input 
+                      type="text" 
+                      value={startRow} 
+                      onChange={(e) => setStartRow(e.target.value.toUpperCase().slice(0, 1))} 
+                      maxLength={1}
+                      style={{ marginBottom: '0', padding: '10px', textAlign: 'center' }}
+                    />
+                  </div>
+                  <div style={{ flex: '1', minWidth: '80px' }}>
+                    <label style={{ fontSize: '0.65rem' }}>Fila Final</label>
+                    <input 
+                      type="text" 
+                      value={endRow} 
+                      onChange={(e) => setEndRow(e.target.value.toUpperCase().slice(0, 1))} 
+                      maxLength={1}
+                      style={{ marginBottom: '0', padding: '10px', textAlign: 'center' }}
+                    />
+                  </div>
+                  <div style={{ flex: '1.5', minWidth: '100px' }}>
+                    <label style={{ fontSize: '0.65rem' }}>Asientos por Fila</label>
+                    <input 
+                      type="number" 
+                      value={seatsPerRow} 
+                      onChange={(e) => setSeatsPerRow(Math.max(1, parseInt(e.target.value) || 1))} 
+                      min={1}
+                      style={{ marginBottom: '0', padding: '10px', textAlign: 'center' }}
+                    />
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={generateGrid}
+                    className="btn-secondary" 
+                    style={{ flex: '2', height: '42px', marginTop: '22px', fontSize: '0.8rem', padding: '0 10px', background: 'rgba(222,184,65,0.1)', borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                  >
+                    Generar Plano
+                  </button>
+                </div>
+
+                {/* Subir plano para procesar con IA */}
+                <div style={{ 
+                  background: 'rgba(255,255,255,0.01)', 
+                  border: '1px dashed rgba(255,255,255,0.1)', 
+                  borderRadius: '12px', 
+                  padding: '12px', 
+                  marginBottom: '20px', 
+                  textAlign: 'center' 
+                }}>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', marginBottom: '0', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                    <Sparkles size={14} color="var(--accent)" />
+                    <span>¿Tienes una foto del plano? Escanear con IA</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleAIScanLayout} 
+                      style={{ display: 'none' }} 
+                    />
+                  </label>
+                </div>
+
+                {/* Cuadrícula interactiva de butacas */}
+                <label style={{ color: 'var(--accent)' }}>Mapa Visual de Asientos (Haz clic para desactivar pasillos)</label>
+                {renderInteractiveGrid()}
+
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '-10px' }}>
                   <Info size={14} style={{ marginTop: '2px', flexShrink: '0' }} />
-                  <span>El aforo máximo será de {seatingLayoutStr.split(',').filter(x => x.trim().length > 0).length} butacas.</span>
+                  <span>El aforo total de este show numerado será de <b>{seatingLayoutList.length}</b> butacas activas.</span>
                 </div>
               </div>
             ) : (

@@ -1,4 +1,6 @@
 const { query } = require('../config/db');
+const fs = require('fs');
+const path = require('path');
 
 // Listar todos los eventos
 exports.getAllEvents = async (req, res) => {
@@ -319,6 +321,137 @@ exports.toggleEventStatus = async (req, res) => {
     res.status(500).json({
       status: 'ERROR',
       message: 'Error al cambiar estado del evento',
+      error: err.message
+    });
+};
+
+// Subir afiche o fondo de boleto comprimido (base64)
+exports.uploadImage = async (req, res) => {
+  const { image, type } = req.body;
+  if (!image) {
+    return res.status(400).json({ status: 'ERROR', message: 'No se envió ninguna imagen.' });
+  }
+
+  try {
+    const folder = type === 'ticket' ? 'tickets' : 'banners';
+    const uploadsDir = path.join(__dirname, '..', 'public', 'uploads', folder);
+    
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const matches = image.match(/^data:image\/([A-Za-z\-+]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ status: 'ERROR', message: 'Formato de imagen inválido o corrupto.' });
+    }
+
+    const imageExtension = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+    const base64Data = matches[2];
+    const filename = `${type || 'img'}_${Date.now()}_${Math.round(Math.random() * 1e9)}.${imageExtension}`;
+    const filepath = path.join(uploadsDir, filename);
+
+    fs.writeFileSync(filepath, Buffer.from(base64Data, 'base64'));
+    const publicPath = `/uploads/${folder}/${filename}`;
+
+    res.json({
+      status: 'OK',
+      url: publicPath
+    });
+  } catch (err) {
+    console.error('Error al subir imagen:', err);
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Error al almacenar la imagen en el servidor.',
+      error: err.message
+    });
+  }
+};
+
+// Analizar croquis de butacas con IA a través de OpenRouter
+exports.parseSeatingLayout = async (req, res) => {
+  const { image } = req.body;
+  if (!image) {
+    return res.status(400).json({ status: 'ERROR', message: 'No se envió ninguna imagen del plano.' });
+  }
+
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    return res.status(400).json({
+      status: 'ERROR',
+      message: 'Configuración de IA no disponible en el servidor. Por favor define la variable OPENROUTER_API_KEY en tu .env.'
+    });
+  }
+
+  try {
+    // LLamada a OpenRouter (usando fetch nativo de Node.js)
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'http://localhost:5000',
+        'X-Title': 'Studio 5 Tickets'
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Analiza esta imagen de un plano de asientos (butacas) de teatro/cine. Identifica e inscribe todos los códigos de asientos (por ejemplo: A1, A2, A3, B1, B2, B3, C1...). Devuelve EXCLUSIVAMENTE una lista JSON plana con las etiquetas identificadas en formato de strings. Ejemplo: ["A1","A2","B1","B2"]. No devuelvas formato markdown, ni bloques de código, ni comentarios adicionales.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: image // Formato data:image/jpeg;base64,...
+                }
+              }
+            ]
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    const assistantMessage = data.choices?.[0]?.message?.content || '';
+    
+    // Intentar parsear el JSON
+    let parsedSeats = [];
+    try {
+      // Limpiar markdown del mensaje si la IA desobedeció
+      const cleanJson = assistantMessage.replace(/```json|```/g, '').trim();
+      parsedSeats = JSON.parse(cleanJson);
+    } catch (parseErr) {
+      console.warn('Fallo al parsear JSON directamente de la respuesta de la IA. Intentando extraer array.', assistantMessage);
+      const match = assistantMessage.match(/\[\s*".*?"\s*(?:,\s*".*?"\s*)*\]/s);
+      if (match) {
+        parsedSeats = JSON.parse(match[0]);
+      } else {
+        throw new Error('No se pudo interpretar el formato de respuesta del plano.');
+      }
+    }
+
+    if (!Array.isArray(parsedSeats)) {
+      throw new Error('La respuesta de la IA no es un listado válido de asientos.');
+    }
+
+    res.json({
+      status: 'OK',
+      seats: parsedSeats.map(s => s.trim().toUpperCase()).filter(s => s.length > 0)
+    });
+
+  } catch (err) {
+    console.error('Error al analizar plano con IA:', err);
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Fallo al procesar el plano con IA.',
       error: err.message
     });
   }
