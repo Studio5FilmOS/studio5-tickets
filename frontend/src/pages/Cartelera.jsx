@@ -145,7 +145,7 @@ const Cartelera = () => {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div className="cartelera-grid">
           {filteredEvents.map((evt, index) => {
             const totalAvailable = evt.schedules.reduce((acc, s) => acc + s.available_capacity, 0);
             const isSoldOut = totalAvailable === 0;

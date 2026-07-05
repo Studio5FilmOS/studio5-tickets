@@ -15,7 +15,7 @@ exports.register = async (req, res) => {
 
   try {
     // Verificar si el correo ya existe
-    const userExist = await query('SELECT id FROM users WHERE email = $1', [email]);
+    const userExist = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
     if (userExist.rows.length > 0) {
       return res.status(400).json({
         status: 'ERROR',
@@ -63,7 +63,7 @@ exports.login = async (req, res) => {
 
   try {
     // Buscar usuario en la BD
-    const userRes = await query('SELECT * FROM users WHERE email = $1', [email]);
+    const userRes = await query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
     if (userRes.rows.length === 0) {
       return res.status(401).json({
         status: 'ERROR',

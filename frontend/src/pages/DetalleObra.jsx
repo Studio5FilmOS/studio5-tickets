@@ -448,23 +448,39 @@ const DetalleObra = () => {
   };
 
   return (
-    <div className="glass-panel fade-in">
+    <div className="detalle-obra-page fade-in">
       <button onClick={() => navigate('/')} className="btn-secondary" style={{ padding: '8px 15px', width: 'auto', marginBottom: '20px', fontSize: '0.85rem' }}>
         <ChevronLeft size={16} /> Volver a Cartelera
       </button>
 
-      <h2 style={{ color: 'var(--accent)', marginBottom: '5px' }}>{event.title}</h2>
-      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '15px' }}>📍 {event.venue}</p>
-
-      {promoActiva && (
-        <div style={{ background: 'rgba(241,165,28,0.1)', border: '1px solid var(--accent-glow)', padding: '10px 15px', borderRadius: '12px', marginBottom: '20px', fontSize: '0.85rem' }}>
-          <span style={{ fontWeight: 'bold', color: 'var(--accent)' }}>🔥 PROMOCIÓN ACTIVA: </span>
-          {event.promo_type === '2x1' ? '2x1 en entradas de adultos' : `Preventa especial por $${event.price_promo}`}
-          {event.promo_deadline && ` hasta el ${new Date(event.promo_deadline).toLocaleDateString('es-EC')}`}
+      <div className="detalle-obra-layout">
+        {/* Columna Izquierda: Banner e Info */}
+        <div className="detalle-media-col glass-panel">
+          <div style={{ borderRadius: '16px', overflow: 'hidden', marginBottom: '20px', aspectRatio: '16/9' }}>
+            <img 
+              src={getImageUrl(event.banner_url)} 
+              alt={event.title} 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+            />
+          </div>
+          <h2 style={{ color: 'var(--accent)', marginBottom: '5px', fontSize: '1.8rem', fontWeight: 900 }}>{event.title}</h2>
+          <p style={{ color: 'var(--text-primary)', fontSize: '0.9rem', marginBottom: '15px' }}>📍 {event.venue}</p>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: '1.6', borderTop: '1px solid var(--glass-border)', paddingTop: '15px' }}>
+            <p>Disfruta de esta increíble producción. Selecciona tu función preferida, define la cantidad de entradas o butacas, ingresa tus datos y realiza tu pago en segundos.</p>
+          </div>
         </div>
-      )}
 
-      <form onSubmit={handleRegisterClick}>
+        {/* Columna Derecha: Formulario y Asientos */}
+        <div className="detalle-form-col glass-panel">
+          {promoActiva && (
+            <div style={{ background: 'rgba(241,165,28,0.1)', border: '1px solid var(--accent-glow)', padding: '10px 15px', borderRadius: '12px', marginBottom: '20px', fontSize: '0.85rem' }}>
+              <span style={{ fontWeight: 'bold', color: 'var(--accent)' }}>🔥 PROMOCIÓN ACTIVA: </span>
+              {event.promo_type === '2x1' ? '2x1 en entradas de adultos' : `Preventa especial por $${event.price_promo}`}
+              {event.promo_deadline && ` hasta el ${new Date(event.promo_deadline).toLocaleDateString('es-EC')}`}
+            </div>
+          )}
+
+          <form onSubmit={handleRegisterClick}>
         {/* Vista Admin/Staff: Selección de tipo de operación */}
         {isStaff && (
           <>
@@ -671,6 +687,8 @@ const DetalleObra = () => {
           {isProcessing ? 'PROCESANDO...' : `PAGAR $${calculateTotal().toFixed(2)}`}
         </button>
       </form>
+        </div>
+      </div>
 
       {/* --- MODAL / OVERLAY DE CHECKOUT DE PAYPHONE REAL --- */}
       {showPayphoneModal && (

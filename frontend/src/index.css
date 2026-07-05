@@ -517,3 +517,40 @@ input:focus, select:focus, textarea:focus {
     letter-spacing: 0.5px;
   }
 }
+
+/* --- ADAPTACIÓN PREMIUM PARA ESCRITORIO --- */
+.cartelera-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  width: 100%;
+}
+
+.detalle-obra-page {
+  width: 100%;
+}
+
+.detalle-obra-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 25px;
+  width: 100%;
+}
+
+@media (min-width: 576px) {
+  .cartelera-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 992px) {
+  .cartelera-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .detalle-obra-layout {
+    grid-template-columns: 1fr 1.2fr;
+    align-items: start;
+  }
+}
+
