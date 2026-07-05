@@ -323,6 +323,7 @@ exports.toggleEventStatus = async (req, res) => {
       message: 'Error al cambiar estado del evento',
       error: err.message
     });
+  }
 };
 
 // Subir afiche o fondo de boleto comprimido (base64)
