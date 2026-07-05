@@ -31,10 +31,13 @@ const initDatabase = async () => {
       );
       console.log('Credenciales de administrador y staff verificadas/actualizadas.');
 
-      // Alterar columnas para soportar base64 si no se ha hecho
-      await query("ALTER TABLE events ALTER COLUMN banner_url TYPE TEXT;");
-      await query("ALTER TABLE events ALTER COLUMN ticket_template_url TYPE TEXT;");
-      await query("ALTER TABLE event_clues ALTER COLUMN image_url TYPE TEXT;");
+      // Alterar columnas para soportar base64 si no se ha hecho (seguro en re-deploys)
+      const alterSafe = async (sql) => {
+        try { await query(sql); } catch (e) { /* columna ya modificada, ignorar */ }
+      };
+      await alterSafe("ALTER TABLE events ALTER COLUMN banner_url TYPE TEXT;");
+      await alterSafe("ALTER TABLE events ALTER COLUMN ticket_template_url TYPE TEXT;");
+      await alterSafe("ALTER TABLE event_clues ALTER COLUMN image_url TYPE TEXT;");
       console.log('Migración de columnas TEXT de imágenes completada.');
     }
   } catch (err) {
