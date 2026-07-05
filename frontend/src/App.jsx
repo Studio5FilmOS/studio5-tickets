@@ -12,13 +12,14 @@ import ScannerDashboard from './pages/staff/ScannerDashboard';
 import MomentoWow from './pages/staff/MomentoWow';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PublicInteraction from './pages/PublicInteraction'; // NUEVA PÁGINA
+import PayphoneRedirect from './pages/PayphoneRedirect';
 
 const BottomNavigation = () => {
   const { user, isAuthenticated, logout } = useAuth();
   const location = useLocation();
 
   // No mostrar barra de navegación en e-tickets ni en interactividad pública
-  if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/interaccion/')) {
+  if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/interaccion/') || location.pathname.startsWith('/payphone-redirect')) {
     return null;
   }
 
@@ -103,7 +104,7 @@ const Sidebar = () => {
   const location = useLocation();
 
   // No mostrar barra lateral en e-tickets ni en interactividad pública
-  if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/interaccion/')) {
+  if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/interaccion/') || location.pathname.startsWith('/payphone-redirect')) {
     return null;
   }
 
@@ -200,6 +201,7 @@ const App = () => {
                 
                 {/* NUEVA RUTA PÚBLICA PARA QR DE SALA */}
                 <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
+                <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
 
                 {/* Rutas Protegidas del Staff */}
                 <Route 

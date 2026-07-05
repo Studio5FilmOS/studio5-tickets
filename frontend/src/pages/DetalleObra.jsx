@@ -91,12 +91,23 @@ const DetalleObra = () => {
     };
     fetchPayphoneConfig();
 
+    // Cargar CSS de la Cajita de Pagos
+    const cssId = 'payphone-css';
+    if (!document.getElementById(cssId)) {
+      const link = document.createElement('link');
+      link.id = cssId;
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.css';
+      document.head.appendChild(link);
+    }
+
+    // Cargar JS de la Cajita de Pagos
     const scriptId = 'payphone-script';
     if (!document.getElementById(scriptId)) {
       const script = document.createElement('script');
       script.id = scriptId;
-      script.src = 'https://pay.payphonetodoesposible.com/api/button/v2/payphone-button.js';
-      script.async = true;
+      script.src = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.js';
+      script.type = 'module';
       script.onload = () => setIsPayphoneScriptLoaded(true);
       document.body.appendChild(script);
     } else {
@@ -117,39 +128,39 @@ const DetalleObra = () => {
       const uniqueClientTxId = `TX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`.substring(0, 20);
 
       try {
-        if (window.payphone && window.payphone.Button) {
-          window.payphone.Button({
-            token: payphoneToken,
-            btnHorizontal: true,
-            btnCard: true,
-            createOrder: function (actions) {
-              return actions.prepare({
-                amount: Math.round(calculateTotal() * 100), // en centavos
-                amountWithoutTax: Math.round(calculateTotal() * 100),
-                currency: "USD",
-                clientTransactionId: uniqueClientTxId
-              });
-            },
-            onAuthorize: function (actions) {
-              Swal.fire({
-                title: 'Pago Autorizado',
-                text: 'Registrando tu entrada con el servidor...',
-                allowOutsideClick: false,
-                didOpen: () => { Swal.showLoading(); }
-              });
+        if (window.PPaymentButtonBox) {
+          // Guardar orden pendiente en localStorage antes de que ocurra la redirección
+          const orderData = {
+            idEvento: event.id,
+            fecha: scheduleId,
+            nombre,
+            email,
+            whatsapp,
+            cantAdultos,
+            cantNinos,
+            tipoVenta: 'Venta',
+            metodoPago: 'Payphone',
+            seat_labels: selectedSeats,
+            clientTxId: uniqueClientTxId
+          };
+          localStorage.setItem('pending_order', JSON.stringify(orderData));
 
-              submitOrderToServer(actions.id, uniqueClientTxId);
-            },
-            onError: function(err) {
-              console.error('Payphone SDK Error:', err);
-              Swal.fire('Error de Pago', 'Hubo un inconveniente al procesar tu tarjeta. Intenta nuevamente.', 'error');
-            }
-          }).render("#payphone-element");
+          const ppb = new window.PPaymentButtonBox({
+            token: payphoneToken,
+            amount: Math.round(calculateTotal() * 100), // en centavos
+            amountWithoutTax: Math.round(calculateTotal() * 100),
+            currency: "USD",
+            clientTransactionId: uniqueClientTxId,
+            reference: `Entradas para ${event.title}`,
+            lang: "es",
+            defaultMethod: "card"
+          });
+          ppb.render('payphone-element');
         } else {
-          console.error('Payphone SDK no está disponible en window.payphone');
+          console.error('PPaymentButtonBox no está disponible en window');
         }
       } catch (err) {
-        console.error('Error al inicializar Payphone Button:', err);
+        console.error('Error al inicializar PPaymentButtonBox:', err);
       }
     }, 100);
 
