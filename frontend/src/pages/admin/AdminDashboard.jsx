@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
-import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles } from 'lucide-react';
+import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Image, Trash2, Plus } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('ventas'); // 'ventas' o 'crear'
@@ -18,8 +18,8 @@ const AdminDashboard = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [venue, setVenue] = useState('');
-  const [bannerUrl, setBannerUrl] = useState('');
-  const [ticketTemplateUrl, setTicketTemplateUrl] = useState('');
+  const [bannerUrl, setBannerUrl] = useState(''); // Contendrá el string Base64 comprimido
+  const [ticketTemplateUrl, setTicketTemplateUrl] = useState(''); // Contendrá el string Base64 comprimido
   const [priceAdult, setPriceAdult] = useState(15.00);
   const [priceChild, setPriceChild] = useState(7.50);
   const [capacityTotal, setCapacityTotal] = useState(12);
@@ -30,8 +30,108 @@ const AdminDashboard = () => {
   const [pricePromo, setPricePromo] = useState(0.00);
   const [promoDeadline, setPromoDeadline] = useState('');
   const [status, setStatus] = useState('active');
-  const [fechasStr, setFechasStr] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Estados nuevos para el selector dinámico de fechas
+  const [schedulesList, setSchedulesList] = useState([]);
+  const [tempSchedule, setTempSchedule] = useState('');
+
+  // Helper para comprimir imágenes del lado del cliente
+  const compressImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Dimensiones máximas (1200px para mantener calidad excelente en celulares)
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convertir a JPEG comprimido (calidad 0.7)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(dataUrl);
+        };
+        img.onerror = (err) => reject(err);
+        img.src = event.target.result;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Manejar subida de archivo
+  const handleImageFileChange = async (e, target) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      Swal.fire('Error', 'Por favor selecciona un archivo de imagen válido.', 'error');
+      return;
+    }
+
+    Swal.fire({
+      title: 'Procesando imagen...',
+      text: 'Aplicando compresión inteligente',
+      allowOutsideClick: false,
+      didOpen: () => { Swal.showLoading(); }
+    });
+
+    try {
+      const base64Compressed = await compressImage(file);
+      Swal.close();
+
+      if (target === 'banner') {
+        setBannerUrl(base64Compressed);
+      } else if (target === 'ticket') {
+        setTicketTemplateUrl(base64Compressed);
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.close();
+      Swal.fire('Error', 'Ocurrió un error al procesar la imagen.', 'error');
+    }
+  };
+
+  // Agregar función de fecha/hora a la lista
+  const addScheduleItem = () => {
+    if (!tempSchedule) return;
+    const dateFormatted = new Date(tempSchedule).toISOString();
+    
+    if (schedulesList.includes(dateFormatted)) {
+      Swal.fire('Aviso', 'Esta fecha y hora ya ha sido agregada.', 'warning');
+      return;
+    }
+
+    setSchedulesList([...schedulesList, dateFormatted].sort());
+    setTempSchedule('');
+  };
+
+  // Remover fecha/hora de la lista
+  const removeScheduleItem = (indexToRemove) => {
+    setSchedulesList(schedulesList.filter((_, idx) => idx !== indexToRemove));
+  };
 
   // Cargar órdenes y eventos
   const fetchData = async () => {
@@ -69,7 +169,7 @@ const AdminDashboard = () => {
       text: newStatus === 'Anulado' ? 'Esto cancelará el acceso de todos los tickets asociados.' : 'Se activará el acceso y se enviarán los correos correspondientes.',
       icon: 'question',
       showCancelButton: true,
-      confirmButtonColor: newStatus === 'Anulado' ? '#ff3b30' : '#F1A51C',
+      confirmButtonColor: newStatus === 'Anulado' ? '#ff3b30' : '#DEB841',
       cancelButtonColor: '#333'
     });
 
@@ -91,17 +191,12 @@ const AdminDashboard = () => {
   const handleCreateEvent = async (e) => {
     e.preventDefault();
 
-    if (!title || !venue || !bannerUrl || !fechasStr) {
+    if (!title || !venue || !bannerUrl || schedulesList.length === 0) {
       Swal.fire('Error', 'Completa los campos obligatorios y añade al menos una fecha.', 'error');
       return;
     }
 
     setIsSubmitting(true);
-
-    const schedules = fechasStr.split(',').map(f => {
-      const trimmed = f.trim();
-      return Date.parse(trimmed) ? new Date(trimmed).toISOString() : null;
-    }).filter(f => f !== null);
 
     let layoutArray = null;
     let actualCapacity = parseInt(capacityTotal);
@@ -127,13 +222,14 @@ const AdminDashboard = () => {
       price_promo: promoType === 'Preventa' ? pricePromo : 0.00,
       promo_deadline: promoType !== 'Ninguna' && promoDeadline ? new Date(promoDeadline).toISOString() : null,
       status,
-      schedules
+      schedules: schedulesList
     };
 
     try {
       const res = await api.post('/events', payload);
       if (res.data.status === 'OK') {
         Swal.fire('Publicado', 'Evento publicado con éxito.', 'success');
+        // Limpiar formulario
         setTitle('');
         setDescription('');
         setVenue('');
@@ -148,7 +244,7 @@ const AdminDashboard = () => {
         setPromoType('Ninguna');
         setPricePromo(0);
         setPromoDeadline('');
-        setFechasStr('');
+        setSchedulesList([]);
         setActiveTab('ventas');
       }
     } catch (err) {
@@ -159,15 +255,11 @@ const AdminDashboard = () => {
     }
   };
 
-  // --- FILTRADO DE LA LISTA DE ÓRDENES ---
+  // Filtrado de órdenes
   const filteredOrders = orders.filter(o => {
-    // 1. Filtro por Evento
     const matchEvent = filterEventId === 'ALL' || o.event_id === filterEventId;
-    
-    // 2. Filtro por Estado de Pago
     const matchStatus = filterPaymentStatus === 'ALL' || o.payment_status === filterPaymentStatus;
 
-    // 3. Filtro por Barra de Búsqueda (Nombre, Teléfono o Código de Orden)
     const normalizedQuery = searchQuery.toLowerCase().trim();
     const matchQuery = !normalizedQuery || 
       o.customer_name.toLowerCase().includes(normalizedQuery) ||
@@ -178,7 +270,7 @@ const AdminDashboard = () => {
     return matchEvent && matchStatus && matchQuery;
   });
 
-  // --- CÁLCULO DE MÉTRICAS CONTABLES EN TIEMPO REAL (Bajo el filtro actual) ---
+  // Métricas
   const metrics = filteredOrders.reduce((acc, o) => {
     if (o.payment_status === 'Pagado') {
       acc.revenuePaid += parseFloat(o.amount_total) || 0;
@@ -200,33 +292,18 @@ const AdminDashboard = () => {
     totalTicketsSold: 0
   });
 
-  // --- EXPORTAR LISTADO A EXCEL (CSV COMPATIBLE CON EXCEL) ---
   const handleExportToExcel = () => {
     if (filteredOrders.length === 0) {
       Swal.fire('Aviso', 'No hay datos filtrados para exportar.', 'warning');
       return;
     }
 
-    // Cabeceras del Excel
     const headers = [
-      'Código Orden',
-      'Cliente',
-      'Email',
-      'WhatsApp',
-      'Evento',
-      'Función',
-      'Adultos',
-      'Niños',
-      'Entradas Totales',
-      'Valor Total ($)',
-      'Método Pago',
-      'Banco',
-      'Ref. Transacción',
-      'Estado Pago',
-      'Fecha Registro'
+      'Código Orden', 'Cliente', 'Email', 'WhatsApp', 'Evento', 'Función', 
+      'Adultos', 'Niños', 'Entradas Totales', 'Valor Total ($)', 
+      'Método Pago', 'Banco', 'Ref. Transacción', 'Estado Pago', 'Fecha Registro'
     ];
 
-    // Mapear los datos de las filas
     const rows = filteredOrders.map(o => {
       const dateFormatted = new Date(o.schedule_time).toLocaleString('es-EC', { timeZone: 'America/Guayaquil' });
       const createdFormatted = new Date(o.created_at).toLocaleString('es-EC', { timeZone: 'America/Guayaquil' });
@@ -251,18 +328,14 @@ const AdminDashboard = () => {
       ];
     });
 
-    // Combinar cabeceras y filas con separador por comas (CSV estándar)
-    // Usamos delimitador punto y coma ";" que es el estándar regional en Excel en Español
     const csvContent = [
       headers.join(';'),
       ...rows.map(row => row.join(';'))
     ].join('\n');
 
-    // Añadir el BOM de UTF-8 (\uFEFF) para asegurar que Excel reconozca correctamente las tildes y eñes
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     
-    // Crear enlace de descarga automático
     const link = document.createElement('a');
     link.setAttribute('href', url);
     link.setAttribute('download', `Reporte_Ventas_Studio5_${new Date().toISOString().slice(0,10)}.csv`);
@@ -296,10 +369,9 @@ const AdminDashboard = () => {
       {/* PESTAÑA: PANEL CONTABLE Y VENTAS */}
       {activeTab === 'ventas' && (
         <div className="fade-in">
-          
-          {/* --- INDICADORES CONTABLES (DASHBOARD METRICS) --- */}
+          {/* Métricas */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(52, 199, 89, 0.1)' }}>
+            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(52, 199, 89, 0.1)', borderLeft: '3px solid var(--success)' }}>
               <div style={{ background: 'var(--success)', padding: '8px', borderRadius: '8px', color: '#000' }}>
                 <DollarSign size={20} />
               </div>
@@ -309,7 +381,7 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255, 204, 0, 0.1)' }}>
+            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255, 204, 0, 0.1)', borderLeft: '3px solid var(--warning)' }}>
               <div style={{ background: 'var(--warning)', padding: '8px', borderRadius: '8px', color: '#000' }}>
                 <DollarSign size={20} />
               </div>
@@ -319,8 +391,8 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(3, 169, 244, 0.1)' }}>
-              <div style={{ background: 'var(--accent-secondary)', padding: '8px', borderRadius: '8px', color: '#fff' }}>
+            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(222, 184, 65, 0.1)', borderLeft: '3px solid var(--accent)' }}>
+              <div style={{ background: 'var(--accent)', padding: '8px', borderRadius: '8px', color: '#000' }}>
                 <Users size={20} />
               </div>
               <div>
@@ -329,8 +401,8 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(241, 165, 28, 0.1)' }}>
-              <div style={{ background: 'var(--accent)', padding: '8px', borderRadius: '8px', color: '#000' }}>
+            <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255, 255, 255, 0.05)', borderLeft: '3px solid #8e8e93' }}>
+              <div style={{ background: '#333', padding: '8px', borderRadius: '8px', color: '#fff' }}>
                 <Sparkles size={20} />
               </div>
               <div>
@@ -340,13 +412,12 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* --- SECCIÓN DE FILTROS CONTABLES --- */}
+          {/* Filtros */}
           <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '20px' }}>
             <h4 style={{ fontSize: '0.8rem', color: 'var(--accent)', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '1px' }}>Filtros y Reportes</h4>
             
             <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
               <div style={{ display: 'flex', gap: '10px' }}>
-                {/* Filtrar por Evento */}
                 <div style={{ flex: '1' }}>
                   <label style={{ fontSize: '0.65rem' }}>Evento</label>
                   <select 
@@ -361,7 +432,6 @@ const AdminDashboard = () => {
                   </select>
                 </div>
 
-                {/* Filtrar por Estado */}
                 <div style={{ flex: '1' }}>
                   <label style={{ fontSize: '0.65rem' }}>Estado de Pago</label>
                   <select 
@@ -378,7 +448,6 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
-              {/* Barra de Búsqueda */}
               <div style={{ position: 'relative' }}>
                 <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '12px' }} />
                 <input 
@@ -390,7 +459,6 @@ const AdminDashboard = () => {
                 />
               </div>
 
-              {/* Botón Exportar a Excel */}
               <button 
                 onClick={handleExportToExcel}
                 className="btn-outline" 
@@ -401,7 +469,7 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* --- TABLA DE REGISTROS DE ASISTENCIA --- */}
+          {/* Listado */}
           <div className="glass-panel" style={{ padding: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h3 style={{ color: 'var(--accent)', fontSize: '1.1rem' }}>Asistentes y Ventas ({filteredOrders.length})</h3>
@@ -440,10 +508,6 @@ const AdminDashboard = () => {
                       <p style={{ color: 'var(--text-muted)' }}>🎬 {o.event_title} | 📅 {dateFormatted}</p>
                       <p style={{ color: 'var(--text-muted)' }}>🎟️ Entradas: <b>{totalT}</b> | Asiento: <b>{o.desglose || 'Sin enumerar'}</b></p>
                       <p style={{ color: 'var(--text-muted)' }}>📞 WhatsApp: <b>{o.customer_whatsapp || 'N/A'}</b> | Email: <b>{o.customer_email || 'N/A'}</b></p>
-                      
-                      {o.payment_method === 'Transferencia' && (
-                        <p style={{ color: 'var(--text-muted)' }}>🏦 {o.bank_name} | Ref: {o.transaction_ref}</p>
-                      )}
 
                       <p style={{ color: 'var(--accent)', fontWeight: 'bold', marginTop: '4px' }}>Monto: ${parseFloat(o.amount_total).toFixed(2)} ({o.payment_method})</p>
 
@@ -492,11 +556,65 @@ const AdminDashboard = () => {
             <label>Lugar / Sala *</label>
             <input type="text" value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Ej: Teatro Principal" required />
 
-            <label>URL Afiche Posterior (Horizontal 1920x1080) *</label>
-            <input type="url" value={bannerUrl} onChange={(e) => setBannerUrl(e.target.value)} placeholder="Enlace del afiche" required />
+            {/* --- SECCIÓN NUEVA: SUBIDA DIRECTA DE BANNER CON PREVIEW Y COMPRESIÓN --- */}
+            <div style={{ marginBottom: '15px' }}>
+              <label>Imagen del Afiche / Banner (Horizontal 16:9) *</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--glass-border)', padding: '20px', borderRadius: '12px' }}>
+                {bannerUrl ? (
+                  <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden' }}>
+                    <img src={bannerUrl} alt="Banner Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button 
+                      type="button" 
+                      onClick={() => setBannerUrl('')} 
+                      style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,59,48,0.9)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: '8px', color: 'var(--text-muted)' }}>
+                    <Upload size={32} color="var(--accent)" />
+                    <span style={{ fontSize: '0.8rem' }}>Subir Imagen de Afiche</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => handleImageFileChange(e, 'banner')} 
+                      style={{ display: 'none' }} 
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
 
-            <label>URL Molde Boleto (Alargado 1200x400) (Opcional)</label>
-            <input type="url" value={ticketTemplateUrl} onChange={(e) => setTicketTemplateUrl(e.target.value)} placeholder="Enlace del fondo del ticket" />
+            {/* --- SECCIÓN NUEVA: SUBIDA DIRECTA DE TICKET TEMPLATE CON PREVIEW Y COMPRESIÓN --- */}
+            <div style={{ marginBottom: '15px' }}>
+              <label>Imagen Fondo de Boleto (Alargado 3:1) (Opcional)</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--glass-border)', padding: '20px', borderRadius: '12px' }}>
+                {ticketTemplateUrl ? (
+                  <div style={{ position: 'relative', width: '100%', height: '100px', borderRadius: '8px', overflow: 'hidden' }}>
+                    <img src={ticketTemplateUrl} alt="Ticket Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button 
+                      type="button" 
+                      onClick={() => setTicketTemplateUrl('')} 
+                      style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,59,48,0.9)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: '8px', color: 'var(--text-muted)' }}>
+                    <Upload size={32} color="var(--accent)" />
+                    <span style={{ fontSize: '0.8rem' }}>Subir Fondo del Boleto</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => handleImageFileChange(e, 'ticket')} 
+                      style={{ display: 'none' }} 
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
 
             {/* Checkbox Asientos Asignados */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '10px', border: '1px solid var(--glass-border)', marginBottom: '15px' }}>
@@ -507,13 +625,13 @@ const AdminDashboard = () => {
                 onChange={(e) => setHasAssignedSeats(e.target.checked)} 
                 style={{ width: '18px', height: '18px', marginBottom: '0', cursor: 'pointer' }}
               />
-              <label htmlFor="assignedSeats" style={{ marginBottom: '0', cursor: 'pointer', color: 'var(--success)' }}>
+              <label htmlFor="assignedSeats" style={{ marginBottom: '0', cursor: 'pointer', color: 'var(--accent)' }}>
                 🪑 Evento Numerado (Con Asientos Asignados)
               </label>
             </div>
 
             {hasAssignedSeats ? (
-              <div className="fade-in" style={{ background: 'rgba(0,169,244,0.04)', border: '1px solid rgba(3,169,244,0.2)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
+              <div className="fade-in" style={{ background: 'rgba(222,184,65,0.02)', border: '1px solid var(--accent-glow)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
                 <label>Plano de Asientos (Butacas separadas por comas) *</label>
                 <textarea 
                   value={seatingLayoutStr} 
@@ -543,7 +661,7 @@ const AdminDashboard = () => {
                 onChange={(e) => setIsSingleRate(e.target.checked)} 
                 style={{ width: '18px', height: '18px', marginBottom: '0', cursor: 'pointer' }}
               />
-              <label htmlFor="singleRate" style={{ marginBottom: '0', cursor: 'pointer', color: 'var(--success)' }}>
+              <label htmlFor="singleRate" style={{ marginBottom: '0', cursor: 'pointer', color: 'var(--accent)' }}>
                 🎟️ Tarifa Única (Precio General único)
               </label>
             </div>
@@ -580,7 +698,7 @@ const AdminDashboard = () => {
             </select>
 
             {promoType !== 'Ninguna' && (
-              <div className="fade-in" style={{ background: 'rgba(241,165,28,0.05)', border: '1px solid var(--accent-glow)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
+              <div className="fade-in" style={{ background: 'rgba(222,184,65,0.03)', border: '1px solid var(--accent-glow)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
                 {promoType === 'Preventa' && (
                   <>
                     <label>Precio Promocional ($)</label>
@@ -592,16 +710,64 @@ const AdminDashboard = () => {
               </div>
             )}
 
-            <label>Fechas / Funciones * (Formato YYYY-MM-DD HH:MM separados por coma)</label>
-            <textarea 
-              value={fechasStr} 
-              onChange={(e) => setFechasStr(e.target.value)} 
-              placeholder="Ej: 2026-11-27 19:00, 2026-12-05 20:00" 
-              rows="2"
-              required 
-            />
+            {/* --- SECCIÓN NUEVA: SELECTOR DINÁMICO DE FECHAS/HORAS (CALENDARIO) --- */}
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
+              <label style={{ color: 'var(--accent)', fontWeight: 'bold' }}>📅 Fechas / Horarios de Funciones *</label>
+              
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', marginTop: '5px' }}>
+                <input 
+                  type="datetime-local" 
+                  value={tempSchedule} 
+                  onChange={(e) => setTempSchedule(e.target.value)}
+                  style={{ marginBottom: '0', flex: '1', padding: '10px' }}
+                />
+                <button 
+                  type="button" 
+                  onClick={addScheduleItem}
+                  className="btn-primary" 
+                  style={{ width: 'auto', padding: '10px 15px', background: 'var(--accent-secondary)' }}
+                >
+                  <Plus size={16} /> Agregar
+                </button>
+              </div>
 
-            <button type="submit" className="btn-primary" disabled={isSubmitting}>
+              {/* Listado de fechas añadidas (Chips premium) */}
+              {schedulesList.length === 0 ? (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>No has agregado ninguna función todavía.</p>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {schedulesList.map((sch, idx) => {
+                    const formatted = new Date(sch).toLocaleString('es-EC', {
+                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                    });
+                    
+                    return (
+                      <div 
+                        key={idx} 
+                        style={{ 
+                          display: 'flex', alignItems: 'center', gap: '6px', 
+                          background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)',
+                          padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', color: '#fff'
+                        }}
+                      >
+                        <Calendar size={12} color="var(--accent)" />
+                        <span>{formatted}</span>
+                        <button 
+                          type="button" 
+                          onClick={() => removeScheduleItem(idx)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: '0 2px', display: 'flex', alignItems: 'center' }}
+                          title="Eliminar función"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <button type="submit" className="btn-primary" disabled={isSubmitting || schedulesList.length === 0}>
               <Save size={18} /> {isSubmitting ? 'GUARDANDO...' : 'PUBLICAR EVENTO'}
             </button>
           </form>

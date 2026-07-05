@@ -13,14 +13,14 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. TABLA DE EVENTOS
+-- 2. TABLA DE EVENTOS (CON SOPORTE TEXT PARA IMÁGENES COMPRIMIDAS BASE64)
 CREATE TABLE IF NOT EXISTS events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title VARCHAR(255) NOT NULL,
     description TEXT,
     venue VARCHAR(255) NOT NULL,
-    banner_url VARCHAR(1024) NOT NULL,
-    ticket_template_url VARCHAR(1024),
+    banner_url TEXT NOT NULL, -- Cambiado de VARCHAR(1024) a TEXT
+    ticket_template_url TEXT, -- Cambiado de VARCHAR(1024) a TEXT
     price_adult NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     price_child NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     capacity_total INTEGER NOT NULL DEFAULT 0,
@@ -83,29 +83,25 @@ CREATE TABLE IF NOT EXISTS tickets (
 CREATE INDEX IF NOT EXISTS idx_tickets_order ON tickets(order_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_code ON tickets(ticket_code);
 
--- ==========================================
--- TABLAS NUEVAS PARA INTERACTIVIDAD EN VIVO
--- ==========================================
-
 -- 6. TABLA DE ENCUESTAS / PREGUNTAS DEL EVENTO
 CREATE TABLE IF NOT EXISTS event_polls (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     event_id UUID REFERENCES events(id) ON DELETE CASCADE,
     question TEXT NOT NULL,
-    options JSONB NOT NULL, -- Ej: ["Doctor", "Mayordomo", "Detective"]
+    options JSONB NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_polls_event_active ON event_polls(event_id, is_active);
 
--- 7. TABLA DE VOTOS DE ESPECTADORES (ACTUALIZADA CON VOTOS ANÓNIMOS POR DISPOSITIVO)
+-- 7. TABLA DE VOTOS DE ESPECTADORES
 CREATE TABLE IF NOT EXISTS poll_votes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     poll_id UUID REFERENCES event_polls(id) ON DELETE CASCADE,
     schedule_id UUID REFERENCES event_schedules(id) ON DELETE CASCADE,
-    ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE, -- Nullable (si vota por e-ticket)
-    voter_id VARCHAR(100), -- Nullable (token de dispositivo localStorage si entra por QR general)
+    ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+    voter_id VARCHAR(100),
     selected_option VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT unique_ticket_vote UNIQUE (poll_id, ticket_id),
@@ -118,7 +114,7 @@ CREATE TABLE IF NOT EXISTS event_clues (
     event_id UUID REFERENCES events(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
-    image_url VARCHAR(1024),
+    image_url TEXT, -- Cambiado de VARCHAR(1024) a TEXT para soportar base64
     is_revealed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -30,6 +30,12 @@ const initDatabase = async () => {
         "UPDATE users SET password_hash = '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa' WHERE email IN ('admin@studio5.com', 'staff@studio5.com')"
       );
       console.log('Credenciales de administrador y staff verificadas/actualizadas.');
+
+      // Alterar columnas para soportar base64 si no se ha hecho
+      await query("ALTER TABLE events ALTER COLUMN banner_url TYPE TEXT;");
+      await query("ALTER TABLE events ALTER COLUMN ticket_template_url TYPE TEXT;");
+      await query("ALTER TABLE event_clues ALTER COLUMN image_url TYPE TEXT;");
+      console.log('Migración de columnas TEXT de imágenes completada.');
     }
   } catch (err) {
     console.error('Fallo al inicializar base de datos de forma automática:', err);
