@@ -53,6 +53,13 @@ const DetalleObra = () => {
   const [successData, setSuccessData] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Estados de Facturación
+  const [isFinalConsumer, setIsFinalConsumer] = useState(true);
+  const [billingIdNumber, setBillingIdNumber] = useState('');
+  const [billingName, setBillingName] = useState('');
+  const [billingAddress, setBillingAddress] = useState('');
+  const [billingEmail, setBillingEmail] = useState('');
+
   useEffect(() => {
     const fetchEvent = async () => {
       try {
@@ -273,7 +280,13 @@ const DetalleObra = () => {
       banco: bankName,
       numTransaccion: refNum,
       seat_labels: event.has_assigned_seats ? selectedSeats : null,
-      clientTxId: clientTxId
+      clientTxId: clientTxId,
+      // Datos de facturación
+      is_final_consumer: isFinalConsumer,
+      billing_id_number: isFinalConsumer ? null : billingIdNumber,
+      billing_name: isFinalConsumer ? null : billingName,
+      billing_address: isFinalConsumer ? null : billingAddress,
+      billing_email: isFinalConsumer ? null : billingEmail
     };
 
     try {
@@ -687,6 +700,51 @@ const DetalleObra = () => {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Sección de Facturación (opcional, solo si el evento lo requiere) */}
+        {event.require_billing && (
+          <div className="glass-card" style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isFinalConsumer ? '0' : '16px' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff' }}>🧾 Datos de Facturación</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>¿Necesitas factura con tus datos?</div>
+              </div>
+              <label style={{ position: 'relative', display: 'inline-block', width: '46px', height: '26px', marginBottom: 0, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!isFinalConsumer} onChange={e => setIsFinalConsumer(!e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, background: !isFinalConsumer ? 'var(--accent)' : 'rgba(255,255,255,0.12)', borderRadius: '26px', transition: 'background 0.3s' }}>
+                  <span style={{ position: 'absolute', height: '20px', width: '20px', left: !isFinalConsumer ? '22px' : '3px', bottom: '3px', background: '#fff', borderRadius: '50%', transition: 'left 0.3s' }} />
+                </span>
+              </label>
+            </div>
+
+            {isFinalConsumer && (
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '8px 0 0 0' }}>Consumidor Final. Activa el toggle si necesitas factura con tus datos.</p>
+            )}
+
+            {!isFinalConsumer && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ flex: '1' }}>
+                    <label style={{ fontSize: '0.65rem' }}>Cédula / RUC *</label>
+                    <input type="text" value={billingIdNumber} onChange={e => setBillingIdNumber(e.target.value)} placeholder="0912345678" style={{ marginBottom: 0 }} required />
+                  </div>
+                  <div style={{ flex: '2' }}>
+                    <label style={{ fontSize: '0.65rem' }}>Razón Social / Nombre *</label>
+                    <input type="text" value={billingName} onChange={e => setBillingName(e.target.value)} placeholder="Empresa S.A. o Tu Nombre" style={{ marginBottom: 0 }} required />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.65rem' }}>Dirección</label>
+                  <input type="text" value={billingAddress} onChange={e => setBillingAddress(e.target.value)} placeholder="Av. Principal 123, Ciudad" style={{ marginBottom: 0 }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.65rem' }}>Correo para Factura</label>
+                  <input type="email" value={billingEmail} onChange={e => setBillingEmail(e.target.value)} placeholder="factura@empresa.com" style={{ marginBottom: 0 }} />
+                </div>
+              </div>
+            )}
           </div>
         )}
 

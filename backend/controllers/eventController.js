@@ -159,14 +159,14 @@ exports.createEvent = async (req, res) => {
     // Insertar Evento
     const eventRes = await query(
       `INSERT INTO events 
-       (title, description, venue, banner_url, ticket_template_url, price_adult, price_child, capacity_total, is_single_rate, has_assigned_seats, seating_layout, promo_type, price_promo, promo_deadline, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       (title, description, venue, banner_url, ticket_template_url, price_adult, price_child, capacity_total, is_single_rate, has_assigned_seats, seating_layout, promo_type, price_promo, promo_deadline, status, require_billing)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
       [
         title, description, venue, banner_url, ticket_template_url,
         price_adult || 0.00, price_child || 0.00, capacity_total, is_single_rate || false,
         has_assigned_seats || false, layoutJson, promo_type || 'Ninguna', price_promo || 0.00,
-        promo_deadline || null, status || 'active'
+        promo_deadline || null, status || 'active', req.body.require_billing || false
       ]
     );
 
@@ -229,14 +229,14 @@ exports.updateEvent = async (req, res) => {
        title = $1, description = $2, venue = $3, banner_url = $4, ticket_template_url = $5,
        price_adult = $6, price_child = $7, capacity_total = $8, is_single_rate = $9,
        has_assigned_seats = $10, seating_layout = $11, promo_type = $12, price_promo = $13,
-       promo_deadline = $14, status = $15, updated_at = NOW()
-       WHERE id = $16
+       promo_deadline = $14, status = $15, require_billing = $16, updated_at = NOW()
+       WHERE id = $17
        RETURNING *`,
       [
         title, description, venue, banner_url, ticket_template_url,
         price_adult, price_child, capacity_total, is_single_rate,
         has_assigned_seats, layoutJson, promo_type, price_promo,
-        promo_deadline || null, status, id
+        promo_deadline || null, status, req.body.require_billing || false, id
       ]
     );
 

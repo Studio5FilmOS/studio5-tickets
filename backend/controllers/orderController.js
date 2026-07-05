@@ -76,7 +76,9 @@ exports.createOrder = async (req, res) => {
   const {
     idEvento, fecha: scheduleId, nombre, email, whatsapp,
     cantAdultos, cantNinos, tipoVenta, metodoPago, banco, numTransaccion,
-    seat_labels, clientTxId
+    seat_labels, clientTxId,
+    // Campos de facturación
+    is_final_consumer, billing_id_number, billing_name, billing_address, billing_email
   } = req.body;
 
   // Validación de campos básicos
@@ -256,13 +258,14 @@ exports.createOrder = async (req, res) => {
     // 5. Insertar la orden
     const orderInsertRes = await client.query(
       `INSERT INTO orders 
-       (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, ticket_count_adult, ticket_count_child, transaction_ref, bank_name)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, ticket_count_adult, ticket_count_child, transaction_ref, bank_name, is_final_consumer, billing_id_number, billing_name, billing_address, billing_email)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
        RETURNING *`,
       [
         orderNum, buyerId, nombre, email || null, cleanWhatsapp, idEvento, scheduleId,
         operation, metodoPago || 'Efectivo', paymentStatus, finalAmount, cAd, cNi,
-        numTransaccion || null, banco || null
+        numTransaccion || null, banco || null,
+        is_final_consumer !== false, billing_id_number || null, billing_name || null, billing_address || null, billing_email || null
       ]
     );
     const newOrder = orderInsertRes.rows[0];
@@ -333,21 +336,31 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// Listar todas las órdenes
+// Listar todas las órdenes (con filtros opcionales de fecha y evento)
 exports.getAllOrders = async (req, res) => {
   try {
+    const { event_id, schedule_id, date_from, date_to } = req.query;
+    const conditions = [];
+    const params = [];
+
+    if (event_id) { params.push(event_id); conditions.push(`o.event_id = $${params.length}`); }
+    if (schedule_id) { params.push(schedule_id); conditions.push(`o.schedule_id = $${params.length}`); }
+    if (date_from) { params.push(date_from); conditions.push(`o.created_at >= $${params.length}::date`); }
+    if (date_to) { params.push(date_to); conditions.push(`o.created_at < ($${params.length}::date + interval '1 day')`); }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
     const ordersRes = await query(
       `SELECT o.*, e.title as event_title, es.schedule_time
        FROM orders o
        JOIN events e ON e.id = o.event_id
        JOIN event_schedules es ON es.id = o.schedule_id
-       ORDER BY o.created_at DESC`
+       ${whereClause}
+       ORDER BY o.created_at DESC`,
+      params
     );
 
-    res.json({
-      status: 'OK',
-      orders: ordersRes.rows
-    });
+    res.json({ status: 'OK', orders: ordersRes.rows });
   } catch (err) {
     res.status(500).json({
       status: 'ERROR',

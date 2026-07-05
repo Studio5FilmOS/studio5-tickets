@@ -18,6 +18,7 @@ const Cartelera = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
+  const [activePromotion, setActivePromotion] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,7 +35,18 @@ const Cartelera = () => {
         setLoading(false);
       }
     };
+    const fetchPromotion = async () => {
+      try {
+        const res = await api.get('/promotions/active');
+        if (res.data.status === 'OK' && res.data.promotion) {
+          setActivePromotion(res.data.promotion);
+        }
+      } catch (err) {
+        // Si no hay banner activo, se ignora silenciosamente
+      }
+    };
     fetchEvents();
+    fetchPromotion();
   }, []);
 
   const getNextSchedule = (schedules) => {
@@ -88,10 +100,10 @@ const Cartelera = () => {
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '6px' }}>
           <div>
             <p style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '4px' }}>
-              Temporada 2025
+              {activePromotion ? activePromotion.title : 'Cartelera Oficial'}
             </p>
             <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: '#fff', lineHeight: 1.1, letterSpacing: '-0.5px' }}>
-              Cartelera
+              {activePromotion?.subtitle || 'Studio 5 Film & Art'}
             </h1>
           </div>
           {events.length > 0 && (
@@ -109,6 +121,22 @@ const Cartelera = () => {
           height: '2px', width: '100%', borderRadius: '2px', marginTop: '14px',
           background: 'linear-gradient(90deg, #DEB841 0%, rgba(222,184,65,0.3) 40%, transparent 100%)'
         }} />
+
+        {/* Banner de Promoción activa (si tiene imagen) */}
+        {activePromotion?.image_url && (
+          <a
+            href={activePromotion.link_url || '#'}
+            target={activePromotion.link_url ? '_blank' : undefined}
+            rel="noopener noreferrer"
+            style={{ display: 'block', marginTop: '18px', borderRadius: '16px', overflow: 'hidden', cursor: activePromotion.link_url ? 'pointer' : 'default' }}
+          >
+            <img
+              src={getImageUrl(activePromotion.image_url)}
+              alt={activePromotion.title}
+              style={{ width: '100%', maxHeight: '180px', objectFit: 'cover', display: 'block', borderRadius: '16px' }}
+            />
+          </a>
+        )}
       </div>
 
       {/* Filtros */}

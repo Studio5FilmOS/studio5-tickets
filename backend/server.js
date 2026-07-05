@@ -6,6 +6,37 @@ const { query } = require('./config/db');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Auto-Migration para añadir columnas (ignora el error si ya existen)
+(async () => {
+  try {
+    await query('ALTER TABLE events ADD COLUMN require_billing BOOLEAN NOT NULL DEFAULT FALSE;');
+    console.log('Migration: Added require_billing to events');
+  } catch (err) { }
+  try {
+    await query('ALTER TABLE orders ADD COLUMN is_final_consumer BOOLEAN NOT NULL DEFAULT TRUE;');
+    await query('ALTER TABLE orders ADD COLUMN billing_id_number VARCHAR(50);');
+    await query('ALTER TABLE orders ADD COLUMN billing_name VARCHAR(255);');
+    await query('ALTER TABLE orders ADD COLUMN billing_address VARCHAR(255);');
+    await query('ALTER TABLE orders ADD COLUMN billing_email VARCHAR(255);');
+    console.log('Migration: Added billing fields to orders');
+  } catch (err) { }
+  try {
+    await query(`CREATE TABLE IF NOT EXISTS promotions (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      title VARCHAR(255) NOT NULL,
+      subtitle VARCHAR(255),
+      image_url TEXT,
+      link_url TEXT,
+      active BOOLEAN NOT NULL DEFAULT FALSE,
+      start_date DATE,
+      end_date DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );`);
+    console.log('Migration: promotions table ready');
+  } catch (err) { console.error('Migration promotions error:', err.message); }
+})();
+
 // Configuración de CORS — permite el mismo dominio y orígenes configurados
 const allowedOrigins = [
   'http://localhost:5173',
@@ -64,12 +95,14 @@ const authRoutes = require('./routes/authRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const ticketRoutes = require('./routes/ticketRoutes');
+const promotionRoutes = require('./routes/promotionRoutes');
 
 // Vincular Rutas a endpoints de la API
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/tickets', ticketRoutes);
+app.use('/api/promotions', promotionRoutes);
 
 // Servir archivos estáticos del Frontend compilado
 const path = require('path');

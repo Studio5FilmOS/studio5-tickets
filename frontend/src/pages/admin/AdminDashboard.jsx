@@ -1,18 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
-import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair } from 'lucide-react';
+import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt } from 'lucide-react';
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('ventas'); // 'ventas' o 'crear'
+  const [activeTab, setActiveTab] = useState('ventas'); // 'ventas', 'crear', 'eventos', 'banners'
   const [orders, setOrders] = useState([]);
   const [events, setEvents] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   
-  // Estados para filtros
+  // Estados para filtros de ventas
   const [filterEventId, setFilterEventId] = useState('ALL');
   const [filterPaymentStatus, setFilterPaymentStatus] = useState('ALL');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Estado para edición de evento
+  const [editingEvent, setEditingEvent] = useState(null); // null = creando, objeto = editando
+  const [requireBilling, setRequireBilling] = useState(false);
+
+  // Estado para banners / promociones
+  const [banners, setBanners] = useState([]);
+  const [loadingBanners, setLoadingBanners] = useState(false);
+  const [bannerForm, setBannerForm] = useState({ title: '', subtitle: '', image_url: '', link_url: '', active: false, start_date: '', end_date: '' });
+  const [editingBannerId, setEditingBannerId] = useState(null);
+  const [isSavingBanner, setIsSavingBanner] = useState(false);
 
   // Estados para formulario de nuevo evento
   const [title, setTitle] = useState('');
@@ -172,8 +185,13 @@ const AdminDashboard = () => {
   const fetchData = async () => {
     setLoadingOrders(true);
     try {
+      const params = new URLSearchParams();
+      if (filterEventId !== 'ALL') params.append('event_id', filterEventId);
+      if (filterDateFrom) params.append('date_from', filterDateFrom);
+      if (filterDateTo) params.append('date_to', filterDateTo);
+
       const [ordersRes, eventsRes] = await Promise.all([
-        api.get('/orders'),
+        api.get(`/orders?${params.toString()}`),
         api.get('/events')
       ]);
       
@@ -191,8 +209,25 @@ const AdminDashboard = () => {
     }
   };
 
+  // Cargar banners
+  const fetchBanners = async () => {
+    setLoadingBanners(true);
+    try {
+      const res = await api.get('/promotions');
+      if (res.data.status === 'OK') setBanners(res.data.promotions);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingBanners(false);
+    }
+  };
+
   useEffect(() => {
-    fetchData();
+    if (activeTab === 'banners') {
+      fetchBanners();
+    } else {
+      fetchData();
+    }
   }, [activeTab]);
 
   // Generar cuadrícula de asientos de la A a la Z
@@ -416,7 +451,43 @@ const AdminDashboard = () => {
     }
   };
 
-  // Crear nuevo evento
+  // Helper: cargar evento en el formulario para edición
+  const loadEventForEditing = (evt) => {
+    setEditingEvent(evt);
+    setTitle(evt.title);
+    setDescription(evt.description || '');
+    setVenue(evt.venue);
+    setBannerUrl(evt.banner_url || '');
+    setTicketTemplateUrl(evt.ticket_template_url || '');
+    setPriceAdult(parseFloat(evt.price_adult));
+    setPriceChild(parseFloat(evt.price_child));
+    setCapacityTotal(evt.capacity_total);
+    setIsSingleRate(evt.is_single_rate);
+    setHasAssignedSeats(evt.has_assigned_seats);
+    setSeatingLayoutList(evt.seating_layout || []);
+    setPromoType(evt.promo_type || 'Ninguna');
+    setPricePromo(parseFloat(evt.price_promo) || 0);
+    setPromoDeadline(evt.promo_deadline ? evt.promo_deadline.slice(0, 16) : '');
+    setStatus(evt.status);
+    setRequireBilling(evt.require_billing || false);
+    setSchedulesList((evt.schedules || []).map(s => new Date(s.schedule_time).toISOString()));
+    setActiveTab('crear');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const resetEventForm = () => {
+    setEditingEvent(null);
+    setTitle(''); setDescription(''); setVenue('');
+    setBannerUrl(''); setTicketTemplateUrl('');
+    setPriceAdult(15); setPriceChild(7.5); setCapacityTotal(12);
+    setIsSingleRate(false); setHasAssignedSeats(true);
+    setStartRow('A'); setEndRow('C'); setSeatsPerRow(4);
+    setSeatingLayoutList(['A1','A2','A3','A4','B1','B2','B3','B4','C1','C2','C3','C4']);
+    setPromoType('Ninguna'); setPricePromo(0); setPromoDeadline('');
+    setSchedulesList([]); setRequireBilling(false);
+  };
+
+  // Crear o actualizar evento
   const handleCreateEvent = async (e) => {
     e.preventDefault();
 
@@ -436,9 +507,7 @@ const AdminDashboard = () => {
     }
 
     const payload = {
-      title,
-      description,
-      venue,
+      title, description, venue,
       banner_url: bannerUrl,
       ticket_template_url: ticketTemplateUrl || null,
       price_adult: priceAdult,
@@ -451,39 +520,100 @@ const AdminDashboard = () => {
       price_promo: promoType === 'Preventa' ? pricePromo : 0.00,
       promo_deadline: promoType !== 'Ninguna' && promoDeadline ? new Date(promoDeadline).toISOString() : null,
       status,
+      require_billing: requireBilling,
       schedules: schedulesList
     };
 
     try {
-      const res = await api.post('/events', payload);
-      if (res.data.status === 'OK') {
-        Swal.fire('Publicado', 'Evento publicado con éxito.', 'success');
-        // Limpiar formulario
-        setTitle('');
-        setDescription('');
-        setVenue('');
-        setBannerUrl('');
-        setTicketTemplateUrl('');
-        setPriceAdult(15);
-        setPriceChild(7.5);
-        setCapacityTotal(12);
-        setIsSingleRate(false);
-        setHasAssignedSeats(true);
-        setStartRow('A');
-        setEndRow('C');
-        setSeatsPerRow(4);
-        setSeatingLayoutList(['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4']);
-        setPromoType('Ninguna');
-        setPricePromo(0);
-        setPromoDeadline('');
-        setSchedulesList([]);
-        setActiveTab('ventas');
+      let res;
+      if (editingEvent) {
+        res = await api.put(`/events/${editingEvent.id}`, payload);
+        if (res.data.status === 'OK') {
+          Swal.fire('¡Actualizado!', 'El evento ha sido actualizado correctamente.', 'success');
+        }
+      } else {
+        res = await api.post('/events', payload);
+        if (res.data.status === 'OK') {
+          Swal.fire('Publicado', 'Evento publicado con éxito.', 'success');
+        }
       }
+      resetEventForm();
+      setActiveTab('ventas');
     } catch (err) {
       console.error(err);
       Swal.fire('Error', err.response?.data?.message || 'Error al guardar evento.', 'error');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // --- CRUD de Banners ---
+  const handleSaveBanner = async (e) => {
+    e.preventDefault();
+    if (!bannerForm.title) {
+      Swal.fire('Error', 'El título del banner es obligatorio.', 'error');
+      return;
+    }
+    setIsSavingBanner(true);
+    try {
+      let res;
+      if (editingBannerId) {
+        res = await api.put(`/promotions/${editingBannerId}`, bannerForm);
+      } else {
+        res = await api.post('/promotions', bannerForm);
+      }
+      if (res.data.status === 'OK') {
+        Swal.fire('Guardado', 'Banner guardado correctamente.', 'success');
+        setBannerForm({ title: '', subtitle: '', image_url: '', link_url: '', active: false, start_date: '', end_date: '' });
+        setEditingBannerId(null);
+        fetchBanners();
+      }
+    } catch (err) {
+      Swal.fire('Error', err.response?.data?.message || 'Error al guardar banner.', 'error');
+    } finally {
+      setIsSavingBanner(false);
+    }
+  };
+
+  const handleToggleBanner = async (bannerId) => {
+    try {
+      const res = await api.patch(`/promotions/${bannerId}/toggle`);
+      if (res.data.status === 'OK') fetchBanners();
+    } catch (err) {
+      Swal.fire('Error', 'No se pudo cambiar el estado del banner.', 'error');
+    }
+  };
+
+  const handleDeleteBanner = async (bannerId) => {
+    const confirmed = await Swal.fire({
+      title: '¿Eliminar este banner?', icon: 'warning',
+      showCancelButton: true, confirmButtonColor: '#ff3b30', cancelButtonColor: '#333',
+      confirmButtonText: 'Eliminar'
+    });
+    if (confirmed.isConfirmed) {
+      try {
+        await api.delete(`/promotions/${bannerId}`);
+        fetchBanners();
+      } catch (err) {
+        Swal.fire('Error', 'No se pudo eliminar el banner.', 'error');
+      }
+    }
+  };
+
+  const handleBannerImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    Swal.fire({ title: 'Subiendo imagen...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const base64 = await compressImage(file);
+      const res = await api.post('/events/upload', { image: base64, type: 'banner' });
+      Swal.close();
+      if (res.data.status === 'OK') {
+        setBannerForm(prev => ({ ...prev, image_url: res.data.url }));
+      } else throw new Error(res.data.message);
+    } catch (err) {
+      Swal.close();
+      Swal.fire('Error', err.message || 'No se pudo subir la imagen.', 'error');
     }
   };
 
@@ -598,16 +728,18 @@ const AdminDashboard = () => {
 
       {/* Tabs Premium */}
       <div style={{
-        display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '14px',
-        padding: '4px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.07)'
+        display: 'flex', flexWrap: 'wrap', background: 'rgba(255,255,255,0.04)', borderRadius: '14px',
+        padding: '4px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.07)', gap: '2px'
       }}>
         {[
           { id: 'ventas', icon: LayoutGrid, label: 'Ventas' },
-          { id: 'crear', icon: PlusCircle, label: 'Nuevo Evento' }
+          { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Nuevo Evento' },
+          { id: 'eventos', icon: Edit2, label: 'Mis Eventos' },
+          { id: 'banners', icon: Image, label: 'Banners' }
         ].map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => { if (tab.id !== 'crear') setEditingEvent(null); setActiveTab(tab.id); }}
             style={{
               flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
               padding: '11px 14px', borderRadius: '11px', border: 'none', cursor: 'pointer',
@@ -683,6 +815,45 @@ const AdminDashboard = () => {
                     <option value="Anulado">Anulado</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Filtros de Fecha para Cuadre de Caja */}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ flex: '1' }}>
+                  <label style={{ fontSize: '0.65rem' }}>📅 Ventas Desde</label>
+                  <input
+                    type="date"
+                    value={filterDateFrom}
+                    onChange={(e) => setFilterDateFrom(e.target.value)}
+                    style={{ marginBottom: '0', padding: '10px' }}
+                  />
+                </div>
+                <div style={{ flex: '1' }}>
+                  <label style={{ fontSize: '0.65rem' }}>📅 Ventas Hasta</label>
+                  <input
+                    type="date"
+                    value={filterDateTo}
+                    onChange={(e) => setFilterDateTo(e.target.value)}
+                    style={{ marginBottom: '0', padding: '10px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={fetchData}
+                  className="btn-primary"
+                  style={{ flex: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
+                >
+                  <Search size={16} /> Aplicar Filtros
+                </button>
+                <button
+                  onClick={() => { setFilterEventId('ALL'); setFilterDateFrom(''); setFilterDateTo(''); setFilterPaymentStatus('ALL'); setTimeout(fetchData, 50); }}
+                  className="btn-secondary"
+                  style={{ padding: '10px 14px' }}
+                >
+                  <RefreshCw size={15} />
+                </button>
               </div>
 
               <div style={{ position: 'relative' }}>
@@ -1125,10 +1296,154 @@ const AdminDashboard = () => {
               )}
             </div>
 
+            {/* Facturación */}
+            <div className="glass-card" style={{ marginTop: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px' }}>
+              <Receipt size={20} color="var(--accent)" />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff' }}>Recopilación de Datos de Facturación</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Activa para pedir cédula/RUC y razón social durante la compra (ideal para eventos con facturación requerida).</div>
+              </div>
+              <label style={{ position: 'relative', display: 'inline-block', width: '46px', height: '26px', marginBottom: 0 }}>
+                <input type="checkbox" checked={requireBilling} onChange={e => setRequireBilling(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                <span style={{
+                  position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                  background: requireBilling ? 'var(--accent)' : 'rgba(255,255,255,0.12)',
+                  borderRadius: '26px', transition: 'background 0.3s'
+                }}>
+                  <span style={{
+                    position: 'absolute', content: '', height: '20px', width: '20px',
+                    left: requireBilling ? '22px' : '3px', bottom: '3px',
+                    background: '#fff', borderRadius: '50%', transition: 'left 0.3s'
+                  }} />
+                </span>
+              </label>
+            </div>
+
             <button type="submit" className="btn-primary" disabled={isSubmitting || schedulesList.length === 0}>
-              <Save size={18} /> {isSubmitting ? 'GUARDANDO...' : 'PUBLICAR EVENTO'}
+              <Save size={18} /> {isSubmitting ? 'GUARDANDO...' : editingEvent ? 'ACTUALIZAR EVENTO' : 'PUBLICAR EVENTO'}
             </button>
           </form>
+        </div>
+      )}
+      {/* PESTAÑA: MIS EVENTOS (para editar) */}
+      {activeTab === 'eventos' && (
+        <div className="fade-in">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ color: '#fff', fontWeight: 800, fontSize: '1rem' }}>Gestión de Eventos</h3>
+            <button onClick={() => { resetEventForm(); setActiveTab('crear'); }} className="btn-primary" style={{ width: 'auto', padding: '10px 16px', fontSize: '0.82rem' }}>
+              <PlusCircle size={16} /> Nuevo
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {events.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '30px' }}>No hay eventos creados aún.</p>
+            ) : events.map(evt => (
+              <div key={evt.id} className="glass-card" style={{ display: 'flex', gap: '14px', alignItems: 'center', padding: '14px 18px' }}>
+                {evt.banner_url && <img src={getImageUrl(evt.banner_url)} alt="" style={{ width: '56px', height: '56px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{evt.title}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{evt.venue} · {(evt.schedules || []).length} funciones</div>
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '20px', background: evt.status === 'active' ? 'rgba(52,199,89,0.1)' : 'rgba(255,59,48,0.1)', color: evt.status === 'active' ? '#34c759' : '#ff3b30', border: `1px solid ${evt.status === 'active' ? 'rgba(52,199,89,0.2)' : 'rgba(255,59,48,0.2)'}` }}>{evt.status === 'active' ? 'Activo' : 'Inactivo'}</span>
+                    {evt.require_billing && <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '20px', background: 'rgba(222,184,65,0.1)', color: 'var(--accent)', border: '1px solid rgba(222,184,65,0.2)' }}>🧾 Facturación</span>}
+                  </div>
+                </div>
+                <button onClick={() => loadEventForEditing(evt)} style={{ background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)', color: 'var(--accent)', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <Edit2 size={14} /> Editar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* PESTAÑA: BANNERS Y PROMOCIONES */}
+      {activeTab === 'banners' && (
+        <div className="fade-in">
+          <h3 style={{ color: '#fff', fontWeight: 800, fontSize: '1rem', marginBottom: '16px' }}>🖼️ Gestión de Banners y Promociones</h3>
+
+          {/* Formulario de Banner */}
+          <form onSubmit={handleSaveBanner} className="glass-panel" style={{ marginBottom: '20px' }}>
+            <h4 style={{ fontSize: '0.8rem', color: 'var(--accent)', textTransform: 'uppercase', marginBottom: '14px', letterSpacing: '1px' }}>{editingBannerId ? '✏️ Editando Banner' : '+ Nuevo Banner'}</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ flex: '2' }}>
+                  <label style={{ fontSize: '0.65rem' }}>Texto Principal (Ej: Temporada 2026) *</label>
+                  <input type="text" value={bannerForm.title} onChange={e => setBannerForm(p => ({...p, title: e.target.value}))} placeholder="Ej: Temporada 2026" style={{ marginBottom: 0 }} required />
+                </div>
+                <div style={{ flex: '1' }}>
+                  <label style={{ fontSize: '0.65rem' }}>Subtítulo / Título H1</label>
+                  <input type="text" value={bannerForm.subtitle} onChange={e => setBannerForm(p => ({...p, subtitle: e.target.value}))} placeholder="Ej: Cartelera" style={{ marginBottom: 0 }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.65rem' }}>Imagen del Banner</label>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <label style={{ flex: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', background: 'rgba(222,184,65,0.07)', border: '1px dashed rgba(222,184,65,0.4)', borderRadius: '10px', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--accent)' }}>
+                    <Upload size={16} /> Subir imagen
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleBannerImageUpload} />
+                  </label>
+                  {bannerForm.image_url && <img src={getImageUrl(bannerForm.image_url)} alt="preview" style={{ width: '56px', height: '40px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }} />}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ flex: '2' }}>
+                  <label style={{ fontSize: '0.65rem' }}>URL de Destino al hacer clic (opcional)</label>
+                  <input type="url" value={bannerForm.link_url} onChange={e => setBannerForm(p => ({...p, link_url: e.target.value}))} placeholder="https://..." style={{ marginBottom: 0 }} />
+                </div>
+                <div style={{ flex: '1' }}>
+                  <label style={{ fontSize: '0.65rem' }}>Desde</label>
+                  <input type="date" value={bannerForm.start_date} onChange={e => setBannerForm(p => ({...p, start_date: e.target.value}))} style={{ marginBottom: 0 }} />
+                </div>
+                <div style={{ flex: '1' }}>
+                  <label style={{ fontSize: '0.65rem' }}>Hasta</label>
+                  <input type="date" value={bannerForm.end_date} onChange={e => setBannerForm(p => ({...p, end_date: e.target.value}))} style={{ marginBottom: 0 }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="submit" className="btn-primary" disabled={isSavingBanner} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '11px' }}>
+                  <Save size={16} /> {isSavingBanner ? 'Guardando...' : editingBannerId ? 'Actualizar Banner' : 'Crear Banner'}
+                </button>
+                {editingBannerId && (
+                  <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '11px 16px' }} onClick={() => { setBannerForm({ title: '', subtitle: '', image_url: '', link_url: '', active: false, start_date: '', end_date: '' }); setEditingBannerId(null); }}>
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </form>
+
+          {/* Lista de banners */}
+          {loadingBanners ? <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>Cargando banners...</p> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {banners.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '30px' }}>No hay banners creados aún. ¡Crea el primero!</p>
+              ) : banners.map(b => (
+                <div key={b.id} className="glass-card" style={{ display: 'flex', gap: '14px', alignItems: 'center', padding: '14px 18px' }}>
+                  {b.image_url ? <img src={getImageUrl(b.image_url)} alt={b.title} style={{ width: '70px', height: '44px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }} /> : <div style={{ width: '70px', height: '44px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Image size={18} color="var(--text-muted)" /></div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff' }}>{b.title}</div>
+                    {b.subtitle && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{b.subtitle}</div>}
+                    {b.start_date && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '2px' }}>Vigente: {b.start_date?.slice(0,10)} → {b.end_date?.slice(0,10) || 'sin fecha límite'}</div>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                    <button onClick={() => handleToggleBanner(b.id)} style={{ background: b.active ? 'rgba(52,199,89,0.15)' : 'rgba(255,255,255,0.06)', border: `1px solid ${b.active ? 'rgba(52,199,89,0.3)' : 'rgba(255,255,255,0.1)'}`, borderRadius: '8px', padding: '7px 12px', cursor: 'pointer', color: b.active ? '#34c759' : 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      {b.active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />} {b.active ? 'Activo' : 'Off'}
+                    </button>
+                    <button onClick={() => { setEditingBannerId(b.id); setBannerForm({ title: b.title, subtitle: b.subtitle || '', image_url: b.image_url || '', link_url: b.link_url || '', active: b.active, start_date: b.start_date?.slice(0,10) || '', end_date: b.end_date?.slice(0,10) || '' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)', color: 'var(--accent)', borderRadius: '8px', padding: '7px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem' }}>
+                      <Edit2 size={14} />
+                    </button>
+                    <button onClick={() => handleDeleteBanner(b.id)} style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.2)', color: 'var(--error)', borderRadius: '8px', padding: '7px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem' }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
