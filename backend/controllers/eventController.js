@@ -517,3 +517,45 @@ exports.deleteEvent = async (req, res) => {
     });
   }
 };
+
+// Eliminar FORZADO un evento con todas sus órdenes y tickets (Solo Admin - datos de prueba)
+exports.forceDeleteEvent = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const eventCheck = await query('SELECT id, title FROM events WHERE id = $1', [id]);
+    if (eventCheck.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Evento no encontrado.' });
+    }
+
+    const eventTitle = eventCheck.rows[0].title;
+
+    // 1. Borrar tickets vinculados a órdenes de este evento
+    await query(
+      'DELETE FROM tickets WHERE order_id IN (SELECT id FROM orders WHERE event_id = $1)',
+      [id]
+    );
+
+    // 2. Borrar órdenes del evento
+    await query('DELETE FROM orders WHERE event_id = $1', [id]);
+
+    // 3. Borrar funciones
+    await query('DELETE FROM event_schedules WHERE event_id = $1', [id]);
+
+    // 4. Borrar el evento
+    await query('DELETE FROM events WHERE id = $1', [id]);
+
+    res.json({
+      status: 'OK',
+      action: 'force_deleted',
+      message: `El evento "${eventTitle}" y todos sus registros han sido eliminados permanentemente.`
+    });
+  } catch (err) {
+    console.error('Error al eliminar evento forzado:', err);
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Error al eliminar el evento forzado',
+      error: err.message
+    });
+  }
+};

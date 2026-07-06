@@ -14,6 +14,7 @@ router.post('/', authMiddleware, roleMiddleware(['admin']), eventController.crea
 router.put('/:id', authMiddleware, roleMiddleware(['admin']), eventController.updateEvent);
 router.patch('/:id/status', authMiddleware, roleMiddleware(['admin']), eventController.toggleEventStatus);
 router.delete('/:id', authMiddleware, roleMiddleware(['admin']), eventController.deleteEvent);
+router.delete('/:id/force', authMiddleware, roleMiddleware(['admin']), eventController.forceDeleteEvent);
 router.post('/upload', authMiddleware, roleMiddleware(['admin']), eventController.uploadImage);
 router.post('/parse-seating-layout', authMiddleware, roleMiddleware(['admin']), eventController.parseSeatingLayout);
 
