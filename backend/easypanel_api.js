@@ -129,7 +129,18 @@ async function main() {
   console.log('\n\n📋 Obteniendo token de deploy del servicio...');
   const allRes = await trpcGet('projects.listProjectsAndServices', {});
   const allData = extract(allRes);
-  const tickets = allData?.services?.find(s => s.name === 'studio5-tickets');
+  let tickets = null;
+  if (Array.isArray(allData)) {
+    for (const project of allData) {
+      const found = project.services?.find(s => s.name === 'studio5-tickets');
+      if (found) {
+        tickets = found;
+        break;
+      }
+    }
+  } else {
+    tickets = allData?.services?.find(s => s.name === 'studio5-tickets');
+  }
   
   if (tickets) {
     console.log(`Token del servicio: ${tickets.token}`);

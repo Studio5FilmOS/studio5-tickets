@@ -3,12 +3,12 @@ require('dotenv').config();
 
 // Configurar transportador de correo
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  host: process.env.SMTP_HOST || 'smtp.hostinger.com',
   port: parseInt(process.env.SMTP_PORT || '465'),
-  secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+  secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465' || !process.env.SMTP_PORT,
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
+    user: process.env.SMTP_USER || 'ventas@studio5film.com',
+    pass: process.env.SMTP_PASS || '@Ventas12345'
   }
 });
 
@@ -74,8 +74,11 @@ exports.sendTicketEmail = async ({ email, customerName, orderNum, eventTitle, ev
   `;
 
   try {
-    // Si no están configuradas las credenciales SMTP, simulamos el envío
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    const smtpUser = process.env.SMTP_USER || 'ventas@studio5film.com';
+    const smtpPass = process.env.SMTP_PASS || '@Ventas12345';
+
+    // Si no están configuradas las credenciales SMTP ni las predeterminadas, simulamos el envío
+    if (!smtpUser || !smtpPass) {
       console.log('----- EMAIL SIMULATION -----');
       console.log('To:', email);
       console.log('Subject:', `Tus entradas para ${eventTitle}`);
@@ -86,7 +89,7 @@ exports.sendTicketEmail = async ({ email, customerName, orderNum, eventTitle, ev
     }
 
     await transporter.sendMail({
-      from: `"${fromName}" <${process.env.SMTP_USER}>`,
+      from: `"${fromName}" <${smtpUser}>`,
       to: email,
       subject: `Tus entradas para ${eventTitle} (Orden #${orderNum})`,
       html: htmlBody
