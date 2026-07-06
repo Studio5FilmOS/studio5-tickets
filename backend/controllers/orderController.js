@@ -17,8 +17,8 @@ const verifyPayphoneTransaction = (transactionId, clientTxId) => {
       return resolve(true);
     }
 
-    const host = 'paymentbox.payphonetodoesposible.com';
-    const path = '/api/confirm';
+    const host = 'pay.payphonetodoesposible.com';
+    const path = '/api/button/V2/Confirm';
     const payload = JSON.stringify({
       id: parseInt(transactionId) || 0,
       clientTxId: clientTxId
@@ -137,7 +137,12 @@ exports.createOrder = async (req, res) => {
 
       for (let seat of seat_labels) {
         const layout = event.seating_layout;
-        if (layout && !layout.includes(seat)) {
+        const isSeatValid = Array.isArray(layout)
+          ? (Array.isArray(layout[0])
+              ? layout.flat().includes(seat)
+              : layout.includes(seat))
+          : false;
+        if (layout && !isSeatValid) {
           await client.query('ROLLBACK');
           client.release();
           return res.status(400).json({
@@ -211,6 +216,18 @@ exports.createOrder = async (req, res) => {
     // Ajustes por pasarela de pagos / operación
     const operation = tipoVenta || 'Venta';
     let finalAmount = operation === 'Cortesia' ? 0.00 : precioNeto;
+
+    // Aplicar recargo si es Payphone y está activado en el archivo de configuración (.env)
+    if (metodoPago === 'Payphone' && operation === 'Venta') {
+      const surchargeEnable = process.env.PAYPHONE_SURCHARGE_ENABLE !== 'false';
+      if (surchargeEnable) {
+        const rate = parseFloat(process.env.PAYPHONE_SURCHARGE_RATE) || 0.043;
+        const fixed = parseFloat(process.env.PAYPHONE_SURCHARGE_FIXED) || 0.30;
+        const rawTotal = (precioNeto + fixed) / (1 - rate);
+        const roundedTotal = Math.round(rawTotal * 100) / 100;
+        finalAmount = roundedTotal;
+      }
+    }
 
     // Generar código de orden único
     const timestamp = Date.now();

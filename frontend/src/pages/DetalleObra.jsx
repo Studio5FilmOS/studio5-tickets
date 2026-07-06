@@ -48,6 +48,9 @@ const DetalleObra = () => {
   const [showPayphoneModal, setShowPayphoneModal] = useState(false);
   const [payphoneToken, setPayphoneToken] = useState('');
   const [isPayphoneScriptLoaded, setIsPayphoneScriptLoaded] = useState(false);
+  const [surchargeEnable, setSurchargeEnable] = useState(false);
+  const [surchargeRate, setSurchargeRate] = useState(0.043);
+  const [surchargeFixed, setSurchargeFixed] = useState(0.30);
 
   // Estados del Resultado (Éxito)
   const [successData, setSuccessData] = useState(null);
@@ -91,6 +94,9 @@ const DetalleObra = () => {
         const res = await api.get('/config/payphone');
         if (res.data.status === 'OK') {
           setPayphoneToken(res.data.token);
+          setSurchargeEnable(res.data.surcharge_enable || false);
+          setSurchargeRate(res.data.surcharge_rate || 0.043);
+          setSurchargeFixed(res.data.surcharge_fixed || 0.30);
         }
       } catch (err) {
         console.warn('No se pudo obtener el token de Payphone:', err);
@@ -152,10 +158,14 @@ const DetalleObra = () => {
           };
           localStorage.setItem('pending_order', JSON.stringify(orderData));
 
+          const subtotal = calculateTotal();
+          const surcharge = surchargeEnable ? calculatePayphoneSurcharge(subtotal) : 0;
+          const finalAmountCents = Math.round((subtotal + surcharge) * 100);
+
           const ppb = new window.PPaymentButtonBox({
             token: payphoneToken,
-            amount: Math.round(calculateTotal() * 100), // en centavos
-            amountWithoutTax: Math.round(calculateTotal() * 100),
+            amount: finalAmountCents, // en centavos
+            amountWithoutTax: finalAmountCents,
             currency: "USD",
             clientTransactionId: uniqueClientTxId,
             reference: `Entradas para ${event.title}`,
@@ -217,6 +227,13 @@ const DetalleObra = () => {
   const numAdultos = event.has_assigned_seats ? Math.max(0, selectedSeats.length - cantNinos) : cantAdultos;
   const numNinos = event.has_assigned_seats ? cantNinos : cantNinos;
   const totalQty = event.has_assigned_seats ? selectedSeats.length : (cantAdultos + cantNinos);
+
+  const calculatePayphoneSurcharge = (subtotal) => {
+    if (subtotal <= 0) return 0;
+    const total = (subtotal + surchargeFixed) / (1 - surchargeRate);
+    const roundedTotal = Math.round(total * 100) / 100;
+    return Math.max(0, Math.round((roundedTotal - subtotal) * 100) / 100);
+  };
 
   const calculateTotal = () => {
     if (tipoVenta === 'Cortesia') return 0;
@@ -306,6 +323,32 @@ const DetalleObra = () => {
     }
   };
 
+  // Descargar ticket en formato de imagen JPG
+  const descargarTicket = (orderNum) => {
+    const element = document.getElementById(`export-ticket-${orderNum}`);
+    if (!element) return;
+
+    Swal.fire({
+      title: 'Generando imagen...',
+      text: 'Tu ticket premium se está compilando en la galería.',
+      allowOutsideClick: false,
+      didOpen: () => { Swal.showLoading(); }
+    });
+
+    setTimeout(() => {
+      html2canvas(element, { scale: 2, useCORS: true, logging: false }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `Ticket_${orderNum}.jpg`;
+        link.href = canvas.toDataURL('image/jpeg', 1.0);
+        link.click();
+        Swal.close();
+      }).catch(err => {
+        console.error(err);
+        Swal.fire('Error', 'No se pudo generar la imagen del ticket.', 'error');
+      });
+    }, 500);
+  };
+
   const handleRegisterClick = (e) => {
     e.preventDefault();
 
@@ -351,31 +394,57 @@ const DetalleObra = () => {
           <div 
             id={`export-ticket-${order.order_num}`}
             style={{ 
-              position: 'relative', width: '600px', height: '200px', 
-              borderRadius: '0', overflow: 'hidden', background: '#fff', border: '1px solid #ddd',
-              margin: '0 auto 15px auto', fontFamily: 'sans-serif', color: 'black'
+              position: 'relative', width: '320px', height: '420px', 
+              borderRadius: '16px', overflow: 'hidden', background: '#fff', border: '1px solid #ddd',
+              margin: '0 auto 15px auto', fontFamily: 'sans-serif', color: 'black',
+              display: 'flex', flexDirection: 'column', boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
             }}
           >
-            <div style={{ 
-              width: '100%', height: '100%', 
-              backgroundImage: `url(${getImageUrl(event.ticket_template_url || event.banner_url)})`,
-              backgroundSize: 'cover', backgroundPosition: 'center'
-            }}></div>
-            <div style={{ 
-              position: 'absolute', right: '4%', top: '10%', height: '80%', width: '28%', 
-              background: 'rgba(255, 255, 255, 0.96)', borderRadius: '8px', display: 'flex', 
-              flexDirection: 'column', justifyContent: 'center', alignItems: 'center', 
-              padding: '2% 3%', boxSizing: 'border-box', boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
-            }}>
+            {/* Top section: Banner image */}
+            <div style={{ position: 'relative', width: '100%', height: '140px' }}>
+              <img 
+                src={getImageUrl(event.ticket_template_url || event.banner_url)} 
+                alt="Banner preview" 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              />
+              <div style={{ position: 'absolute', bottom: '10px', left: '10px', right: '10px', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '6px' }}>
+                <h3 style={{ margin: 0, color: '#fff', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{event.title}</h3>
+                <p style={{ margin: '2px 0 0 0', color: '#ccc', fontSize: '9px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>📍 {event.venue}</p>
+              </div>
               {order.payment_status === 'Cortesía' && (
-                <span style={{ fontSize: '7px', fontWeight: 900, border: '1px solid #e50914', color: '#e50914', padding: '1px 3px', borderRadius: '3px', marginBottom: '1px', textTransform: 'uppercase' }}>Cortesía</span>
+                <span style={{ position: 'absolute', top: '10px', left: '10px', fontSize: '8px', fontWeight: 900, background: '#e50914', color: '#fff', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>CORTESÍA</span>
               )}
-              <span style={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'center', borderBottom: '1px solid #ddd', paddingBottom: '2px' }}>{order.customer_name}</span>
-              <img src={qrUrl} alt="QR" style={{ width: '70%', aspectRatio: '1/1', margin: '3px 0' }} />
-              <span style={{ fontSize: '6px', fontWeight: 'bold', color: '#555' }}>{order.order_num}</span>
-              <span style={{ fontSize: '7px', fontWeight: '900', color: '#d32f2f', background: '#ffebeb', padding: '1px 4px', borderRadius: '4px', marginTop: '2px', textAlign: 'center', width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {totalQty} {totalQty === 1 ? 'Entrada' : 'Entradas'} {hasSeats && `[${seatLabels.join(',')}]`}
-              </span>
+            </div>
+
+            {/* Perforated separator line */}
+            <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '10px', background: '#fff', position: 'relative' }}>
+              <div style={{ position: 'absolute', left: '-5px', width: '10px', height: '10px', borderRadius: '50%', background: '#111' }}></div>
+              <div style={{ flex: 1, borderTop: '2px dashed #ddd', margin: '0 5px' }}></div>
+              <div style={{ position: 'absolute', right: '-5px', width: '10px', height: '10px', borderRadius: '50%', background: '#111' }}></div>
+            </div>
+
+            {/* Bottom details section */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 15px 15px 15px', background: '#fff', justifyContent: 'space-between' }}>
+              <div style={{ textAlign: 'center', width: '100%' }}>
+                <span style={{ fontSize: '9px', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>Espectador</span>
+                <h2 style={{ margin: '1px 0 0 0', fontSize: '13px', fontWeight: 900, color: '#111', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{order.customer_name}</h2>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <img src={qrUrl} alt="QR" style={{ width: '120px', height: '120px' }} />
+                <span style={{ fontSize: '8px', fontWeight: 'bold', color: '#555', marginTop: '4px', letterSpacing: '0.5px' }}>{order.order_num}</span>
+              </div>
+
+              <div style={{ textAlign: 'center', width: '100%', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
+                <span style={{ fontSize: '8px', color: '#666', fontWeight: 'bold' }}>{dateFormatted}</span>
+                <span style={{ 
+                  fontSize: '9px', fontWeight: '900', color: '#d32f2f', background: '#ffebeb', 
+                  padding: '3px 8px', borderRadius: '4px', display: 'inline-block',
+                  maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                }}>
+                  {totalQty} {totalQty === 1 ? 'Entrada' : 'Entradas'} {hasSeats && `[${seatLabels.join(',')}]`}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -405,15 +474,17 @@ const DetalleObra = () => {
     );
   }
 
-  const renderSeatingMap = () => {
-    const layout = event.seating_layout || [];
-    if (layout.length === 0) return <p>Sin distribución de asientos configurada.</p>;
-
+  // Helper para asegurar distribución en formato matriz 2D
+  const ensure2DLayout = (layout) => {
+    if (!layout || layout.length === 0) return [];
+    if (Array.isArray(layout[0])) return layout;
+    
     const rows = {};
     layout.forEach(seat => {
+      if (!seat) return;
       const match = seat.match(/^([a-zA-Z]+)(\d+)$/);
       if (match) {
-        const rowLabel = match[1];
+        const rowLabel = match[1].toUpperCase();
         if (!rows[rowLabel]) rows[rowLabel] = [];
         rows[rowLabel].push(seat);
       } else {
@@ -422,44 +493,105 @@ const DetalleObra = () => {
       }
     });
 
+    let maxSeatNum = 1;
+    layout.forEach(seat => {
+      if (!seat) return;
+      const match = seat.match(/^([a-zA-Z]+)(\d+)$/);
+      if (match) {
+        const seatNum = parseInt(match[2]);
+        if (seatNum > maxSeatNum) maxSeatNum = seatNum;
+      }
+    });
+
+    const grid = [];
+    Object.keys(rows).sort().forEach(rowName => {
+      const rowSeats = [];
+      const rowSeatsMap = {};
+      rows[rowName].forEach(s => {
+        const match = s.match(/\d+/);
+        if (match) {
+          rowSeatsMap[parseInt(match[0])] = s;
+        }
+      });
+
+      for (let c = 1; c <= maxSeatNum; c++) {
+        rowSeats.push(rowSeatsMap[c] || "");
+      }
+      grid.push(rowSeats);
+    });
+
+    return grid;
+  };
+
+  const renderSeatingMap = () => {
+    const rawLayout = event.seating_layout || [];
+    if (rawLayout.length === 0) return <p>Sin distribución de asientos configurada.</p>;
+
+    const grid = ensure2DLayout(rawLayout);
+
+    const bookedSeatsUpper = bookedSeats.map(s => s.trim().toUpperCase());
+    const selectedSeatsUpper = selectedSeats.map(s => s.trim().toUpperCase());
+
     return (
       <div style={{ background: 'rgba(0,0,0,0.3)', padding: '20px 10px', borderRadius: '16px', border: '1px solid var(--glass-border)', margin: '15px 0 25px 0' }}>
         <div style={{ width: '70%', height: '4px', background: 'var(--accent-glow)', margin: '0 auto 20px auto', borderRadius: '2px', boxShadow: '0 0 10px var(--accent-glow)', textAlign: 'center', fontSize: '0.65rem', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '2px', paddingTop: '8px' }}>
           Escenario / Pantalla
         </div>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
-          {Object.keys(rows).sort().map(rowName => (
-            <div key={rowName} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', width: '15px', color: 'var(--text-muted)' }}>{rowName}</span>
-              {rows[rowName].sort((a,b) => parseInt(a.replace(/\D/g,'')) - parseInt(b.replace(/\D/g,''))).map(seat => {
-                const isBooked = bookedSeats.includes(seat);
-                const isSelected = selectedSeats.includes(seat);
-                
-                let seatColor = 'var(--text-muted)';
-                if (isBooked) seatColor = 'var(--error)';
-                else if (isSelected) seatColor = 'var(--accent)';
-                else seatColor = 'var(--success)';
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start', width: '100%', overflowX: 'auto', padding: '10px 0' }}>
+          {grid.map((row, rowIndex) => {
+            let rowName = "";
+            const firstActive = row.find(s => s !== "");
+            if (firstActive) {
+              const match = firstActive.match(/^([a-zA-Z]+)/);
+              if (match) rowName = match[1];
+            }
+            if (!rowName) {
+              rowName = String.fromCharCode(65 + rowIndex);
+            }
 
-                return (
-                  <button
-                    key={seat}
-                    type="button"
-                    onClick={() => toggleSeat(seat)}
-                    disabled={isBooked}
-                    style={{
-                      background: 'none', border: 'none', cursor: isBooked ? 'not-allowed' : 'pointer',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'var(--transition-smooth)'
-                    }}
-                    title={`Asiento ${seat} - ${isBooked ? 'Ocupado' : isSelected ? 'Seleccionado' : 'Disponible'}`}
-                  >
-                    <Armchair size={22} color={seatColor} style={{ transform: isSelected ? 'scale(1.15)' : 'none' }} />
-                    <span style={{ fontSize: '0.55rem', color: isBooked ? 'var(--text-muted)' : '#fff', marginTop: '2px', fontWeight: 'bold' }}>{seat}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+            return (
+              <div key={rowIndex} style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center', width: 'max-content', minWidth: '100%', padding: '0 10px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', width: '15px', color: 'var(--text-muted)', textAlign: 'center' }}>{rowName}</span>
+                {row.map((seat, colIndex) => {
+                  const isActive = seat !== "";
+                  if (!isActive) {
+                    return (
+                      <div 
+                        key={`spacer-${rowIndex}-${colIndex}`} 
+                        style={{ width: '22px', height: '36px' }} 
+                      />
+                    );
+                  }
+
+                  const isBooked = bookedSeatsUpper.includes(seat.toUpperCase());
+                  const isSelected = selectedSeatsUpper.includes(seat.toUpperCase());
+                  
+                  let seatColor = 'var(--text-muted)';
+                  if (isBooked) seatColor = 'var(--error)';
+                  else if (isSelected) seatColor = 'var(--accent)';
+                  else seatColor = 'var(--success)';
+
+                  return (
+                    <button
+                      key={seat}
+                      type="button"
+                      onClick={() => toggleSeat(seat)}
+                      disabled={isBooked}
+                      style={{
+                        background: 'none', border: 'none', cursor: isBooked ? 'not-allowed' : 'pointer',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'var(--transition-smooth)'
+                      }}
+                      title={`Asiento ${seat} - ${isBooked ? 'Ocupado' : isSelected ? 'Seleccionado' : 'Disponible'}`}
+                    >
+                      <Armchair size={22} color={seatColor} style={{ transform: isSelected ? 'scale(1.15)' : 'none' }} />
+                      <span style={{ fontSize: '0.55rem', color: isBooked ? 'var(--text-muted)' : '#fff', marginTop: '2px', fontWeight: 'bold' }}>{seat}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '20px', fontSize: '0.7rem' }}>
@@ -748,12 +880,29 @@ const DetalleObra = () => {
           </div>
         )}
 
+        {metodoPago === 'Payphone' && surchargeEnable && calculateTotal() > 0 && (
+          <div className="glass-card" style={{ marginBottom: '15px', padding: '12px', background: 'rgba(222,184,65,0.03)', border: '1px solid var(--accent-glow)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
+              <span>Subtotal:</span>
+              <span>${calculateTotal().toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
+              <span>Recargo por Servicio de Tarjeta:</span>
+              <span>${calculatePayphoneSurcharge(calculateTotal()).toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--accent)', paddingTop: '5px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <span>Total a Pagar:</span>
+              <span>${(calculateTotal() + calculatePayphoneSurcharge(calculateTotal())).toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+
         <button 
           type="submit" 
           className="btn-primary" 
           disabled={isProcessing || (event.has_assigned_seats ? selectedSeats.length === 0 : disponibles <= 0)}
         >
-          {isProcessing ? 'PROCESANDO...' : `PAGAR $${calculateTotal().toFixed(2)}`}
+          {isProcessing ? 'PROCESANDO...' : `PAGAR $${(metodoPago === 'Payphone' && surchargeEnable ? calculateTotal() + calculatePayphoneSurcharge(calculateTotal()) : calculateTotal()).toFixed(2)}`}
         </button>
       </form>
         </div>

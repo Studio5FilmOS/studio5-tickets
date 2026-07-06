@@ -341,13 +341,20 @@ exports.uploadImage = async (req, res) => {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
-    const matches = image.match(/^data:image\/([A-Za-z\-+]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-      return res.status(400).json({ status: 'ERROR', message: 'Formato de imagen inválido o corrupto.' });
+    if (!image.startsWith('data:image/')) {
+      return res.status(400).json({ status: 'ERROR', message: 'Formato de imagen inválido. Debe comenzar con data:image/.' });
     }
 
-    const imageExtension = matches[1] === 'jpeg' ? 'jpg' : matches[1];
-    const base64Data = matches[2];
+    const semiColonIdx = image.indexOf(';');
+    const commaIdx = image.indexOf(',');
+    if (semiColonIdx === -1 || commaIdx === -1 || !image.includes('base64,')) {
+      return res.status(400).json({ status: 'ERROR', message: 'Formato de codificación de imagen inválido.' });
+    }
+
+    const mimeType = image.substring(5, semiColonIdx); // e.g. "image/jpeg"
+    const ext = mimeType.split('/')[1] || 'png';
+    const imageExtension = ext === 'jpeg' ? 'jpg' : ext;
+    const base64Data = image.substring(commaIdx + 1);
     const filename = `${type || 'img'}_${Date.now()}_${Math.round(Math.random() * 1e9)}.${imageExtension}`;
     const filepath = path.join(uploadsDir, filename);
 
@@ -401,7 +408,7 @@ exports.parseSeatingLayout = async (req, res) => {
             content: [
               {
                 type: 'text',
-                text: 'Analiza esta imagen de un plano de asientos (butacas) de teatro/cine. Identifica e inscribe todos los códigos de asientos (por ejemplo: A1, A2, A3, B1, B2, B3, C1...). Devuelve EXCLUSIVAMENTE una lista JSON plana con las etiquetas identificadas en formato de strings. Ejemplo: ["A1","A2","B1","B2"]. No devuelvas formato markdown, ni bloques de código, ni comentarios adicionales.'
+                text: 'Analiza la imagen de este croquis de asientos de teatro/cine. Debes devolver una representación en cuadrícula de la distribución física de la sala (respetando pasillos, espacios vacíos, la cabina de control/consola y la alineación con el escenario). Para ello, genera una matriz 2D (un array de arrays de strings). Cada fila de la matriz debe corresponder a una fila física en el plano de asientos. Cada elemento de una fila debe ser: 1. El código identificador del asiento (por ejemplo, "A1", "A2", "B10", etc.) si hay un asiento en esa posición. 2. Un string vacío "" si hay un pasillo vertical, una consola, una columna física o un espacio vacío en esa posición de la cuadrícula. Asegúrate de alinear las columnas verticalmente entre las diferentes filas (por ejemplo, si hay un pasillo central, los strings vacíos "" deben aparecer en el mismo índice de columna en todas las filas para que se dibuje como un pasillo vertical continuo). Devuelve EXCLUSIVAMENTE el JSON de la matriz 2D sin bloques de código markdown, formato de texto o comentarios. Ejemplo de salida: [["A1", "A2", "", "A3", "A4"], ["B1", "B2", "", "B3", "B4"]]'
               },
               {
                 type: 'image_url',
@@ -430,10 +437,15 @@ exports.parseSeatingLayout = async (req, res) => {
       const cleanJson = assistantMessage.replace(/```json|```/g, '').trim();
       parsedSeats = JSON.parse(cleanJson);
     } catch (parseErr) {
-      console.warn('Fallo al parsear JSON directamente de la respuesta de la IA. Intentando extraer array.', assistantMessage);
-      const match = assistantMessage.match(/\[\s*".*?"\s*(?:,\s*".*?"\s*)*\]/s);
-      if (match) {
-        parsedSeats = JSON.parse(match[0]);
+      console.warn('Fallo al parsear JSON directamente de la respuesta de la IA. Intentando extraer matriz.', assistantMessage);
+      const startIdx = assistantMessage.indexOf('[');
+      const endIdx = assistantMessage.lastIndexOf(']');
+      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        try {
+          parsedSeats = JSON.parse(assistantMessage.substring(startIdx, endIdx + 1));
+        } catch (subParseErr) {
+          throw new Error('No se pudo interpretar el formato de respuesta del plano.');
+        }
       } else {
         throw new Error('No se pudo interpretar el formato de respuesta del plano.');
       }
@@ -443,9 +455,20 @@ exports.parseSeatingLayout = async (req, res) => {
       throw new Error('La respuesta de la IA no es un listado válido de asientos.');
     }
 
+    let normalizedLayout = [];
+    if (Array.isArray(parsedSeats[0])) {
+      normalizedLayout = parsedSeats.map(row => 
+        row.map(s => typeof s === 'string' ? s.trim().toUpperCase() : "")
+      );
+    } else {
+      normalizedLayout = parsedSeats
+        .map(s => typeof s === 'string' ? s.trim().toUpperCase() : "")
+        .filter(s => s.length > 0);
+    }
+
     res.json({
       status: 'OK',
-      seats: parsedSeats.map(s => s.trim().toUpperCase()).filter(s => s.length > 0)
+      seats: normalizedLayout
     });
 
   } catch (err) {
@@ -453,6 +476,43 @@ exports.parseSeatingLayout = async (req, res) => {
     res.status(500).json({
       status: 'ERROR',
       message: 'Fallo al procesar el plano con IA.',
+      error: err.message
+    });
+  }
+};
+
+// Eliminar un evento (o desactivarlo si tiene órdenes asociadas)
+exports.deleteEvent = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // 1. Verificar si existen órdenes asociadas a este evento
+    const ordersCheck = await query('SELECT COUNT(*)::integer FROM orders WHERE event_id = $1', [id]);
+    const ordersCount = ordersCheck.rows[0].count;
+
+    if (ordersCount > 0) {
+      // Tiene órdenes, no se puede eliminar físicamente. Cambiar estado a inactivo
+      await query("UPDATE events SET status = 'inactive' WHERE id = $1", [id]);
+      return res.json({
+        status: 'OK',
+        action: 'archived',
+        message: 'El evento tiene ventas y no puede ser borrado físicamente para no perder el historial de tickets. Se ha cambiado su estado a "Inactivo" para retirarlo de cartelera.'
+      });
+    }
+
+    // 2. Si no tiene órdenes, se puede borrar físicamente de forma segura
+    await query('DELETE FROM events WHERE id = $1', [id]);
+
+    res.json({
+      status: 'OK',
+      action: 'deleted',
+      message: 'Evento eliminado con éxito.'
+    });
+  } catch (err) {
+    console.error('Error al eliminar evento:', err);
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Error al eliminar el evento',
       error: err.message
     });
   }

@@ -52,7 +52,57 @@ const AdminDashboard = () => {
 
   // Estados nuevos para el selector dinámico de fechas
   const [schedulesList, setSchedulesList] = useState([]);
-  const [tempSchedule, setTempSchedule] = useState('');
+  const [tempDate, setTempDate] = useState('');
+  const [tempTime, setTempTime] = useState('20:00');
+
+  // Helper para asegurar distribución en formato matriz 2D
+  const ensure2DLayout = (layout) => {
+    if (!layout || layout.length === 0) return [];
+    if (Array.isArray(layout[0])) return layout;
+    
+    const rows = {};
+    layout.forEach(seat => {
+      if (!seat) return;
+      const match = seat.match(/^([a-zA-Z]+)(\d+)$/);
+      if (match) {
+        const rowLabel = match[1].toUpperCase();
+        if (!rows[rowLabel]) rows[rowLabel] = [];
+        rows[rowLabel].push(seat);
+      } else {
+        if (!rows['Otros']) rows['Otros'] = [];
+        rows['Otros'].push(seat);
+      }
+    });
+
+    let maxSeatNum = 1;
+    layout.forEach(seat => {
+      if (!seat) return;
+      const match = seat.match(/^([a-zA-Z]+)(\d+)$/);
+      if (match) {
+        const seatNum = parseInt(match[2]);
+        if (seatNum > maxSeatNum) maxSeatNum = seatNum;
+      }
+    });
+
+    const grid = [];
+    Object.keys(rows).sort().forEach(rowName => {
+      const rowSeats = [];
+      const rowSeatsMap = {};
+      rows[rowName].forEach(s => {
+        const match = s.match(/\d+/);
+        if (match) {
+          rowSeatsMap[parseInt(match[0])] = s;
+        }
+      });
+
+      for (let c = 1; c <= maxSeatNum; c++) {
+        rowSeats.push(rowSeatsMap[c] || "");
+      }
+      grid.push(rowSeats);
+    });
+
+    return grid;
+  };
 
   // Resolver URLs relativas de imágenes
   const getImageUrl = (url) => {
@@ -72,35 +122,42 @@ const AdminDashboard = () => {
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
+          try {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
 
-          // Dimensiones máximas (1200px para mantener calidad excelente en celulares)
-          const MAX_WIDTH = 1200;
-          const MAX_HEIGHT = 1200;
+            // Dimensiones máximas (1200px para mantener calidad excelente en celulares)
+            const MAX_WIDTH = 1200;
+            const MAX_HEIGHT = 1200;
 
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+              }
             }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
+
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              throw new Error('No se pudo obtener el contexto 2D del Canvas.');
             }
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Convertir a JPEG comprimido (calidad 0.7)
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            resolve(dataUrl);
+          } catch (err) {
+            reject(err);
           }
-
-          canvas.width = width;
-          canvas.height = height;
-
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Convertir a JPEG comprimido (calidad 0.7)
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-          resolve(dataUrl);
         };
         img.onerror = (err) => reject(err);
         img.src = event.target.result;
@@ -164,8 +221,19 @@ const AdminDashboard = () => {
 
   // Agregar función de fecha/hora a la lista
   const addScheduleItem = () => {
-    if (!tempSchedule) return;
-    const dateFormatted = new Date(tempSchedule).toISOString();
+    if (!tempDate || !tempTime) {
+      Swal.fire('Error', 'Por favor selecciona una fecha y hora válidas.', 'error');
+      return;
+    }
+    const combinedStr = `${tempDate}T${tempTime}`;
+    const dateObj = new Date(combinedStr);
+    
+    if (isNaN(dateObj.getTime())) {
+      Swal.fire('Error', 'La fecha u hora ingresada no es válida.', 'error');
+      return;
+    }
+
+    const dateFormatted = dateObj.toISOString();
     
     if (schedulesList.includes(dateFormatted)) {
       Swal.fire('Aviso', 'Esta fecha y hora ya ha sido agregada.', 'warning');
@@ -173,7 +241,8 @@ const AdminDashboard = () => {
     }
 
     setSchedulesList([...schedulesList, dateFormatted].sort());
-    setTempSchedule('');
+    setTempDate('');
+    setTempTime('20:00');
   };
 
   // Remover fecha/hora de la lista
@@ -248,30 +317,39 @@ const AdminDashboard = () => {
     const newLayout = [];
     for (let r = start; r <= end; r++) {
       const rowChar = String.fromCharCode(r);
+      const rowSeats = [];
       for (let s = 1; s <= numSeats; s++) {
-        newLayout.push(`${rowChar}${s}`);
+        rowSeats.push(`${rowChar}${s}`);
       }
+      newLayout.push(rowSeats);
     }
     setSeatingLayoutList(newLayout);
   };
 
   // Activar/desactivar butaca individual en el editor interactivo
-  const toggleSeatLayout = (seatLabel) => {
-    if (seatingLayoutList.includes(seatLabel)) {
-      setSeatingLayoutList(seatingLayoutList.filter(s => s !== seatLabel));
-    } else {
-      setSeatingLayoutList([...seatingLayoutList, seatLabel].sort((a, b) => {
-        const matchA = a.match(/^([A-Z]+)(\d+)$/);
-        const matchB = b.match(/^([A-Z]+)(\d+)$/);
-        if (!matchA || !matchB) return a.localeCompare(b);
-        const rowA = matchA[1];
-        const rowB = matchB[1];
-        const numA = parseInt(matchA[2]);
-        const numB = parseInt(matchB[2]);
-        if (rowA !== rowB) return rowA.localeCompare(rowB);
-        return numA - numB;
-      }));
-    }
+  const toggleSeatLayout = (rowIndex, colIndex) => {
+    const grid = ensure2DLayout(seatingLayoutList);
+    const updated = grid.map((row, rIdx) => {
+      if (rIdx !== rowIndex) return row;
+      return row.map((seat, cIdx) => {
+        if (cIdx !== colIndex) return seat;
+        if (seat !== "") {
+          return "";
+        } else {
+          let rowChar = "";
+          const firstActive = row.find(s => s !== "");
+          if (firstActive) {
+            const match = firstActive.match(/^([a-zA-Z]+)/);
+            if (match) rowChar = match[1];
+          }
+          if (!rowChar) {
+            rowChar = String.fromCharCode('A'.charCodeAt(0) + rowIndex);
+          }
+          return `${rowChar}${colIndex + 1}`;
+        }
+      });
+    });
+    setSeatingLayoutList(updated);
   };
 
   // Cargar croquis y enviarlo a OpenRouter para procesarlo con IA
@@ -299,7 +377,8 @@ const AdminDashboard = () => {
 
       if (response.data.status === 'OK') {
         setSeatingLayoutList(response.data.seats);
-        Swal.fire('Éxito', `Plano importado con éxito. Se detectaron ${response.data.seats.length} asientos.`, 'success');
+        const activeCount = ensure2DLayout(response.data.seats).flat().filter(s => s && s.trim() !== "").length;
+        Swal.fire('Éxito', `Plano importado con éxito. Se detectaron ${activeCount} asientos activos.`, 'success');
       } else {
         throw new Error(response.data.message || 'Error en la respuesta de la IA.');
       }
@@ -312,38 +391,8 @@ const AdminDashboard = () => {
 
   // Renderizar la cuadrícula interactiva
   const renderInteractiveGrid = () => {
-    let endCharCode = 65; // A
-    let maxSeatNum = 1;
+    const grid = ensure2DLayout(seatingLayoutList);
     
-    if (seatingLayoutList.length > 0) {
-      seatingLayoutList.forEach(seat => {
-        const match = seat.match(/^([A-Z]+)(\d+)$/);
-        if (match) {
-          const rowChar = match[1];
-          const seatNum = parseInt(match[2]);
-          const charCode = rowChar.charCodeAt(0);
-          if (charCode > endCharCode) endCharCode = charCode;
-          if (seatNum > maxSeatNum) maxSeatNum = seatNum;
-        }
-      });
-    } else {
-      endCharCode = endRow.toUpperCase().charCodeAt(0);
-      maxSeatNum = parseInt(seatsPerRow) || 1;
-    }
-    
-    const start = 'A'.charCodeAt(0);
-    const end = String.fromCharCode(endCharCode).charCodeAt(0);
-    
-    const allRows = [];
-    for (let r = start; r <= end; r++) {
-      const rowChar = String.fromCharCode(r);
-      const rowSeats = [];
-      for (let s = 1; s <= maxSeatNum; s++) {
-        rowSeats.push(`${rowChar}${s}`);
-      }
-      allRows.push({ rowName: rowChar, seats: rowSeats });
-    }
-
     return (
       <div style={{ 
         background: 'rgba(0,0,0,0.3)', 
@@ -374,46 +423,60 @@ const AdminDashboard = () => {
           Escenario / Pantalla
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', overflowX: 'auto', padding: '10px 0' }}>
-          {allRows.map(row => (
-            <div key={row.rowName} style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', width: '15px', color: 'var(--text-muted)', textAlign: 'center' }}>
-                {row.rowName}
-              </span>
-              {row.seats.map(seat => {
-                const isActive = seatingLayoutList.includes(seat);
-                return (
-                  <button
-                    key={seat}
-                    type="button"
-                    onClick={() => toggleSeatLayout(seat)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      transition: 'all 0.15s'
-                    }}
-                    title={`Butaca ${seat} - ${isActive ? 'Activa' : 'Inactiva/Pasillo'}`}
-                  >
-                    <Armchair size={22} color={isActive ? 'var(--accent)' : 'var(--text-muted)'} style={{ transform: isActive ? 'scale(1.1)' : 'none', opacity: isActive ? 1 : 0.2 }} />
-                    <span style={{ fontSize: '0.55rem', color: isActive ? '#fff' : 'rgba(255,255,255,0.15)', marginTop: '2px', fontWeight: 'bold' }}>
-                      {seat}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', overflowX: 'auto', padding: '10px 0', alignItems: 'flex-start' }}>
+          {grid.map((row, rowIndex) => {
+            let rowName = "";
+            const firstActive = row.find(s => s !== "");
+            if (firstActive) {
+              const match = firstActive.match(/^([A-Za-z]+)/);
+              if (match) rowName = match[1];
+            }
+            if (!rowName) {
+              rowName = String.fromCharCode(65 + rowIndex);
+            }
+
+            return (
+              <div key={rowIndex} style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center', width: 'max-content', minWidth: '100%', padding: '0 10px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', width: '15px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                  {rowName}
+                </span>
+                {row.map((seat, colIndex) => {
+                  const isActive = seat !== "";
+                  
+                  return (
+                    <button
+                      key={colIndex}
+                      type="button"
+                      onClick={() => toggleSeatLayout(rowIndex, colIndex)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        transition: 'all 0.15s',
+                        width: '22px'
+                      }}
+                      title={isActive ? `Desactivar asiento ${seat} (Convertir en pasillo)` : `Activar asiento en Fila ${rowName}, Columna ${colIndex + 1}`}
+                    >
+                      <Armchair size={20} color={isActive ? 'var(--accent)' : 'var(--text-muted)'} style={{ transform: isActive ? 'scale(1.1)' : 'none', opacity: isActive ? 1 : 0.2 }} />
+                      <span style={{ fontSize: '0.55rem', color: isActive ? '#fff' : 'rgba(255,255,255,0.15)', marginTop: '2px', fontWeight: 'bold' }}>
+                        {isActive ? seat : `${rowName}${colIndex + 1}`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '12px', fontSize: '0.7rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <Armchair size={13} color="var(--accent)" />
-            <span>Activa ({seatingLayoutList.length})</span>
+            <span>Activa ({grid.flat().filter(s => s && s.trim() !== "").length})</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <Armchair size={13} color="var(--text-muted)" style={{ opacity: 0.3 }} />
@@ -451,6 +514,41 @@ const AdminDashboard = () => {
     }
   };
 
+  // Helper: eliminar o archivar evento
+  const handleDeleteEvent = async (eventId, eventTitle) => {
+    const confirmRes = await Swal.fire({
+      title: `¿Eliminar "${eventTitle}"?`,
+      text: "Si el evento ya tiene ventas registradas, se desactivará e inactivará de forma automática para preservar el historial. Si no tiene ventas, se eliminará permanentemente de la base de datos.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ff3b30',
+      cancelButtonColor: '#333',
+      confirmButtonText: 'Sí, continuar',
+      cancelButtonText: 'Cancelar'
+    });
+
+    if (confirmRes.isConfirmed) {
+      try {
+        const res = await api.delete(`/events/${eventId}`);
+        if (res.data.status === 'OK') {
+          if (res.data.action === 'archived') {
+            Swal.fire({
+              title: 'Evento Desactivado',
+              text: res.data.message,
+              icon: 'info'
+            });
+          } else {
+            Swal.fire('Eliminado', res.data.message, 'success');
+          }
+          fetchData();
+        }
+      } catch (err) {
+        console.error(err);
+        Swal.fire('Error', err.response?.data?.message || 'No se pudo eliminar el evento.', 'error');
+      }
+    }
+  };
+
   // Helper: cargar evento en el formulario para edición
   const loadEventForEditing = (evt) => {
     setEditingEvent(evt);
@@ -464,7 +562,7 @@ const AdminDashboard = () => {
     setCapacityTotal(evt.capacity_total);
     setIsSingleRate(evt.is_single_rate);
     setHasAssignedSeats(evt.has_assigned_seats);
-    setSeatingLayoutList(evt.seating_layout || []);
+    setSeatingLayoutList(ensure2DLayout(evt.seating_layout || []));
     setPromoType(evt.promo_type || 'Ninguna');
     setPricePromo(parseFloat(evt.price_promo) || 0);
     setPromoDeadline(evt.promo_deadline ? evt.promo_deadline.slice(0, 16) : '');
@@ -482,7 +580,7 @@ const AdminDashboard = () => {
     setPriceAdult(15); setPriceChild(7.5); setCapacityTotal(12);
     setIsSingleRate(false); setHasAssignedSeats(true);
     setStartRow('A'); setEndRow('C'); setSeatsPerRow(4);
-    setSeatingLayoutList(['A1','A2','A3','A4','B1','B2','B3','B4','C1','C2','C3','C4']);
+    setSeatingLayoutList(ensure2DLayout(['A1','A2','A3','A4','B1','B2','B3','B4','C1','C2','C3','C4']));
     setPromoType('Ninguna'); setPricePromo(0); setPromoDeadline('');
     setSchedulesList([]); setRequireBilling(false);
   };
@@ -491,8 +589,20 @@ const AdminDashboard = () => {
   const handleCreateEvent = async (e) => {
     e.preventDefault();
 
-    if (!title || !venue || !bannerUrl || schedulesList.length === 0) {
-      Swal.fire('Error', 'Completa los campos obligatorios y añade al menos una fecha.', 'error');
+    if (!title) {
+      Swal.fire('Falta Nombre', 'Por favor ingresa el nombre del evento.', 'warning');
+      return;
+    }
+    if (!venue) {
+      Swal.fire('Falta Lugar', 'Por favor ingresa el lugar o sala del evento.', 'warning');
+      return;
+    }
+    if (!bannerUrl) {
+      Swal.fire('Falta Imagen', 'Por favor sube la imagen del afiche o banner del evento.', 'warning');
+      return;
+    }
+    if (schedulesList.length === 0) {
+      Swal.fire('Falta Fecha', 'Por favor añade al menos una fecha o función para el evento.', 'warning');
       return;
     }
 
@@ -503,7 +613,7 @@ const AdminDashboard = () => {
     
     if (hasAssignedSeats) {
       layoutArray = seatingLayoutList;
-      actualCapacity = seatingLayoutList.length;
+      actualCapacity = ensure2DLayout(seatingLayoutList).flat().filter(s => s && s.trim() !== "").length;
     }
 
     const payload = {
@@ -1049,10 +1159,10 @@ const AdminDashboard = () => {
 
             {/* --- SECCIÓN NUEVA: SUBIDA DIRECTA DE TICKET TEMPLATE CON PREVIEW Y COMPRESIÓN --- */}
             <div style={{ marginBottom: '15px' }}>
-              <label>Imagen Fondo de Boleto (Alargado 3:1) (Opcional)</label>
+              <label>Imagen Fondo de Boleto (Vertical 3:4) (Opcional)</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--glass-border)', padding: '20px', borderRadius: '12px' }}>
                 {ticketTemplateUrl ? (
-                  <div style={{ position: 'relative', width: '100%', height: '100px', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ position: 'relative', width: '150px', height: '200px', borderRadius: '8px', overflow: 'hidden' }}>
                     <img src={getImageUrl(ticketTemplateUrl)} alt="Ticket Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <button 
                       type="button" 
@@ -1171,7 +1281,7 @@ const AdminDashboard = () => {
 
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '-10px' }}>
                   <Info size={14} style={{ marginTop: '2px', flexShrink: '0' }} />
-                  <span>El aforo total de este show numerado será de <b>{seatingLayoutList.length}</b> butacas activas.</span>
+                  <span>El aforo total de este show numerado será de <b>{ensure2DLayout(seatingLayoutList).flat().filter(s => s && s.trim() !== "").length}</b> butacas activas.</span>
                 </div>
               </div>
             ) : (
@@ -1243,18 +1353,42 @@ const AdminDashboard = () => {
             <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
               <label style={{ color: 'var(--accent)', fontWeight: 'bold' }}>📅 Fechas / Horarios de Funciones *</label>
               
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', marginTop: '5px' }}>
-                <input 
-                  type="datetime-local" 
-                  value={tempSchedule} 
-                  onChange={(e) => setTempSchedule(e.target.value)}
-                  style={{ marginBottom: '0', flex: '1', padding: '10px' }}
-                />
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', marginTop: '5px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '2', minWidth: '150px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Fecha</span>
+                  <input 
+                    type="date" 
+                    value={tempDate} 
+                    onChange={(e) => setTempDate(e.target.value)}
+                    onClick={(e) => {
+                      try { e.target.showPicker(); } catch(err) { console.warn(err); }
+                    }}
+                    onFocus={(e) => {
+                      try { e.target.showPicker(); } catch(err) { console.warn(err); }
+                    }}
+                    style={{ marginBottom: '0', padding: '10px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '8px' }}
+                  />
+                </div>
+                <div style={{ flex: '1', minWidth: '100px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Hora</span>
+                  <input 
+                    type="time" 
+                    value={tempTime} 
+                    onChange={(e) => setTempTime(e.target.value)}
+                    onClick={(e) => {
+                      try { e.target.showPicker(); } catch(err) { console.warn(err); }
+                    }}
+                    onFocus={(e) => {
+                      try { e.target.showPicker(); } catch(err) { console.warn(err); }
+                    }}
+                    style={{ marginBottom: '0', padding: '10px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '8px' }}
+                  />
+                </div>
                 <button 
                   type="button" 
                   onClick={addScheduleItem}
                   className="btn-primary" 
-                  style={{ width: 'auto', padding: '10px 15px', background: 'var(--accent-secondary)' }}
+                  style={{ width: 'auto', padding: '10px 15px', background: 'var(--accent-secondary)', height: '42px', alignSelf: 'flex-end' }}
                 >
                   <Plus size={16} /> Agregar
                 </button>
@@ -1348,9 +1482,14 @@ const AdminDashboard = () => {
                     {evt.require_billing && <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '20px', background: 'rgba(222,184,65,0.1)', color: 'var(--accent)', border: '1px solid rgba(222,184,65,0.2)' }}>🧾 Facturación</span>}
                   </div>
                 </div>
-                <button onClick={() => loadEventForEditing(evt)} style={{ background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)', color: 'var(--accent)', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  <Edit2 size={14} /> Editar
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => loadEventForEditing(evt)} style={{ background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)', color: 'var(--accent)', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    <Edit2 size={14} /> Editar
+                  </button>
+                  <button onClick={() => handleDeleteEvent(evt.id, evt.title)} style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.3)', color: '#ff3b30', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    <Trash2 size={14} /> Borrar
+                  </button>
+                </div>
               </div>
             ))}
           </div>

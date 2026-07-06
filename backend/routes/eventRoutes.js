@@ -13,6 +13,7 @@ router.get('/:id', optionalAuthMiddleware, eventController.getEventById);
 router.post('/', authMiddleware, roleMiddleware(['admin']), eventController.createEvent);
 router.put('/:id', authMiddleware, roleMiddleware(['admin']), eventController.updateEvent);
 router.patch('/:id/status', authMiddleware, roleMiddleware(['admin']), eventController.toggleEventStatus);
+router.delete('/:id', authMiddleware, roleMiddleware(['admin']), eventController.deleteEvent);
 router.post('/upload', authMiddleware, roleMiddleware(['admin']), eventController.uploadImage);
 router.post('/parse-seating-layout', authMiddleware, roleMiddleware(['admin']), eventController.parseSeatingLayout);
 

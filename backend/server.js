@@ -86,7 +86,10 @@ app.get('/health', async (req, res) => {
 app.get('/api/config/payphone', (req, res) => {
   res.json({
     status: 'OK',
-    token: process.env.PAYPHONE_TOKEN || ''
+    token: process.env.PAYPHONE_TOKEN || '',
+    surcharge_enable: process.env.PAYPHONE_SURCHARGE_ENABLE !== 'false',
+    surcharge_rate: parseFloat(process.env.PAYPHONE_SURCHARGE_RATE) || 0.043,
+    surcharge_fixed: parseFloat(process.env.PAYPHONE_SURCHARGE_FIXED) || 0.30
   });
 });
 

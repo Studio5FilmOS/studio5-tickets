@@ -166,31 +166,56 @@ const BoletoView = () => {
         <div 
           id={`export-ticket-${ticket.ticket_code}`}
           style={{ 
-            position: 'relative', width: '600px', height: '200px', 
+            position: 'relative', width: '320px', height: '420px', 
             borderRadius: '0', overflow: 'hidden', background: '#fff', border: '1px solid #ddd',
-            fontFamily: 'sans-serif', color: 'black'
+            fontFamily: 'sans-serif', color: 'black', display: 'flex', flexDirection: 'column'
           }}
         >
-          <div style={{ 
-            width: '100%', height: '100%', 
-            backgroundImage: `url(${getImageUrl(ticket.ticket_template_url || ticket.banner_url)})`,
-            backgroundSize: 'cover', backgroundPosition: 'center'
-          }}></div>
-          <div style={{ 
-            position: 'absolute', right: '4%', top: '10%', height: '80%', width: '28%', 
-            background: 'rgba(255, 255, 255, 0.96)', borderRadius: '8px', display: 'flex', 
-            flexDirection: 'column', justifyContent: 'center', alignItems: 'center', 
-            padding: '2% 3%', boxSizing: 'border-box', boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
-          }}>
+          {/* Top section: Banner image */}
+          <div style={{ position: 'relative', width: '100%', height: '140px' }}>
+            <img 
+              src={getImageUrl(ticket.ticket_template_url || ticket.banner_url)} 
+              alt="Banner preview" 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+            />
+            <div style={{ position: 'absolute', bottom: '10px', left: '10px', right: '10px', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '6px' }}>
+              <h3 style={{ margin: 0, color: '#fff', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{ticket.event_title}</h3>
+              <p style={{ margin: '2px 0 0 0', color: '#ccc', fontSize: '9px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>📍 {ticket.event_venue}</p>
+            </div>
             {ticket.operation_type === 'Cortesia' && (
-              <span style={{ fontSize: '9px', fontWeight: 900, border: '1px solid #e50914', color: '#e50914', padding: '1px 3px', borderRadius: '3px', marginBottom: '1px', textTransform: 'uppercase' }}>CORTESÍA</span>
+              <span style={{ position: 'absolute', top: '10px', left: '10px', fontSize: '8px', fontWeight: 900, background: '#e50914', color: '#fff', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>CORTESÍA</span>
             )}
-            <span style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'center', borderBottom: '1px solid #ddd', paddingBottom: '2px' }}>{ticket.customer_name}</span>
-            <img src={qrUrl} alt="QR" style={{ width: '70%', aspectRatio: '1/1', margin: '3px 0' }} />
-            <span style={{ fontSize: '7px', fontWeight: 'bold', color: '#555' }}>{ticket.ticket_code}</span>
-            <span style={{ fontSize: '8px', fontWeight: '900', color: '#d32f2f', background: '#ffebeb', padding: '1px 5px', borderRadius: '4px', marginTop: '2px' }}>
-              Entrada {ticket.ticket_type} {ticket.seat_label && `[Butaca: ${ticket.seat_label}]`}
-            </span>
+          </div>
+
+          {/* Perforated separator line */}
+          <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '10px', background: '#fff', position: 'relative' }}>
+            <div style={{ position: 'absolute', left: '-5px', width: '10px', height: '10px', borderRadius: '50%', background: '#111' }}></div>
+            <div style={{ flex: 1, borderTop: '2px dashed #ddd', margin: '0 5px' }}></div>
+            <div style={{ position: 'absolute', right: '-5px', width: '10px', height: '10px', borderRadius: '50%', background: '#111' }}></div>
+          </div>
+
+          {/* Bottom details section */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 15px 15px 15px', background: '#fff', justifyContent: 'space-between' }}>
+            <div style={{ textAlign: 'center', width: '100%' }}>
+              <span style={{ fontSize: '9px', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>Espectador</span>
+              <h2 style={{ margin: '1px 0 0 0', fontSize: '13px', fontWeight: 900, color: '#111', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ticket.customer_name}</h2>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <img src={qrUrl} alt="QR" style={{ width: '120px', height: '120px' }} />
+              <span style={{ fontSize: '8px', fontWeight: 'bold', color: '#555', marginTop: '4px', letterSpacing: '0.5px' }}>{ticket.ticket_code}</span>
+            </div>
+
+            <div style={{ textAlign: 'center', width: '100%', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
+              <span style={{ fontSize: '8px', color: '#666', fontWeight: 'bold' }}>{dateFormatted}</span>
+              <span style={{ 
+                fontSize: '9px', fontWeight: '900', color: '#d32f2f', background: '#ffebeb', 
+                padding: '3px 8px', borderRadius: '4px', display: 'inline-block',
+                maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+              }}>
+                Entrada {ticket.ticket_type} {ticket.seat_label && `[Butaca: ${ticket.seat_label}]`}
+              </span>
+            </div>
           </div>
         </div>
       </div>
