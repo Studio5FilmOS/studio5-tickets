@@ -408,26 +408,27 @@ exports.parseSeatingLayout = async (req, res) => {
             content: [
               {
                 type: 'text',
-                text: `Eres un experto en cartografía de salas de teatro y cines. Analiza la imagen del plano de asientos con máxima precisión. Sigue estas instrucciones al pie de la letra:
+                text: `Eres un sistema de digitalización de planos de sala de teatro/cine. Tu tarea es convertir la imagen en una CUADRÍCULA ABSOLUTA con posicionamiento exacto. Sigue estos pasos en orden:
 
-PASO 1 - ORIENTACIÓN DEL ESCENARIO:
-- Identifica visualmente dónde está el ESCENARIO, PANTALLA o PALCO en el plano (puede estar arriba, abajo, a los lados).
-- La fila MÁS CERCANA al escenario debe ser la PRIMERA fila de tu matriz (índice 0 del array).
-- La fila MÁS LEJANA al escenario debe ser la ÚLTIMA fila de tu matriz.
-- Si el escenario está abajo en la imagen, invierte el orden de las filas para que la fila más cercana al escenario quede primero.
-- MANTÉN los identificadores de asiento EXACTAMENTE como aparecen en el plano (A1, A2, B1, etc.).
+PASO 1 — IDENTIFICAR EL ESCENARIO:
+Localiza el escenario, pantalla o palco. La fila de asientos MÁS CERCANA al escenario será la fila 0 (primera en la matriz). Si el escenario está abajo en la imagen, invierte el orden vertical de las filas. Mantén los identificadores exactos del plano (A1, B3, etc.).
 
-PASO 2 - PASILLOS Y ESPACIOS VACÍOS:
-- Todo pasillo horizontal o vertical, toda columna estructural, toda consola de sonido/luz, todo espacio físicamente vacío entre grupos de asientos DEBE ser representado con un string vacío "".
-- Los pasillos VERTICALES (entre columnas de asientos) deben aparecer en el MISMO índice de columna en TODAS las filas (perfectamente alineados verticalmente).
-- Si en el plano hay un pasillo central entre la columna 5 y 6, todas las filas deben tener "" en ese índice.
-- NUNCA inventes asientos donde hay pasillos. NUNCA pongas asientos donde el plano muestra espacio vacío.
+PASO 2 — MAPEAR LA CUADRÍCULA ABSOLUTA:
+Esta es la regla más importante. Debes construir una cuadrícula donde TODAS las filas tienen EXACTAMENTE el mismo número de columnas.
+- Determina el TOTAL de columnas físicas que tiene la sala de izquierda a derecha (incluyendo pasillos y espacios vacíos).
+- Para cada fila, coloca el código del asiento (ej: "A1") en el índice de columna que corresponde a su posición física real.
+- Si una fila no tiene asiento en cierta columna (porque hay un pasillo, la fila es más corta, la fila está desplazada, o las butacas están en media luna), pon "" en esa posición.
+- El mismo pasillo vertical debe ser "" en el MISMO índice de columna en TODAS las filas.
+- Si la fila E tiene 3 asientos a la izquierda (columnas 0,1,2) y 2 asientos a la derecha (columnas 8,9) con espacio vacío en el medio (columnas 3-7), el array de esa fila debe ser: ["E1","E2","E3","","","","","","E4","E5"].
+- NUNCA inventes asientos que no están en el plano. NUNCA omitas espacios vacíos que sí están en el plano.
 
-PASO 3 - FORMATO DE SALIDA:
-- Devuelve ÚNICAMENTE un array JSON 2D sin ningún texto adicional, sin markdown, sin bloques de código, sin comentarios.
-- Formato exacto: [["A1","A2","","A3","A4"],["B1","B2","","B3","B4"]]
-- Cada sub-array es una fila física (de escenario hacia atrás).
-- Cada elemento es el código del asiento (string) o "" para pasillo/espacio vacío.`
+PASO 3 — FORMATO DE SALIDA:
+- Devuelve ÚNICAMENTE el JSON del array 2D. Sin texto adicional, sin markdown, sin bloques de código.
+- Cada sub-array (fila) debe tener EXACTAMENTE el mismo número de elementos.
+- Ejemplo con pasillo central y fila corta desplazada:
+  [["A1","A2","A3","","A4","A5","A6"],
+   ["B1","B2","B3","","B4","B5","B6"],
+   ["","","C1","","C2","","""]]`
               },
               {
                 type: 'image_url',
