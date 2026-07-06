@@ -408,7 +408,26 @@ exports.parseSeatingLayout = async (req, res) => {
             content: [
               {
                 type: 'text',
-                text: 'Analiza la imagen de este croquis de asientos de teatro/cine. Debes devolver una representación en cuadrícula de la distribución física de la sala (respetando pasillos, espacios vacíos, la cabina de control/consola y la alineación con el escenario). Para ello, genera una matriz 2D (un array de arrays de strings). Cada fila de la matriz debe corresponder a una fila física en el plano de asientos. Cada elemento de una fila debe ser: 1. El código identificador del asiento (por ejemplo, "A1", "A2", "B10", etc.) si hay un asiento en esa posición. 2. Un string vacío "" si hay un pasillo vertical, una consola, una columna física o un espacio vacío en esa posición de la cuadrícula. Asegúrate de alinear las columnas verticalmente entre las diferentes filas (por ejemplo, si hay un pasillo central, los strings vacíos "" deben aparecer en el mismo índice de columna en todas las filas para que se dibuje como un pasillo vertical continuo). Devuelve EXCLUSIVAMENTE el JSON de la matriz 2D sin bloques de código markdown, formato de texto o comentarios. Ejemplo de salida: [["A1", "A2", "", "A3", "A4"], ["B1", "B2", "", "B3", "B4"]]'
+                text: `Eres un experto en cartografía de salas de teatro y cines. Analiza la imagen del plano de asientos con máxima precisión. Sigue estas instrucciones al pie de la letra:
+
+PASO 1 - ORIENTACIÓN DEL ESCENARIO:
+- Identifica visualmente dónde está el ESCENARIO, PANTALLA o PALCO en el plano (puede estar arriba, abajo, a los lados).
+- La fila MÁS CERCANA al escenario debe ser la PRIMERA fila de tu matriz (índice 0 del array).
+- La fila MÁS LEJANA al escenario debe ser la ÚLTIMA fila de tu matriz.
+- Si el escenario está abajo en la imagen, invierte el orden de las filas para que la fila más cercana al escenario quede primero.
+- MANTÉN los identificadores de asiento EXACTAMENTE como aparecen en el plano (A1, A2, B1, etc.).
+
+PASO 2 - PASILLOS Y ESPACIOS VACÍOS:
+- Todo pasillo horizontal o vertical, toda columna estructural, toda consola de sonido/luz, todo espacio físicamente vacío entre grupos de asientos DEBE ser representado con un string vacío "".
+- Los pasillos VERTICALES (entre columnas de asientos) deben aparecer en el MISMO índice de columna en TODAS las filas (perfectamente alineados verticalmente).
+- Si en el plano hay un pasillo central entre la columna 5 y 6, todas las filas deben tener "" en ese índice.
+- NUNCA inventes asientos donde hay pasillos. NUNCA pongas asientos donde el plano muestra espacio vacío.
+
+PASO 3 - FORMATO DE SALIDA:
+- Devuelve ÚNICAMENTE un array JSON 2D sin ningún texto adicional, sin markdown, sin bloques de código, sin comentarios.
+- Formato exacto: [["A1","A2","","A3","A4"],["B1","B2","","B3","B4"]]
+- Cada sub-array es una fila física (de escenario hacia atrás).
+- Cada elemento es el código del asiento (string) o "" para pasillo/espacio vacío.`
               },
               {
                 type: 'image_url',
