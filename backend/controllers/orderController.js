@@ -275,12 +275,12 @@ exports.createOrder = async (req, res) => {
     // 5. Insertar la orden
     const orderInsertRes = await client.query(
       `INSERT INTO orders 
-       (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, ticket_count_adult, ticket_count_child, transaction_ref, bank_name, is_final_consumer, billing_id_number, billing_name, billing_address, billing_email)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+       (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, amount_net, ticket_count_adult, ticket_count_child, transaction_ref, bank_name, is_final_consumer, billing_id_number, billing_name, billing_address, billing_email)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
        RETURNING *`,
       [
         orderNum, buyerId, nombre, email || null, cleanWhatsapp, idEvento, scheduleId,
-        operation, metodoPago || 'Efectivo', paymentStatus, finalAmount, cAd, cNi,
+        operation, metodoPago || 'Efectivo', paymentStatus, finalAmount, operation === 'Cortesia' ? 0.00 : precioNeto, cAd, cNi,
         numTransaccion || null, banco || null,
         is_final_consumer !== false, billing_id_number || null, billing_name || null, billing_address || null, billing_email || null
       ]
@@ -368,7 +368,8 @@ exports.getAllOrders = async (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const ordersRes = await query(
-      `SELECT o.*, e.title as event_title, es.schedule_time
+      `SELECT o.*, e.title as event_title, es.schedule_time,
+       (SELECT COUNT(*)::integer FROM tickets t WHERE t.order_id = o.id AND t.status = 'Used') as checked_in_count
        FROM orders o
        JOIN events e ON e.id = o.event_id
        JOIN event_schedules es ON es.id = o.schedule_id

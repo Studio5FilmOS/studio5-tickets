@@ -18,7 +18,9 @@ const PORT = process.env.PORT || 5000;
     await query('ALTER TABLE orders ADD COLUMN billing_name VARCHAR(255);');
     await query('ALTER TABLE orders ADD COLUMN billing_address VARCHAR(255);');
     await query('ALTER TABLE orders ADD COLUMN billing_email VARCHAR(255);');
-    console.log('Migration: Added billing fields to orders');
+    await query('ALTER TABLE orders ADD COLUMN amount_net NUMERIC(10, 2) NOT NULL DEFAULT 0.00;');
+    await query('UPDATE orders SET amount_net = amount_total WHERE amount_net = 0.00 AND amount_total > 0.00;');
+    console.log('Migration: Added billing fields and amount_net to orders');
   } catch (err) { }
   try {
     await query(`CREATE TABLE IF NOT EXISTS promotions (

@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS orders (
     payment_method VARCHAR(100) NOT NULL,
     payment_status VARCHAR(50) NOT NULL DEFAULT 'Pending',
     amount_total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    amount_net NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     ticket_count_adult INTEGER NOT NULL DEFAULT 0,
     ticket_count_child INTEGER NOT NULL DEFAULT 0,
     transaction_ref VARCHAR(100),
