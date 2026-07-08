@@ -142,10 +142,17 @@ initDatabase()
   .then(() => runMigrations())
   .then(() => {
     app.listen(PORT, () => {
+      console.log(`==================================================`);
+      console.log(`🔌 CONFIGURACIÓN DE CONEXIÓN A BASE DE DATOS:`);
+      console.log(`  - Host: ${process.env.DB_HOST || 'localhost (default)'}`);
+      console.log(`  - Database: ${process.env.DB_DATABASE || 'studio5_tickets (default)'}`);
+      console.log(`  - User: ${process.env.DB_USER || 'postgres (default)'}`);
+      console.log(`  - Port: ${process.env.DB_PORT || '5432 (default)'}`);
+      console.log(`==================================================`);
       console.log(`Servidor de Tickets corriendo en el puerto ${PORT}`);
       console.log(`Modo: ${process.env.NODE_ENV || 'development'}`);
     });
   })
   .catch(err => {
-    console.error('Error durante la inicialización del servidor:', err);
+    console.error('❌ Error durante la inicialización del servidor:', err);
   });
