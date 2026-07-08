@@ -23,6 +23,16 @@ async function execute() {
     // Iniciar transacción
     await client.query('BEGIN');
     
+    // Asegurar que las columnas de la migración existan
+    console.log('⚙️ Asegurando que las columnas de facturación existan en las tablas...');
+    await client.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS require_billing BOOLEAN NOT NULL DEFAULT FALSE;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_final_consumer BOOLEAN NOT NULL DEFAULT TRUE;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_id_number VARCHAR(50);');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_name VARCHAR(255);');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_address VARCHAR(255);');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_email VARCHAR(255);');
+    console.log('✅ Columnas de facturación verificadas/creadas.');
+    
     // 1. Buscar o crear el evento "Enredados"
     let eventId;
     const eventCheck = await client.query(
