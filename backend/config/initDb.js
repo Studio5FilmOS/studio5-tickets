@@ -1,111 +1,98 @@
 const fs = require('fs');
 const path = require('path');
-const { query, pool } = require('./db');
+const { query } = require('./db');
+
+// Hash bcrypt de 'password123' — contraseña por defecto de admin/staff
+const DEFAULT_HASH = '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa';
 
 /**
- * Ejecuta un archivo SQL dividiendo por punto y coma, 
- * ignorando comentarios. Esto es necesario porque el driver `pg`
+ * Ejecuta un archivo SQL dividiendo por punto y coma,
+ * ignorando comentarios. Necesario porque el driver `pg`
  * no soporta múltiples sentencias en un solo query().
  */
 const runSqlFile = async (filePath) => {
   const sql = fs.readFileSync(filePath, 'utf8');
-  // Eliminar comentarios de una línea (-- ...) y multilínea (/* ... */)
   const cleanSql = sql
     .replace(/--.*$/gm, '')
     .replace(/\/\*[\s\S]*?\*\//g, '');
-  
-  const statements = cleanSql
-    .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 5); // ignorar fragmentos vacíos
-
+  const statements = cleanSql.split(';').map(s => s.trim()).filter(s => s.length > 5);
   for (const stmt of statements) {
     try {
       await query(stmt);
     } catch (err) {
-      // Ignorar errores de "ya existe" que son normales con IF NOT EXISTS
       if (!err.message.includes('already exists')) {
-        console.warn(`⚠️ Advertencia al ejecutar SQL: ${err.message}`);
+        console.warn(`⚠️ SQL warning: ${err.message}`);
       }
     }
   }
 };
 
 /**
- * Aplica migraciones seguras (ALTER TABLE ... ADD COLUMN IF NOT EXISTS)
- * para columnas que se agregaron después de la creación inicial del schema.
- * Esto es seguro de correr en cada deploy.
+ * Aplica migraciones seguras (ADD COLUMN IF NOT EXISTS) en cada deploy.
  */
 const applyMigrations = async () => {
-  const alterSafe = async (sql) => {
-    try { await query(sql); } catch (e) { /* ignorar si ya existe */ }
-  };
-
-  // Migración: columnas TEXT para imágenes (base64)
-  await alterSafe("ALTER TABLE events ALTER COLUMN banner_url TYPE TEXT;");
-  await alterSafe("ALTER TABLE events ALTER COLUMN ticket_template_url TYPE TEXT;");
-  await alterSafe("ALTER TABLE event_clues ALTER COLUMN image_url TYPE TEXT;");
-
-  // Migración: columna de requerimiento de facturación en eventos
-  await alterSafe("ALTER TABLE events ADD COLUMN IF NOT EXISTS require_billing BOOLEAN NOT NULL DEFAULT FALSE;");
-
-  // Migración: columnas de facturación en órdenes
-  await alterSafe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_final_consumer BOOLEAN NOT NULL DEFAULT TRUE;");
-  await alterSafe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_id_number VARCHAR(50);");
-  await alterSafe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_name VARCHAR(255);");
-  await alterSafe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_address VARCHAR(255);");
-  await alterSafe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_email VARCHAR(255);");
-
+  const safe = async (sql) => { try { await query(sql); } catch (e) { /* already exists */ } };
+  await safe("ALTER TABLE events ALTER COLUMN banner_url TYPE TEXT;");
+  await safe("ALTER TABLE events ALTER COLUMN ticket_template_url TYPE TEXT;");
+  await safe("ALTER TABLE event_clues ALTER COLUMN image_url TYPE TEXT;");
+  await safe("ALTER TABLE events ADD COLUMN IF NOT EXISTS require_billing BOOLEAN NOT NULL DEFAULT FALSE;");
+  await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_final_consumer BOOLEAN NOT NULL DEFAULT TRUE;");
+  await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_id_number VARCHAR(50);");
+  await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_name VARCHAR(255);");
+  await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_address VARCHAR(255);");
+  await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_email VARCHAR(255);");
   console.log('✅ Migraciones de columnas aplicadas correctamente.');
+};
+
+/**
+ * UPSERT de usuarios admin/staff — corre siempre en cada deploy
+ * para garantizar que las credenciales funcionen sin importar el estado de la BD.
+ */
+const upsertAdminUsers = async () => {
+  await query(`
+    INSERT INTO users (name, email, phone, password_hash, role) VALUES
+    ('Administrador Studio 5', 'admin@studio5.com', '0999999999', '${DEFAULT_HASH}', 'admin'),
+    ('Staff Puerta 1', 'staff@studio5.com', '0888888888', '${DEFAULT_HASH}', 'staff')
+    ON CONFLICT (email) DO UPDATE SET
+      password_hash = EXCLUDED.password_hash,
+      role = EXCLUDED.role,
+      name = EXCLUDED.name;
+  `);
+  console.log('✅ Usuarios admin/staff creados o verificados (contraseña: password123).');
 };
 
 const initDatabase = async () => {
   try {
-    // PASO 1: Verificar si las tablas existen, creando el schema si no están
-    const usersCheck = await query(
-      "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users')"
-    );
-    const eventsCheck = await query(
-      "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'events')"
-    );
-    const ordersCheck = await query(
-      "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'orders')"
-    );
+    // PASO 1: Verificar qué tablas existen
+    const check = async (table) => {
+      const r = await query(`SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname='public' AND tablename='${table}')`);
+      return r.rows[0].exists;
+    };
 
-    const usersExists = usersCheck.rows[0].exists;
-    const eventsExists = eventsCheck.rows[0].exists;
-    const ordersExists = ordersCheck.rows[0].exists;
+    const usersExists = await check('users');
+    const eventsExists = await check('events');
+    const ordersExists = await check('orders');
 
-    console.log(`📊 Estado de tablas: users=${usersExists}, events=${eventsExists}, orders=${ordersExists}`);
+    console.log(`📊 Tablas: users=${usersExists}, events=${eventsExists}, orders=${ordersExists}`);
 
-    // Si ALGUNA tabla crítica falta, ejecutar el schema completo
+    // Si alguna tabla crítica falta, crear todas las tablas
     if (!usersExists || !eventsExists || !ordersExists) {
-      console.log('⚠️ Tablas faltantes detectadas. Inicializando esquema...');
+      console.log('⚠️ Tablas faltantes. Inicializando esquema...');
       const schemaPath = path.join(__dirname, '..', 'database', 'schema.sql');
       await runSqlFile(schemaPath);
-      console.log('✅ Esquema de base de datos creado correctamente.');
-
-      // Crear usuarios admin por defecto
-      await query(`
-        INSERT INTO users (name, email, phone, password_hash, role) VALUES
-        ('Administrador Studio 5', 'admin@studio5.com', '0999999999', '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa', 'admin'),
-        ('Staff Puerta 1', 'staff@studio5.com', '0888888888', '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa', 'staff')
-        ON CONFLICT (email) DO NOTHING;
-      `);
-      console.log('✅ Usuarios administrativos creados.');
+      console.log('✅ Esquema creado correctamente.');
     } else {
       console.log('✅ Base de datos ya inicializada.');
-      // Actualizar credenciales por si acaso
-      await query(
-        "UPDATE users SET password_hash = '$2a$10$35QT8095H557PUDT0G.ipehs5K.kJ9aePeofBqtghPRIrXNJXd0Wa' WHERE email IN ('admin@studio5.com', 'staff@studio5.com')"
-      );
     }
 
-    // PASO 2: SIEMPRE aplicar migraciones (seguro en cada deploy)
+    // PASO 2: SIEMPRE actualizar/crear usuarios admin y staff
+    await upsertAdminUsers();
+
+    // PASO 3: SIEMPRE aplicar migraciones de columnas
     await applyMigrations();
 
   } catch (err) {
-    console.error('❌ Fallo al inicializar base de datos:', err.message);
+    console.error('❌ Error al inicializar base de datos:', err.message);
     console.error(err.stack);
   }
 };

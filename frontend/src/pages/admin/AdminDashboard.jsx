@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
-import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt } from 'lucide-react';
+import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog } from 'lucide-react';
+import AdminUsers from './AdminUsers';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('ventas'); // 'ventas', 'crear', 'eventos', 'banners'
@@ -911,7 +912,8 @@ const AdminDashboard = () => {
           { id: 'ventas', icon: LayoutGrid, label: 'Ventas' },
           { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Nuevo Evento' },
           { id: 'eventos', icon: Edit2, label: 'Mis Eventos' },
-          { id: 'banners', icon: Image, label: 'Banners' }
+          { id: 'banners', icon: Image, label: 'Banners' },
+          { id: 'usuarios', icon: UserCog, label: 'Usuarios' }
         ].map(tab => (
           <button
             key={tab.id}
@@ -1758,6 +1760,13 @@ const AdminDashboard = () => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* PESTAÑA: USUARIOS */}
+      {activeTab === 'usuarios' && (
+        <div className="glass-panel fade-in">
+          <AdminUsers />
         </div>
       )}
     </div>

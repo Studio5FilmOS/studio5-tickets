@@ -136,6 +136,7 @@ const eventRoutes = require('./routes/eventRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const ticketRoutes = require('./routes/ticketRoutes');
 const promotionRoutes = require('./routes/promotionRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 // Vincular Rutas a endpoints de la API
 app.use('/api/auth', authRoutes);
@@ -143,6 +144,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/promotions', promotionRoutes);
+app.use('/api/admin/users', userRoutes);
 
 // Servir archivos estáticos del Frontend compilado
 const path = require('path');
