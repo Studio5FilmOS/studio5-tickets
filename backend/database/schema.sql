@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS events (
     promo_type VARCHAR(50) NOT NULL DEFAULT 'Ninguna',
     price_promo NUMERIC(10, 2) DEFAULT 0.00,
     promo_deadline TIMESTAMPTZ,
+    require_billing BOOLEAN NOT NULL DEFAULT FALSE,
     status VARCHAR(50) NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -64,6 +65,11 @@ CREATE TABLE IF NOT EXISTS orders (
     ticket_count_child INTEGER NOT NULL DEFAULT 0,
     transaction_ref VARCHAR(100),
     bank_name VARCHAR(100),
+    is_final_consumer BOOLEAN NOT NULL DEFAULT TRUE,
+    billing_id_number VARCHAR(50),
+    billing_name VARCHAR(255),
+    billing_address VARCHAR(255),
+    billing_email VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
