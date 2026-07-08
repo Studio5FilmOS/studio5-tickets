@@ -30,12 +30,16 @@ async function main() {
       console.log('Intentando continuar...');
     }
 
+    // Eliminar comentarios de una línea (-- ...) y comentarios multilínea (/* ... */)
+    const cleanSql = schemaSql
+      .replace(/--.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+
     // Dividir el archivo SQL en comandos por el punto y coma (;)
-    // Esto es muy básico, pero suficiente para schema.sql
-    const statements = schemaSql
+    const statements = cleanSql
       .split(';')
       .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'));
+      .filter(s => s.length > 0);
 
     console.log(`🎬 Ejecutando ${statements.length} sentencias del esquema...`);
     
