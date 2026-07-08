@@ -20,59 +20,53 @@ async function execute() {
   try {
     console.log('🔌 Conectando a la base de datos...');
     
-    // 1. Buscar el evento "Enredados"
-    const eventRes = await client.query(
-      "SELECT * FROM events WHERE title ILIKE '%Enredados%' LIMIT 1"
+    // Iniciar transacción
+    await client.query('BEGIN');
+    
+    // 1. Buscar o crear el evento "Enredados"
+    let eventId;
+    const eventCheck = await client.query(
+      "SELECT id FROM events WHERE title ILIKE '%Enredados%' LIMIT 1"
     );
     
-    if (eventRes.rows.length === 0) {
-      console.log('❌ ERROR: No se encontró ningún evento con el título "Enredados".');
-      console.log('Por favor, asegúrate de crear el evento primero desde el panel de administración.');
-      return;
+    if (eventCheck.rows.length > 0) {
+      eventId = eventCheck.rows[0].id;
+      console.log(`✅ Evento "Enredados" encontrado (ID: ${eventId})`);
+    } else {
+      console.log('📝 Creando evento "Enredados" en la base de datos...');
+      const eventInsertRes = await client.query(`
+        INSERT INTO events (title, description, venue, banner_url, ticket_template_url, price_adult, price_child, capacity_total, is_single_rate, has_assigned_seats, seating_layout, promo_type, price_promo, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        RETURNING id
+      `, [
+        'Enredados', 'Una producción de Studio 5 Film & Art.', 'Sala La Bota', 
+        'https://i.imgur.com/0z5756T.png', null, 15.00, 0.00, 150, true, false, null, 'Preventa', 10.00, 'active'
+      ]);
+      eventId = eventInsertRes.rows[0].id;
+      console.log(`✅ Evento "Enredados" creado (ID: ${eventId})`);
     }
     
-    const event = eventRes.rows[0];
-    console.log(`✅ Evento encontrado: "${event.title}" (ID: ${event.id})`);
-    
-    // 2. Buscar la función (schedule) del 18 de Julio de 2026 (08:00 PM / 20:00)
-    const scheduleRes = await client.query(
-      "SELECT * FROM event_schedules WHERE event_id = $1 ORDER BY schedule_time ASC",
-      [event.id]
+    // 2. Buscar o crear la función (schedule) del 18 de Julio de 2026 (08:00 PM / 20:00)
+    let scheduleId;
+    const scheduleTime = '2026-07-18 20:00:00-05';
+    const scheduleCheck = await client.query(
+      "SELECT id FROM event_schedules WHERE event_id = $1 AND schedule_time = $2 LIMIT 1",
+      [eventId, scheduleTime]
     );
     
-    if (scheduleRes.rows.length === 0) {
-      console.log(`❌ ERROR: No se encontraron funciones (horarios) para el evento "${event.title}".`);
-      console.log('Por favor, agrega el horario del sábado 18 de julio de 2026 a las 20:00 (08:00 PM) al evento.');
-      return;
+    if (scheduleCheck.rows.length > 0) {
+      scheduleId = scheduleCheck.rows[0].id;
+      console.log(`✅ Horario del 18 de Julio encontrado (ID: ${scheduleId})`);
+    } else {
+      console.log('📝 Creando horario del 18 de Julio (20:00)...');
+      const scheduleInsertRes = await client.query(`
+        INSERT INTO event_schedules (event_id, schedule_time)
+        VALUES ($1, $2)
+        RETURNING id
+      `, [eventId, scheduleTime]);
+      scheduleId = scheduleInsertRes.rows[0].id;
+      console.log(`✅ Horario del 18 de Julio creado (ID: ${scheduleId})`);
     }
-    
-    // Buscar la función que sea del 18 de julio de 2026
-    let targetSchedule = null;
-    for (const sch of scheduleRes.rows) {
-      const schDate = new Date(sch.schedule_time);
-      // Ajustado a la zona horaria de Ecuador (UTC-5) o local
-      console.log(`   Función disponible: ${sch.schedule_time} (${schDate.toISOString()})`);
-      
-      const day = schDate.getUTCDate();
-      const month = schDate.getUTCMonth() + 1; // 0-indexed
-      const year = schDate.getUTCFullYear();
-      
-      // Si coincide con el 18 de Julio de 2026
-      // También verificamos con la zona horaria local en caso de que esté guardada localmente
-      if ((schDate.getDate() === 18 && schDate.getMonth() === 6 && schDate.getFullYear() === 2026) ||
-          (day === 18 && month === 7 && year === 2026)) {
-        targetSchedule = sch;
-        break;
-      }
-    }
-    
-    if (!targetSchedule) {
-      console.log('❌ ERROR: No se encontró una función para el 18 de Julio de 2026.');
-      console.log('Por favor, crea el horario de esa función en la cartelera del administrador.');
-      return;
-    }
-    
-    console.log(`✅ Función seleccionada: ${targetSchedule.schedule_time} (ID: ${targetSchedule.id})`);
     
     // 3. Verificar si la orden ya existe
     const orderCheck = await client.query(
@@ -81,11 +75,9 @@ async function execute() {
     
     if (orderCheck.rows.length > 0) {
       console.log('⚠️ LA ORDEN YA EXISTE EN LA BASE DE DATOS. No se realizaron cambios.');
+      await client.query('ROLLBACK');
       return;
     }
-    
-    // Iniciar transacción
-    await client.query('BEGIN');
     
     const orderNum = 'ORD-1783370086305';
     const clientName = 'LADY CARRILLO';
@@ -105,7 +97,7 @@ async function execute() {
       VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING id, order_num
     `, [
-      orderNum, clientName, clientEmail, clientPhone, event.id, targetSchedule.id,
+      orderNum, clientName, clientEmail, clientPhone, eventId, scheduleId,
       'Venta', 'Payphone', 'Pagado', 10.76, 10.00,
       1, 0, txRef, false,
       docNumber, clientName, clientEmail
