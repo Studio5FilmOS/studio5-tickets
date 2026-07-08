@@ -91,6 +91,34 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Ruta de diagnóstico de base de datos (temporal)
+app.get('/api/debug-events', async (req, res) => {
+  try {
+    const dbInfo = await query('SELECT current_database(), current_user');
+    const tables = await query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename");
+    let events = [];
+    let eventsError = null;
+    try {
+      const evRes = await query('SELECT id, title, status, created_at FROM events ORDER BY created_at DESC');
+      events = evRes.rows;
+    } catch(e) { eventsError = e.message; }
+    res.json({
+      db: dbInfo.rows[0],
+      tables: tables.rows.map(r => r.tablename),
+      events,
+      eventsError,
+      env: {
+        DB_HOST: process.env.DB_HOST,
+        DB_DATABASE: process.env.DB_DATABASE,
+        DB_USER: process.env.DB_USER,
+        NODE_ENV: process.env.NODE_ENV
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Ruta para obtener la configuración pública de Payphone
 app.get('/api/config/payphone', (req, res) => {
   res.json({
