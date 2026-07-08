@@ -30,11 +30,11 @@ He creado un script automatizado en la raíz de tu proyecto para subir el códig
 | Variable | Valor | Descripción |
 | :--- | :--- | :--- |
 | `NODE_ENV` | `production` | Activa las optimizaciones de producción |
-| `DB_USER` | `postgres` | Usuario de base de datos de tu servicio actual |
-| `DB_PASSWORD` | `Studio5_Master_2026` | Contraseña copiada de tu servicio `studio5-db` |
-| `DB_HOST` | `studio5_studio5-db` | Servidor interno de Postgres en Easypanel |
+| `DB_USER` | `tickets_user` | Usuario de la base de datos `tickets-db` |
+| `DB_PASSWORD` | `Tickets_Studio5_2026` | Contraseña configurada para la base de datos `tickets-db` |
+| `DB_HOST` | `studio5_tickets-db` | Servidor interno de la nueva base de datos en Easypanel |
 | `DB_PORT` | `5432` | Puerto interno |
-| `DB_DATABASE` | `studio5` | Nombre de base de datos |
+| `DB_DATABASE` | `studio5_tickets` | Nombre de la base de datos del sistema de tickets |
 | `JWT_SECRET` | `super_secreto_studio5_2026` | Llave de seguridad de autenticación |
 | `FRONTEND_URL` | `https://ticket.studio5film.com` | Dominio público de tu PWA |
 
