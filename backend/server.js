@@ -7,11 +7,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Auto-Migration para añadir columnas (ignora el error si ya existen)
-(async () => {
+// Función para ejecutar migraciones (añadir columnas y tablas nuevas) de forma segura
+const runMigrations = async () => {
   try {
     await query('ALTER TABLE events ADD COLUMN require_billing BOOLEAN NOT NULL DEFAULT FALSE;');
     console.log('Migration: Added require_billing to events');
-  } catch (err) { }
+  } catch (err) {
+    console.log('Migration: require_billing already exists or could not be added:', err.message);
+  }
   try {
     await query('ALTER TABLE orders ADD COLUMN is_final_consumer BOOLEAN NOT NULL DEFAULT TRUE;');
     await query('ALTER TABLE orders ADD COLUMN billing_id_number VARCHAR(50);');
@@ -21,7 +24,9 @@ const PORT = process.env.PORT || 5000;
     await query('ALTER TABLE orders ADD COLUMN amount_net NUMERIC(10, 2) NOT NULL DEFAULT 0.00;');
     await query('UPDATE orders SET amount_net = amount_total WHERE amount_net = 0.00 AND amount_total > 0.00;');
     console.log('Migration: Added billing fields and amount_net to orders');
-  } catch (err) { }
+  } catch (err) {
+    console.log('Migration: Billing fields/amount_net already exist or could not be added:', err.message);
+  }
   try {
     await query(`CREATE TABLE IF NOT EXISTS promotions (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -36,8 +41,10 @@ const PORT = process.env.PORT || 5000;
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );`);
     console.log('Migration: promotions table ready');
-  } catch (err) { console.error('Migration promotions error:', err.message); }
-})();
+  } catch (err) {
+    console.error('Migration promotions error:', err.message);
+  }
+};
 
 // Configuración de CORS — permite el mismo dominio y orígenes configurados
 const allowedOrigins = [
@@ -128,12 +135,17 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Inicializar base de datos e iniciar servidor
+// Inicializar base de datos, ejecutar migraciones e iniciar servidor
 const initDatabase = require('./config/initDb');
 
-initDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Servidor de Tickets corriendo en el puerto ${PORT}`);
-    console.log(`Modo: ${process.env.NODE_ENV || 'development'}`);
+initDatabase()
+  .then(() => runMigrations())
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Servidor de Tickets corriendo en el puerto ${PORT}`);
+      console.log(`Modo: ${process.env.NODE_ENV || 'development'}`);
+    });
+  })
+  .catch(err => {
+    console.error('Error durante la inicialización del servidor:', err);
   });
-});

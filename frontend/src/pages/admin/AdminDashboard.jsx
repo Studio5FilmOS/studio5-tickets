@@ -117,53 +117,56 @@ const AdminDashboard = () => {
 
   // Helper para comprimir imágenes del lado del cliente
   const compressImage = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            let width = img.width;
-            let height = img.height;
+    return new Promise(async (resolve, reject) => {
+      try {
+        // createImageBitmap es más rápido y confiable que img.onload
+        let bitmap;
+        try {
+          bitmap = await Promise.race([
+            createImageBitmap(file),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_bitmap')), 12000))
+          ]);
+        } catch (e) {
+          // Fallback: FileReader + Image clásico
+          const dataUrl = await new Promise((res2, rej2) => {
+            const reader = new FileReader();
+            const t = setTimeout(() => rej2(new Error('La imagen tardó demasiado. Intenta con otro formato (JPG o PNG).')), 20000);
+            reader.onload = ev => {
+              clearTimeout(t);
+              const img = new Image();
+              img.onload = () => res2(ev.target.result);
+              img.onerror = () => { clearTimeout(t); rej2(new Error('Formato de imagen no compatible. Usa JPG o PNG.')); };
+              img.src = ev.target.result;
+            };
+            reader.onerror = () => { clearTimeout(t); rej2(new Error('Error al leer el archivo.')); };
+            reader.readAsDataURL(file);
+          });
+          resolve(dataUrl);
+          return;
+        }
 
-            // Dimensiones máximas (1200px para mantener calidad excelente en celulares)
-            const MAX_WIDTH = 1200;
-            const MAX_HEIGHT = 1200;
+        const canvas = document.createElement('canvas');
+        let { width, height } = bitmap;
+        const MAX_DIM = (width > 3000 || height > 3000) ? 900 : 1200;
 
-            if (width > height) {
-              if (width > MAX_WIDTH) {
-                height *= MAX_WIDTH / width;
-                width = MAX_WIDTH;
-              }
-            } else {
-              if (height > MAX_HEIGHT) {
-                width *= MAX_HEIGHT / height;
-                height = MAX_HEIGHT;
-              }
-            }
+        if (width > height) {
+          if (width > MAX_DIM) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
+        } else {
+          if (height > MAX_DIM) { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
+        }
 
-            canvas.width = width;
-            canvas.height = height;
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('No se pudo obtener el contexto del Canvas.');
+        ctx.drawImage(bitmap, 0, 0, width, height);
+        bitmap.close?.();
 
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-              throw new Error('No se pudo obtener el contexto 2D del Canvas.');
-            }
-            ctx.drawImage(img, 0, 0, width, height);
-
-            // Convertir a JPEG comprimido (calidad 0.7)
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            resolve(dataUrl);
-          } catch (err) {
-            reject(err);
-          }
-        };
-        img.onerror = (err) => reject(err);
-        img.src = event.target.result;
-      };
-      reader.onerror = (err) => reject(err);
-      reader.readAsDataURL(file);
+        const quality = file.size > 5 * 1024 * 1024 ? 0.6 : 0.75;
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch (err) {
+        reject(err);
+      }
     });
   };
 
@@ -376,8 +379,18 @@ const AdminDashboard = () => {
       Swal.close();
 
       if (response.data.status === 'OK') {
-        setSeatingLayoutList(response.data.seats);
-        const activeCount = ensure2DLayout(response.data.seats).flat().filter(s => s && s.trim() !== "").length;
+        const rawSeats = response.data.seats;
+        // La IA ya devuelve filas de igual longitud con posicionamiento absoluto.
+        // Si por alguna razón hay filas de diferente largo, igualamos con "" al final (sin centrar, para respetar el offset real).
+        let normalized = rawSeats;
+        if (Array.isArray(rawSeats) && Array.isArray(rawSeats[0])) {
+          const maxLen = Math.max(...rawSeats.map(r => r.length));
+          normalized = rawSeats.map(row =>
+            row.length < maxLen ? [...row, ...Array(maxLen - row.length).fill('')] : row
+          );
+        }
+        setSeatingLayoutList(normalized);
+        const activeCount = ensure2DLayout(normalized).flat().filter(s => s && s.trim() !== "").length;
         Swal.fire('Éxito', `Plano importado con éxito. Se detectaron ${activeCount} asientos activos.`, 'success');
       } else {
         throw new Error(response.data.message || 'Error en la respuesta de la IA.');
@@ -442,7 +455,28 @@ const AdminDashboard = () => {
                 </span>
                 {row.map((seat, colIndex) => {
                   const isActive = seat !== "";
-                  
+
+                  // Pasillo: espacio completamente vacío y transparente, clickeable para reactivar
+                  if (!isActive) {
+                    return (
+                      <button
+                        key={colIndex}
+                        type="button"
+                        onClick={() => toggleSeatLayout(rowIndex, colIndex)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          width: '22px',
+                          height: '32px',
+                          flexShrink: 0
+                        }}
+                        title={`Activar asiento en Fila ${rowName}, Columna ${colIndex + 1}`}
+                      />
+                    );
+                  }
+
                   return (
                     <button
                       key={colIndex}
@@ -459,11 +493,11 @@ const AdminDashboard = () => {
                         transition: 'all 0.15s',
                         width: '22px'
                       }}
-                      title={isActive ? `Desactivar asiento ${seat} (Convertir en pasillo)` : `Activar asiento en Fila ${rowName}, Columna ${colIndex + 1}`}
+                      title={`Desactivar asiento ${seat} (Convertir en pasillo vacío)`}
                     >
-                      <Armchair size={20} color={isActive ? 'var(--accent)' : 'var(--text-muted)'} style={{ transform: isActive ? 'scale(1.1)' : 'none', opacity: isActive ? 1 : 0.2 }} />
-                      <span style={{ fontSize: '0.55rem', color: isActive ? '#fff' : 'rgba(255,255,255,0.15)', marginTop: '2px', fontWeight: 'bold' }}>
-                        {isActive ? seat : `${rowName}${colIndex + 1}`}
+                      <Armchair size={20} color="var(--accent)" style={{ transform: 'scale(1.1)' }} />
+                      <span style={{ fontSize: '0.55rem', color: '#fff', marginTop: '2px', fontWeight: 'bold' }}>
+                        {seat}
                       </span>
                     </button>
                   );
@@ -479,8 +513,8 @@ const AdminDashboard = () => {
             <span>Activa ({grid.flat().filter(s => s && s.trim() !== "").length})</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Armchair size={13} color="var(--text-muted)" style={{ opacity: 0.3 }} />
-            <span>Pasillo / Pasadizo</span>
+            <div style={{ width: '13px', height: '13px', border: '1px dashed rgba(255,255,255,0.25)', borderRadius: '2px' }} />
+            <span>Pasillo / Pasadizo (vacío)</span>
           </div>
         </div>
       </div>
@@ -518,7 +552,7 @@ const AdminDashboard = () => {
   const handleDeleteEvent = async (eventId, eventTitle) => {
     const confirmRes = await Swal.fire({
       title: `¿Eliminar "${eventTitle}"?`,
-      text: "Si el evento ya tiene ventas registradas, se desactivará e inactivará de forma automática para preservar el historial. Si no tiene ventas, se eliminará permanentemente de la base de datos.",
+      text: "Si el evento ya tiene ventas registradas, se desactivará automáticamente para preservar el historial. Si no tiene ventas, se eliminará permanentemente.",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ff3b30',
@@ -527,27 +561,58 @@ const AdminDashboard = () => {
       cancelButtonText: 'Cancelar'
     });
 
-    if (confirmRes.isConfirmed) {
-      try {
-        const res = await api.delete(`/events/${eventId}`);
-        if (res.data.status === 'OK') {
-          if (res.data.action === 'archived') {
-            Swal.fire({
-              title: 'Evento Desactivado',
-              text: res.data.message,
-              icon: 'info'
+    if (!confirmRes.isConfirmed) return;
+
+    try {
+      const res = await api.delete(`/events/${eventId}`);
+      if (res.data.status === 'OK') {
+        if (res.data.action === 'archived') {
+          // Tiene ventas — preguntar si quiere borrado forzado (para datos de prueba)
+          const forceRes = await Swal.fire({
+            title: '⚠️ Evento con Ventas',
+            html: `<p>${res.data.message}</p><br/><p style="color:#ff9f0a;font-size:0.85rem"><strong>¿Son ventas de prueba?</strong><br/>Si este era un evento de prueba y quieres borrarlo definitivamente junto con sus órdenes de prueba, usa el botón rojo de abajo.</p>`,
+            icon: 'info',
+            showCancelButton: true,
+            showDenyButton: true,
+            confirmButtonText: 'OK, dejar inactivo',
+            denyButtonText: '🗑️ Borrar forzado (pruebas)',
+            denyButtonColor: '#ff3b30',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#555',
+          });
+
+          if (forceRes.isDenied) {
+            // Confirmar borrado forzado con doble advertencia
+            const finalConfirm = await Swal.fire({
+              title: '¡ÚLTIMO AVISO!',
+              html: `<p>Esto borrará <strong>permanentemente</strong> el evento <strong>"${eventTitle}"</strong> junto con <strong>TODAS sus órdenes y tickets</strong>.</p><p style="color:#ff3b30;margin-top:12px">Esta acción <u>NO SE PUEDE DESHACER</u>. ¿Confirmas?</p>`,
+              icon: 'error',
+              showCancelButton: true,
+              confirmButtonColor: '#ff3b30',
+              confirmButtonText: 'Sí, borrar todo permanentemente',
+              cancelButtonText: 'Cancelar'
             });
-          } else {
-            Swal.fire('Eliminado', res.data.message, 'success');
+            if (finalConfirm.isConfirmed) {
+              const forceDeleteRes = await api.delete(`/events/${eventId}/force`);
+              if (forceDeleteRes.data.status === 'OK') {
+                Swal.fire('¡Eliminado!', forceDeleteRes.data.message, 'success');
+                fetchData();
+              }
+            }
+          } else if (forceRes.isConfirmed) {
+            fetchData();
           }
+        } else {
+          Swal.fire('Eliminado', res.data.message, 'success');
           fetchData();
         }
-      } catch (err) {
-        console.error(err);
-        Swal.fire('Error', err.response?.data?.message || 'No se pudo eliminar el evento.', 'error');
       }
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', err.response?.data?.message || 'No se pudo eliminar el evento.', 'error');
     }
   };
+
 
   // Helper: cargar evento en el formulario para edición
   const loadEventForEditing = (evt) => {
@@ -744,10 +809,11 @@ const AdminDashboard = () => {
 
   // Métricas
   const metrics = filteredOrders.reduce((acc, o) => {
+    const netVal = parseFloat(o.amount_net) > 0 ? parseFloat(o.amount_net) : (parseFloat(o.amount_total) || 0);
     if (o.payment_status === 'Pagado') {
-      acc.revenuePaid += parseFloat(o.amount_total) || 0;
+      acc.revenuePaid += netVal;
     } else if (o.payment_status === 'Pendiente') {
-      acc.revenuePending += parseFloat(o.amount_total) || 0;
+      acc.revenuePending += netVal;
     } else if (o.payment_status === 'Cortesía') {
       acc.cortesiasCount += (parseInt(o.ticket_count_adult) + parseInt(o.ticket_count_child)) || 0;
     }
@@ -930,22 +996,50 @@ const AdminDashboard = () => {
               {/* Filtros de Fecha para Cuadre de Caja */}
               <div style={{ display: 'flex', gap: '10px' }}>
                 <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem' }}>📅 Ventas Desde</label>
-                  <input
-                    type="date"
-                    value={filterDateFrom}
-                    onChange={(e) => setFilterDateFrom(e.target.value)}
-                    style={{ marginBottom: '0', padding: '10px' }}
-                  />
+                  <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📅 Ventas Desde</label>
+                  <div style={{ position: 'relative' }}>
+                    <Calendar size={15} color="var(--accent)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1 }} />
+                    <input
+                      type="date"
+                      value={filterDateFrom}
+                      onChange={(e) => setFilterDateFrom(e.target.value)}
+                      style={{
+                        marginBottom: '0',
+                        padding: '11px 12px 11px 36px',
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '10px',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.9rem',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        colorScheme: 'dark'
+                      }}
+                    />
+                  </div>
                 </div>
                 <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem' }}>📅 Ventas Hasta</label>
-                  <input
-                    type="date"
-                    value={filterDateTo}
-                    onChange={(e) => setFilterDateTo(e.target.value)}
-                    style={{ marginBottom: '0', padding: '10px' }}
-                  />
+                  <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📅 Ventas Hasta</label>
+                  <div style={{ position: 'relative' }}>
+                    <Calendar size={15} color="var(--accent)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1 }} />
+                    <input
+                      type="date"
+                      value={filterDateTo}
+                      onChange={(e) => setFilterDateTo(e.target.value)}
+                      style={{
+                        marginBottom: '0',
+                        padding: '11px 12px 11px 36px',
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '10px',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.9rem',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        colorScheme: 'dark'
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1344,8 +1438,27 @@ const AdminDashboard = () => {
                     <input type="number" step="0.01" value={pricePromo} onChange={(e) => setPricePromo(parseFloat(e.target.value) || 0)} />
                   </>
                 )}
-                <label>Fecha Límite de Promoción (Opcional)</label>
-                <input type="datetime-local" value={promoDeadline} onChange={(e) => setPromoDeadline(e.target.value)} />
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.8rem' }}>Fecha Límite de Promoción (Opcional)</label>
+                <input
+                  type="datetime-local"
+                  value={promoDeadline}
+                  onChange={(e) => setPromoDeadline(e.target.value)}
+                  onClick={(e) => { try { e.target.showPicker(); } catch(err) {} }}
+                  onFocus={(e) => { try { e.target.showPicker(); } catch(err) {} }}
+                  style={{
+                    marginBottom: '10px',
+                    padding: '11px 12px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: '10px',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.9rem',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    colorScheme: 'dark',
+                    cursor: 'pointer'
+                  }}
+                />
               </div>
             )}
 
@@ -1366,7 +1479,19 @@ const AdminDashboard = () => {
                     onFocus={(e) => {
                       try { e.target.showPicker(); } catch(err) { console.warn(err); }
                     }}
-                    style={{ marginBottom: '0', padding: '10px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '8px' }}
+                    style={{
+                      marginBottom: '0',
+                      padding: '11px 12px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: '10px',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.9rem',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      colorScheme: 'dark',
+                      cursor: 'pointer'
+                    }}
                   />
                 </div>
                 <div style={{ flex: '1', minWidth: '100px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1381,7 +1506,19 @@ const AdminDashboard = () => {
                     onFocus={(e) => {
                       try { e.target.showPicker(); } catch(err) { console.warn(err); }
                     }}
-                    style={{ marginBottom: '0', padding: '10px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '8px' }}
+                    style={{
+                      marginBottom: '0',
+                      padding: '11px 12px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: '10px',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.9rem',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      colorScheme: 'dark',
+                      cursor: 'pointer'
+                    }}
                   />
                 </div>
                 <button 
@@ -1533,12 +1670,50 @@ const AdminDashboard = () => {
                   <input type="url" value={bannerForm.link_url} onChange={e => setBannerForm(p => ({...p, link_url: e.target.value}))} placeholder="https://..." style={{ marginBottom: 0 }} />
                 </div>
                 <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem' }}>Desde</label>
-                  <input type="date" value={bannerForm.start_date} onChange={e => setBannerForm(p => ({...p, start_date: e.target.value}))} style={{ marginBottom: 0 }} />
+                  <label style={{ fontSize: '0.65rem', display: 'block', marginBottom: '4px' }}>Desde</label>
+                  <input
+                    type="date"
+                    value={bannerForm.start_date}
+                    onChange={e => setBannerForm(p => ({...p, start_date: e.target.value}))}
+                    onClick={(e) => { try { e.target.showPicker(); } catch(err) {} }}
+                    onFocus={(e) => { try { e.target.showPicker(); } catch(err) {} }}
+                    style={{
+                      marginBottom: 0,
+                      padding: '10px 12px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: '10px',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.85rem',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      colorScheme: 'dark',
+                      cursor: 'pointer'
+                    }}
+                  />
                 </div>
                 <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem' }}>Hasta</label>
-                  <input type="date" value={bannerForm.end_date} onChange={e => setBannerForm(p => ({...p, end_date: e.target.value}))} style={{ marginBottom: 0 }} />
+                  <label style={{ fontSize: '0.65rem', display: 'block', marginBottom: '4px' }}>Hasta</label>
+                  <input
+                    type="date"
+                    value={bannerForm.end_date}
+                    onChange={e => setBannerForm(p => ({...p, end_date: e.target.value}))}
+                    onClick={(e) => { try { e.target.showPicker(); } catch(err) {} }}
+                    onFocus={(e) => { try { e.target.showPicker(); } catch(err) {} }}
+                    style={{
+                      marginBottom: 0,
+                      padding: '10px 12px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: '10px',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.85rem',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      colorScheme: 'dark',
+                      cursor: 'pointer'
+                    }}
+                  />
                 </div>
               </div>
 

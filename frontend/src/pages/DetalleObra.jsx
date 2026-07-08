@@ -162,7 +162,7 @@ const DetalleObra = () => {
           const surcharge = surchargeEnable ? calculatePayphoneSurcharge(subtotal) : 0;
           const finalAmountCents = Math.round((subtotal + surcharge) * 100);
 
-          const ppb = new window.PPaymentButtonBox({
+           const ppb = new window.PPaymentButtonBox({
             token: payphoneToken,
             amount: finalAmountCents, // en centavos
             amountWithoutTax: finalAmountCents,
@@ -170,7 +170,10 @@ const DetalleObra = () => {
             clientTransactionId: uniqueClientTxId,
             reference: `Entradas para ${event.title}`,
             lang: "es",
-            defaultMethod: "card"
+            defaultMethod: "card",
+            email: email || '',
+            phoneNumber: whatsapp ? whatsapp.replace(/\D/g, '') : '',
+            ...(isFinalConsumer ? {} : { documentId: billingIdNumber || '' })
           });
           ppb.render('payphone-element');
         } else {
@@ -394,16 +397,16 @@ const DetalleObra = () => {
           <div 
             id={`export-ticket-${order.order_num}`}
             style={{ 
-              position: 'relative', width: '320px', height: '420px', 
+              position: 'relative', width: '320px', height: '460px', 
               borderRadius: '16px', overflow: 'hidden', background: '#fff', border: '1px solid #ddd',
               margin: '0 auto 15px auto', fontFamily: 'sans-serif', color: 'black',
               display: 'flex', flexDirection: 'column', boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
             }}
           >
             {/* Top section: Banner image */}
-            <div style={{ position: 'relative', width: '100%', height: '140px' }}>
+            <div style={{ position: 'relative', width: '100%', height: '180px' }}>
               <img 
-                src={getImageUrl(event.ticket_template_url || event.banner_url)} 
+                src={getImageUrl(event.banner_url)} 
                 alt="Banner preview" 
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
               />
@@ -844,7 +847,19 @@ const DetalleObra = () => {
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>¿Necesitas factura con tus datos?</div>
               </div>
               <label style={{ position: 'relative', display: 'inline-block', width: '46px', height: '26px', marginBottom: 0, cursor: 'pointer' }}>
-                <input type="checkbox" checked={!isFinalConsumer} onChange={e => setIsFinalConsumer(!e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                <input 
+                  type="checkbox" 
+                  checked={!isFinalConsumer} 
+                  onChange={e => {
+                    const needsBilling = e.target.checked;
+                    setIsFinalConsumer(!needsBilling);
+                    if (needsBilling) {
+                      if (!billingName) setBillingName(nombre);
+                      if (!billingEmail) setBillingEmail(email);
+                    }
+                  }} 
+                  style={{ opacity: 0, width: 0, height: 0 }} 
+                />
                 <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, background: !isFinalConsumer ? 'var(--accent)' : 'rgba(255,255,255,0.12)', borderRadius: '26px', transition: 'background 0.3s' }}>
                   <span style={{ position: 'absolute', height: '20px', width: '20px', left: !isFinalConsumer ? '22px' : '3px', bottom: '3px', background: '#fff', borderRadius: '50%', transition: 'left 0.3s' }} />
                 </span>

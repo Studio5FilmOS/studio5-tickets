@@ -19,6 +19,7 @@ const Cartelera = () => {
   const [error, setError] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [activePromotion, setActivePromotion] = useState(null);
+  const [failedImages, setFailedImages] = useState({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -203,15 +204,33 @@ const Cartelera = () => {
                 }}
               >
                 {/* Imagen / Banner */}
-                <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', overflow: 'hidden' }}>
-                  <img
-                    src={getImageUrl(evt.banner_url)}
-                    alt={evt.title}
-                    style={{
-                      width: '100%', height: '100%', objectFit: 'cover',
-                      transition: 'transform 0.5s ease'
-                    }}
-                  />
+                <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', overflow: 'hidden', background: 'rgba(30,30,30,0.9)' }}>
+                  {evt.banner_url && !failedImages[evt.id] ? (
+                    <img
+                      src={getImageUrl(evt.banner_url)}
+                      alt={evt.title}
+                      loading="eager"
+                      onError={() => {
+                        setFailedImages(prev => ({ ...prev, [evt.id]: true }));
+                      }}
+                      style={{
+                        width: '100%', height: '100%', objectFit: 'cover',
+                        transition: 'transform 0.5s ease', display: 'block'
+                      }}
+                    />
+                  ) : (
+                    /* Fallback placeholder cuando la imagen no carga */
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      background: 'linear-gradient(135deg, rgba(222,184,65,0.08) 0%, rgba(10,10,10,0.95) 100%)',
+                      flexDirection: 'column', gap: '8px'
+                    }}>
+                      <Ticket size={32} color="rgba(222,184,65,0.3)" />
+                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.2)', fontWeight: '600' }}>{evt.title}</span>
+                    </div>
+                  )}
 
                   {/* Gradiente inferior */}
                   <div style={{
@@ -253,7 +272,7 @@ const Cartelera = () => {
                     </div>
                   </div>
 
-                  {/* Título sobre imagen (si está agotado, overlay) */}
+                  {/* Si está agotado, overlay */}
                   {isSoldOut && (
                     <div style={{
                       position: 'absolute', inset: 0,
@@ -346,9 +365,25 @@ const Cartelera = () => {
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>
                         Desde
                       </span>
-                      <span style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--accent)' }}>
-                        ${parseFloat(evt.price_adult || 0).toFixed(2)}
-                      </span>
+                      {hasPromo && evt.price_promo > 0 ? (
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px' }}>
+                          <span style={{
+                            fontSize: '0.85rem', fontWeight: '600',
+                            color: 'rgba(255,255,255,0.35)',
+                            textDecoration: 'line-through',
+                            textDecorationColor: 'rgba(255,59,48,0.6)'
+                          }}>
+                            ${parseFloat(evt.price_adult || 0).toFixed(2)}
+                          </span>
+                          <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#DEB841' }}>
+                            ${parseFloat(evt.price_promo).toFixed(2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--accent)' }}>
+                          ${parseFloat(evt.price_adult || 0).toFixed(2)}
+                        </span>
+                      )}
                     </div>
 
                     <div style={{

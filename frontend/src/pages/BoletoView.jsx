@@ -166,15 +166,15 @@ const BoletoView = () => {
         <div 
           id={`export-ticket-${ticket.ticket_code}`}
           style={{ 
-            position: 'relative', width: '320px', height: '420px', 
+            position: 'relative', width: '320px', height: '460px', 
             borderRadius: '0', overflow: 'hidden', background: '#fff', border: '1px solid #ddd',
             fontFamily: 'sans-serif', color: 'black', display: 'flex', flexDirection: 'column'
           }}
         >
           {/* Top section: Banner image */}
-          <div style={{ position: 'relative', width: '100%', height: '140px' }}>
+          <div style={{ position: 'relative', width: '100%', height: '180px' }}>
             <img 
-              src={getImageUrl(ticket.ticket_template_url || ticket.banner_url)} 
+              src={getImageUrl(ticket.banner_url)} 
               alt="Banner preview" 
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
             />

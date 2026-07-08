@@ -434,6 +434,8 @@ const QRScannerTab = () => {
    ================================================================ */
 const ManualRegistryTab = () => {
   const [orders, setOrders] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL');
@@ -451,9 +453,63 @@ const ManualRegistryTab = () => {
     }
   };
 
-  useEffect(() => { fetchOrders(); }, []);
+  const fetchEvents = async () => {
+    try {
+      const res = await api.get('/events');
+      if (res.data.status === 'OK') {
+        setEvents(res.data.events);
+        if (res.data.events.length > 0 && selectedEventId === 'ALL') {
+          setSelectedEventId(res.data.events[0].id);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchEvents();
+    fetchOrders();
+  }, []);
+
+  const currentEvent = events.find(e => e.id === selectedEventId);
+
+  // Aforo disponible
+  let capacityAvailable = 0;
+  if (selectedEventId === 'ALL') {
+    events.forEach(e => {
+      e.schedules?.forEach(s => { capacityAvailable += s.available_capacity || 0; });
+    });
+  } else if (currentEvent) {
+    currentEvent.schedules?.forEach(s => { capacityAvailable += s.available_capacity || 0; });
+  }
+
+  // Vendidas, Pendientes, Cortesías, Validadas
+  let soldCount = 0;
+  let pendingCount = 0;
+  let cortesiasCount = 0;
+  let validatedCount = 0;
+
+  orders.forEach(o => {
+    if (selectedEventId !== 'ALL' && o.event_id !== selectedEventId) return;
+
+    const ticketsQty = (parseInt(o.ticket_count_adult || 0) + parseInt(o.ticket_count_child || 0));
+
+    if (o.payment_status === 'Anulado') return;
+
+    if (o.operation_type === 'Cortesia' || o.payment_status === 'Cortesía') {
+      cortesiasCount += ticketsQty;
+    } else if (o.payment_status === 'Pendiente') {
+      pendingCount += ticketsQty;
+    } else if (o.payment_status === 'Pagado') {
+      soldCount += ticketsQty;
+    }
+
+    validatedCount += parseInt(o.checked_in_count || 0);
+  });
 
   const filteredOrders = orders.filter(o => {
+    const matchEvent = selectedEventId === 'ALL' || o.event_id === selectedEventId;
     const matchStatus = filterStatus === 'ALL' || o.payment_status === filterStatus;
     const q = searchQuery.toLowerCase();
     const matchQ = !q ||
@@ -461,7 +517,7 @@ const ManualRegistryTab = () => {
       o.order_num?.toLowerCase().includes(q) ||
       o.customer_whatsapp?.includes(q) ||
       o.customer_email?.toLowerCase().includes(q);
-    return matchStatus && matchQ;
+    return matchEvent && matchStatus && matchQ;
   });
 
   const handleManualCheckIn = async (orderId, orderNum) => {
@@ -481,7 +537,6 @@ const ManualRegistryTab = () => {
     if (!isConfirmed) return;
 
     try {
-      // Obtener tickets activos de la orden
       const res = await api.post('/tickets/scan', { ticketCode: orderId, byOrderId: true });
       if (res.data.status !== 'ERROR') {
         const activeIds = res.data.tickets.filter(t => t.status === 'Active').map(t => t.id);
@@ -531,6 +586,56 @@ const ManualRegistryTab = () => {
 
   return (
     <div>
+      {/* Selector de Evento */}
+      <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <label style={{ fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '1px' }}>Filtrar por Evento</label>
+        <select 
+          value={selectedEventId} 
+          onChange={(e) => setSelectedEventId(e.target.value)}
+          style={{
+            padding: '11px 12px',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: '10px',
+            color: 'var(--text-primary)',
+            fontSize: '0.9rem',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}
+        >
+          <option value="ALL" style={{ background: '#111' }}>Todos los eventos</option>
+          {events.map(e => (
+            <option key={e.id} value={e.id} style={{ background: '#111' }}>{e.title}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Tarjetas de Resumen (Dashboard Staff) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '24px' }}>
+        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid var(--accent)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Aforo Disponible</span>
+          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#fff' }}>{capacityAvailable}</span>
+        </div>
+        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid #34c759', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Vendidas</span>
+          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#34c759' }}>{soldCount}</span>
+        </div>
+        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid #0a84ff', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Adentro (Validadas)</span>
+          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#0a84ff' }}>{validatedCount}</span>
+        </div>
+        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid #af52de', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Cortesías</span>
+          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#af52de' }}>{cortesiasCount}</span>
+        </div>
+        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid #ff9f0a', display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Pagos Pendientes en Puerta</span>
+          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#ff9f0a' }}>{pendingCount}</span>
+        </div>
+      </div>
+
+      <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '20px 0' }} />
+
       {/* Buscador */}
       <div style={{ position: 'relative', marginBottom: '12px' }}>
         <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
@@ -684,7 +789,7 @@ const ManualRegistryTab = () => {
    COMPONENTE PRINCIPAL
    ================================================================ */
 const ScannerDashboard = () => {
-  const [activeTab, setActiveTab] = useState('scanner');
+  const [activeTab, setActiveTab] = useState('manual');
 
   return (
     <div className="fade-in" style={{ paddingBottom: '10px' }}>
@@ -725,8 +830,8 @@ const ScannerDashboard = () => {
         padding: '4px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.07)'
       }}>
         {[
-          { id: 'scanner', icon: Camera, label: 'Escáner QR' },
-          { id: 'manual', icon: ClipboardList, label: 'Registro Manual' }
+          { id: 'manual', icon: ClipboardList, label: 'Resumen de Sala' },
+          { id: 'scanner', icon: Camera, label: 'Escáner QR' }
         ].map(tab => (
           <button
             key={tab.id}
