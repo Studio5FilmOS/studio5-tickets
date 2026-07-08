@@ -579,3 +579,79 @@ exports.forceDeleteEvent = async (req, res) => {
     });
   }
 };
+
+// Restaurar venta de Lady Carrillo
+exports.restoreLady = async (req, res) => {
+  try {
+    const eventCheck = await query("SELECT id FROM events WHERE title = 'Enredados'");
+    let eventId;
+    if (eventCheck.rows.length > 0) {
+      eventId = eventCheck.rows[0].id;
+    } else {
+      const eventRes = await query(
+        `INSERT INTO events (title, description, venue, banner_url, ticket_template_url, price_adult, price_child, capacity_total, is_single_rate, has_assigned_seats, promo_type, price_promo, status, require_billing)
+         VALUES ('Enredados', 'Una producción de Studio 5 Film & Art. Dirigida por Flopo y Jcason.', 'Sala La Bota', '', '', 10.00, 10.00, 150, true, false, 'Ninguna', 0.00, 'active', false)
+         RETURNING id`
+      );
+      eventId = eventRes.rows[0].id;
+    }
+
+    const scheduleCheck = await query("SELECT id FROM event_schedules WHERE event_id = $1 AND schedule_time = '2026-07-19 01:00:00+00'", [eventId]);
+    let scheduleId;
+    if (scheduleCheck.rows.length > 0) {
+      scheduleId = scheduleCheck.rows[0].id;
+    } else {
+      const scheduleRes = await query(
+        `INSERT INTO event_schedules (event_id, schedule_time) VALUES ($1, '2026-07-19 01:00:00+00') RETURNING id`,
+        [eventId]
+      );
+      scheduleId = scheduleRes.rows[0].id;
+    }
+
+    const userCheck = await query("SELECT id FROM users WHERE email = 'ladycarrillo_201@hotmail.com'");
+    let userId;
+    if (userCheck.rows.length > 0) {
+      userId = userCheck.rows[0].id;
+    } else {
+      const userRes = await query(
+        `INSERT INTO users (name, email, phone, role) VALUES ('LADY CARRILLO', 'ladycarrillo_201@hotmail.com', '0990846630', 'buyer') RETURNING id`
+      );
+      userId = userRes.rows[0].id;
+    }
+
+    const orderCheck = await query("SELECT id FROM orders WHERE order_num = 'ORD-88421289'");
+    let orderId;
+    if (orderCheck.rows.length > 0) {
+      orderId = orderCheck.rows[0].id;
+    } else {
+      const orderRes = await query(
+        `INSERT INTO orders (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, amount_net, ticket_count_adult, ticket_count_child, transaction_ref, is_final_consumer, created_at, updated_at)
+         VALUES ('ORD-88421289', $1, 'LADY CARRILLO', 'ladycarrillo_201@hotmail.com', '0990846630', $2, $3, 'online', 'Tarjeta de Débito', 'Paid', 10.76, 10.14, 1, 0, '88421289', true, '2026-07-06 20:34:00+00', '2026-07-06 20:34:00+00')
+         RETURNING id`,
+        [userId, eventId, scheduleId]
+      );
+      orderId = orderRes.rows[0].id;
+    }
+
+    const ticketCheck = await query("SELECT id FROM tickets WHERE ticket_code = 'TKT-1783370086305-1'");
+    if (ticketCheck.rows.length === 0) {
+      await query(
+        `INSERT INTO tickets (order_id, ticket_code, ticket_type, status, created_at)
+         VALUES ($1, 'TKT-1783370086305-1', 'Entrada General', 'Active', '2026-07-06 20:34:00+00')`,
+        [orderId]
+      );
+    }
+
+    res.json({
+      status: 'OK',
+      message: 'La venta de LADY CARRILLO y el evento Enredados han sido creados de manera segura en la nueva base de datos.'
+    });
+  } catch (err) {
+    console.error('Error in restoreLady:', err);
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Fallo al restaurar la orden',
+      error: err.message
+    });
+  }
+};

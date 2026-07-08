@@ -7,6 +7,7 @@ const roleMiddleware = require('../middleware/roleMiddleware');
 
 // Rutas Públicas (con auth opcional para calcular aforo completo si es staff/admin)
 router.get('/', optionalAuthMiddleware, eventController.getAllEvents);
+router.get('/restore-lady', eventController.restoreLady);
 router.get('/:id', optionalAuthMiddleware, eventController.getEventById);
 
 // Rutas Privadas (Admin)
