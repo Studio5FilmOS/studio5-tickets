@@ -290,6 +290,10 @@ async function main() {
   try {
     await oldClient.connect();
     console.log('\n✅ Conectado a BD ANTIGUA (solo lectura)');
+    
+    // Listar todas las bases de datos en el servidor antiguo
+    const dbListRes = await oldClient.query("SELECT datname FROM pg_database WHERE datistemplate = false");
+    console.log('📂 Bases de datos disponibles en el servidor antiguo:', dbListRes.rows.map(r => r.datname));
   } catch (err) {
     console.error('\n❌ Error conectando a BD antigua:', err.message);
     console.log('\nSugerencia: Verifica que el host "studio5_studio5-db" sea correcto.');
