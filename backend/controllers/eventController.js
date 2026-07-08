@@ -623,10 +623,15 @@ exports.restoreLady = async (req, res) => {
     let orderId;
     if (orderCheck.rows.length > 0) {
       orderId = orderCheck.rows[0].id;
+      // Forzar actualización a 'Pagado' por si quedó en 'Paid'
+      await query(
+        `UPDATE orders SET payment_status = 'Pagado', amount_total = 10.76, amount_net = 10.14, payment_method = 'Tarjeta de Débito' WHERE id = $1`,
+        [orderId]
+      );
     } else {
       const orderRes = await query(
         `INSERT INTO orders (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, amount_net, ticket_count_adult, ticket_count_child, transaction_ref, is_final_consumer, created_at, updated_at)
-         VALUES ('ORD-88421289', $1, 'LADY CARRILLO', 'ladycarrillo_201@hotmail.com', '0990846630', $2, $3, 'online', 'Tarjeta de Débito', 'Paid', 10.76, 10.14, 1, 0, '88421289', true, '2026-07-06 20:34:00+00', '2026-07-06 20:34:00+00')
+         VALUES ('ORD-88421289', $1, 'LADY CARRILLO', 'ladycarrillo_201@hotmail.com', '0990846630', $2, $3, 'online', 'Tarjeta de Débito', 'Pagado', 10.76, 10.14, 1, 0, '88421289', true, '2026-07-06 20:34:00+00', '2026-07-06 20:34:00+00')
          RETURNING id`,
         [userId, eventId, scheduleId]
       );
