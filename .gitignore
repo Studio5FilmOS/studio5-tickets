@@ -13,3 +13,6 @@ dist/
 # Archivos del sistema
 .DS_Store
 Thumbs.db
+
+# Ignorar subidas dinámicas de usuario en local
+backend/public/uploads/

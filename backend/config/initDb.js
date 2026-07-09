@@ -41,6 +41,36 @@ const applyMigrations = async () => {
   await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_name VARCHAR(255);");
   await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_address VARCHAR(255);");
   await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_email VARCHAR(255);");
+  await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS comprobante_url TEXT;");
+  
+  await safe(`
+    CREATE TABLE IF NOT EXISTS bank_accounts (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      bank_name VARCHAR(255) NOT NULL,
+      account_type VARCHAR(100) NOT NULL,
+      account_number VARCHAR(100) NOT NULL,
+      owner_name VARCHAR(255) NOT NULL,
+      owner_id VARCHAR(50) NOT NULL,
+      owner_email VARCHAR(255),
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  try {
+    const bankCheck = await query("SELECT COUNT(*)::integer FROM bank_accounts;");
+    if (bankCheck.rows[0].count === 0) {
+      await query(`
+        INSERT INTO bank_accounts (bank_name, account_type, account_number, owner_name, owner_id, owner_email, is_active)
+        VALUES ('Banco Pichincha', 'Ahorros', '2200888333', 'Studio 5 Film', '1722883344', 'ventas@studio5film.com', true);
+      `);
+      console.log('✅ Cuenta bancaria semilla insertada.');
+    }
+  } catch (err) {
+    console.error('Error seeding bank_accounts table:', err.message);
+  }
+
   console.log('✅ Migraciones de columnas aplicadas correctamente.');
 };
 

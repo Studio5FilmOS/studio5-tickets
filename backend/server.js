@@ -137,6 +137,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const ticketRoutes = require('./routes/ticketRoutes');
 const promotionRoutes = require('./routes/promotionRoutes');
 const userRoutes = require('./routes/userRoutes');
+const bankAccountRoutes = require('./routes/bankAccountRoutes');
 
 // Vincular Rutas a endpoints de la API
 app.use('/api/auth', authRoutes);
@@ -145,6 +146,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/admin/users', userRoutes);
+app.use('/api/bank-accounts', bankAccountRoutes);
 
 // Servir archivos estáticos del Frontend compilado
 const path = require('path');

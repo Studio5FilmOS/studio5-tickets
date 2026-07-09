@@ -1,6 +1,42 @@
 const { query, pool } = require('../config/db');
-const { sendTicketEmail } = require('../services/emailService');
+const { sendTicketEmail, sendPendingTransferEmail } = require('../services/emailService');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
+
+// Helper para guardar el comprobante de transferencia desde Base64
+const saveReceiptFile = (base64Data) => {
+  if (!base64Data) return null;
+  if (!base64Data.startsWith('data:')) return null;
+
+  try {
+    const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      throw new Error('Formato base64 inválido');
+    }
+
+    const fileType = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+    
+    let extension = 'jpg';
+    if (fileType.includes('png')) extension = 'png';
+    else if (fileType.includes('pdf')) extension = 'pdf';
+    else if (fileType.includes('jpeg')) extension = 'jpg';
+    
+    const fileName = `recibo-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}.${extension}`;
+    const uploadDir = path.join(__dirname, '..', 'public', 'uploads', 'receipts');
+    
+    fs.mkdirSync(uploadDir, { recursive: true });
+    
+    const filePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+    
+    return `/uploads/receipts/${fileName}`;
+  } catch (err) {
+    console.error('Error al guardar comprobante de transferencia:', err);
+    return null;
+  }
+};
 
 // Helper para verificar transacciones con Payphone (Ecuador)
 const verifyPayphoneTransaction = (transactionId, clientTxId) => {
@@ -78,7 +114,8 @@ exports.createOrder = async (req, res) => {
     cantAdultos, cantNinos, tipoVenta, metodoPago, banco, numTransaccion,
     seat_labels, clientTxId,
     // Campos de facturación
-    is_final_consumer, billing_id_number, billing_name, billing_address, billing_email
+    is_final_consumer, billing_id_number, billing_name, billing_address, billing_email,
+    comprobante
   } = req.body;
 
   // Validación de campos básicos
@@ -86,6 +123,16 @@ exports.createOrder = async (req, res) => {
     return res.status(400).json({
       status: 'ERROR',
       message: 'Faltan campos obligatorios para registrar la venta.'
+    });
+  }
+
+  // Si es transferencia y es comprador público, exigir comprobante
+  const isTransfer = metodoPago && (metodoPago === 'Transferencia' || metodoPago === 'Transferencia Bancaria' || metodoPago.startsWith('Transf'));
+  const isPublic = !req.user || req.user.role === 'buyer';
+  if (isTransfer && isPublic && !comprobante) {
+    return res.status(400).json({
+      status: 'ERROR',
+      message: 'El comprobante de pago es obligatorio para procesar la transferencia bancaria.'
     });
   }
 
@@ -259,9 +306,27 @@ exports.createOrder = async (req, res) => {
     }
 
     let paymentStatus = 'Pending';
-    if (operation === 'Cortesia') paymentStatus = 'Cortesía';
-    else if (operation === 'Venta') paymentStatus = 'Pagado'; // Payphone o Efectivo directo se marcan pagados
-    else paymentStatus = 'Pendiente';
+    const userRole = req.user ? req.user.role : null;
+    
+    if (operation === 'Cortesia') {
+      paymentStatus = 'Cortesía';
+    } else if (isTransfer) {
+      if (userRole === 'admin') {
+        paymentStatus = 'Pagado'; // Aprobado automáticamente si es admin
+      } else {
+        paymentStatus = 'Pendiente'; // Pendiente para staff y compradores públicos
+      }
+    } else if (operation === 'Venta') {
+      paymentStatus = 'Pagado'; // Payphone o Efectivo directo se marcan pagados
+    } else {
+      paymentStatus = 'Pendiente';
+    }
+
+    // Guardar archivo del comprobante si existe
+    let comprobanteUrl = null;
+    if (comprobante) {
+      comprobanteUrl = saveReceiptFile(comprobante);
+    }
 
     // Desglose
     let desglose = event.is_single_rate ? `${totalQty} Entradas` : `${cAd} Ad / ${cNi} Ni`;
@@ -275,14 +340,15 @@ exports.createOrder = async (req, res) => {
     // 5. Insertar la orden
     const orderInsertRes = await client.query(
       `INSERT INTO orders 
-       (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, amount_net, ticket_count_adult, ticket_count_child, transaction_ref, bank_name, is_final_consumer, billing_id_number, billing_name, billing_address, billing_email)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+       (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, amount_net, ticket_count_adult, ticket_count_child, transaction_ref, bank_name, is_final_consumer, billing_id_number, billing_name, billing_address, billing_email, comprobante_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
        RETURNING *`,
       [
         orderNum, buyerId, nombre, email || null, cleanWhatsapp, idEvento, scheduleId,
         operation, metodoPago || 'Efectivo', paymentStatus, finalAmount, operation === 'Cortesia' ? 0.00 : precioNeto, cAd, cNi,
         numTransaccion || null, banco || null,
-        is_final_consumer !== false, billing_id_number || null, billing_name || null, billing_address || null, billing_email || null
+        is_final_consumer !== false, billing_id_number || null, billing_name || null, billing_address || null, billing_email || null,
+        comprobanteUrl
       ]
     );
     const newOrder = orderInsertRes.rows[0];
@@ -315,7 +381,19 @@ exports.createOrder = async (req, res) => {
     client.release();
 
     // 7. Enviar correo electrónico
-    if (paymentStatus !== 'Pendiente' && email && email.includes('@')) {
+    if (paymentStatus === 'Pendiente' && email && email.includes('@')) {
+      sendPendingTransferEmail({
+        email,
+        customerName: nombre,
+        orderNum: newOrder.order_num,
+        eventTitle: event.title,
+        eventVenue: event.venue,
+        scheduleTime: schedule.schedule_time,
+        ticketCount: totalQty,
+        ticketDesglose: desglose,
+        amountTotal: finalAmount
+      }).catch(err => console.error('Error al enviar email de transferencia pendiente:', err));
+    } else if (paymentStatus !== 'Pendiente' && email && email.includes('@')) {
       sendTicketEmail({
         email,
         customerName: nombre,

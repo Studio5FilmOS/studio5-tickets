@@ -28,6 +28,22 @@ const AdminDashboard = () => {
   const [editingBannerId, setEditingBannerId] = useState(null);
   const [isSavingBanner, setIsSavingBanner] = useState(false);
 
+  // Estados para cuentas bancarias y aprobaciones de transferencia
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [loadingBanks, setLoadingBanks] = useState(false);
+  const [editingBank, setEditingBank] = useState(null);
+  const [isSavingBank, setIsSavingBank] = useState(false);
+  const [selectedReceiptUrl, setSelectedReceiptUrl] = useState(null);
+  const [bankForm, setBankForm] = useState({
+    bank_name: '',
+    account_type: 'Ahorros',
+    account_number: '',
+    owner_name: '',
+    owner_id: '',
+    owner_email: '',
+    is_active: true
+  });
+
   // Estados para formulario de nuevo evento
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -295,9 +311,116 @@ const AdminDashboard = () => {
     }
   };
 
+  // Obtener cuentas bancarias (Admin)
+  const fetchBankAccounts = async () => {
+    setLoadingBanks(true);
+    try {
+      const res = await api.get('/bank-accounts/admin');
+      if (res.data.status === 'OK') {
+        setBankAccounts(res.data.bankAccounts);
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', 'No se pudieron obtener las cuentas bancarias.', 'error');
+    } finally {
+      setLoadingBanks(false);
+    }
+  };
+
+  // Guardar cuenta bancaria (Crear / Editar)
+  const handleSaveBankAccount = async (e) => {
+    e.preventDefault();
+    if (!bankForm.bank_name || !bankForm.account_type || !bankForm.account_number || !bankForm.owner_name || !bankForm.owner_id) {
+      Swal.fire('Error', 'Faltan campos obligatorios.', 'error');
+      return;
+    }
+    setIsSavingBank(true);
+    try {
+      let res;
+      if (editingBank) {
+        res = await api.put(`/bank-accounts/admin/${editingBank.id}`, bankForm);
+      } else {
+        res = await api.post('/bank-accounts/admin', bankForm);
+      }
+      if (res.data.status === 'OK') {
+        Swal.fire('Éxito', editingBank ? 'Cuenta bancaria actualizada correctamente.' : 'Cuenta bancaria creada correctamente.', 'success');
+        setEditingBank(null);
+        setBankForm({
+          bank_name: '',
+          account_type: 'Ahorros',
+          account_number: '',
+          owner_name: '',
+          owner_id: '',
+          owner_email: '',
+          is_active: true
+        });
+        fetchBankAccounts();
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', err.response?.data?.message || 'Error al guardar la cuenta bancaria.', 'error');
+    } finally {
+      setIsSavingBank(false);
+    }
+  };
+
+  // Cambiar estado activo/inactivo rápido
+  const handleToggleBankActive = async (bank) => {
+    try {
+      const updated = { ...bank, is_active: !bank.is_active };
+      const res = await api.put(`/bank-accounts/admin/${bank.id}`, updated);
+      if (res.data.status === 'OK') {
+        fetchBankAccounts();
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', 'No se pudo cambiar el estado de la cuenta bancaria.', 'error');
+    }
+  };
+
+  // Eliminar cuenta bancaria
+  const handleDeleteBankAccount = async (id, bankName) => {
+    const confirm = await Swal.fire({
+      title: `¿Eliminar cuenta de ${bankName}?`,
+      text: "Esta acción no se puede deshacer y eliminará esta cuenta del panel de clientes.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ff3b30',
+      cancelButtonColor: '#333'
+    });
+    if (confirm.isConfirmed) {
+      try {
+        const res = await api.delete(`/bank-accounts/admin/${id}`);
+        if (res.data.status === 'OK') {
+          Swal.fire('Eliminada', 'La cuenta bancaria ha sido eliminada con éxito.', 'success');
+          fetchBankAccounts();
+        }
+      } catch (err) {
+        console.error(err);
+        Swal.fire('Error', 'No se pudo eliminar la cuenta bancaria.', 'error');
+      }
+    }
+  };
+
+  // Empezar a editar una cuenta
+  const handleStartEditBank = (bank) => {
+    setEditingBank(bank);
+    setBankForm({
+      bank_name: bank.bank_name,
+      account_type: bank.account_type,
+      account_number: bank.account_number,
+      owner_name: bank.owner_name,
+      owner_id: bank.owner_id,
+      owner_email: bank.owner_email || '',
+      is_active: bank.is_active
+    });
+  };
+
   useEffect(() => {
     if (activeTab === 'banners') {
       fetchBanners();
+    } else if (activeTab === 'bancos') {
+      fetchBankAccounts();
     } else {
       fetchData();
     }
@@ -808,6 +931,18 @@ const AdminDashboard = () => {
     return matchEvent && matchStatus && matchQuery;
   });
 
+  // Filtrado de transferencias pendientes
+  const filteredPendingTransfers = orders.filter(o => {
+    if (o.payment_status !== 'Pendiente') return false;
+    
+    const normalizedQuery = searchQuery.toLowerCase().trim();
+    return !normalizedQuery || 
+      o.customer_name.toLowerCase().includes(normalizedQuery) ||
+      o.order_num.toLowerCase().includes(normalizedQuery) ||
+      (o.customer_whatsapp && o.customer_whatsapp.includes(normalizedQuery)) ||
+      (o.customer_email && o.customer_email.toLowerCase().includes(normalizedQuery));
+  });
+
   // Métricas
   const metrics = filteredOrders.reduce((acc, o) => {
     const netVal = parseFloat(o.amount_net) > 0 ? parseFloat(o.amount_net) : (parseFloat(o.amount_total) || 0);
@@ -913,6 +1048,8 @@ const AdminDashboard = () => {
           { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Nuevo Evento' },
           { id: 'eventos', icon: Edit2, label: 'Mis Eventos' },
           { id: 'banners', icon: Image, label: 'Banners' },
+          { id: 'transferencias', icon: Receipt, label: 'Transferencias' },
+          { id: 'bancos', icon: DollarSign, label: 'Cuentas' },
           { id: 'usuarios', icon: UserCog, label: 'Usuarios' }
         ].map(tab => (
           <button
@@ -1767,6 +1904,404 @@ const AdminDashboard = () => {
       {activeTab === 'usuarios' && (
         <div className="glass-panel fade-in">
           <AdminUsers />
+        </div>
+      )}
+
+      {/* PESTAÑA: VALIDAR TRANSFERENCIAS */}
+      {activeTab === 'transferencias' && (
+        <div className="fade-in">
+          {/* Barra de Búsqueda */}
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '20px', padding: '16px 20px', marginBottom: '22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ color: '#fff', fontSize: '1rem', fontWeight: '800' }}>Validación de Transferencias</h3>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {filteredPendingTransfers.length} reservas pendientes de aprobación
+                </p>
+              </div>
+              <button onClick={fetchData} style={{
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem'
+              }}>
+                <RefreshCw size={13} /> Actualizar
+              </button>
+            </div>
+            
+            <div style={{ position: 'relative' }}>
+              <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '12px' }} />
+              <input 
+                type="text" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por cliente, whatsapp o número de orden..." 
+                style={{ paddingLeft: '38px', marginBottom: '0', padding: '10px 10px 10px 38px' }}
+              />
+            </div>
+          </div>
+
+          {/* Listado de Transferencias */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {loadingOrders ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+                <div className="spinner" />
+              </div>
+            ) : filteredPendingTransfers.length === 0 ? (
+              <div className="glass-panel" style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <Users size={32} color="var(--text-muted)" style={{ marginBottom: '10px', opacity: 0.4 }} />
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No hay transferencias pendientes que coincidan con la búsqueda.</p>
+              </div>
+            ) : (
+              filteredPendingTransfers.map((o) => {
+                const dateFormatted = o.schedule_time
+                  ? new Date(o.schedule_time).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                  : 'Sin fecha';
+                const totalT = parseInt(o.ticket_count_adult || 0) + parseInt(o.ticket_count_child || 0);
+
+                return (
+                  <div key={o.id} className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                      <div>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--accent)', letterSpacing: '0.5px', display: 'block', marginBottom: '3px' }}>#{o.order_num}</span>
+                        <h3 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: '800' }}>{o.customer_name}</h3>
+                      </div>
+                      
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px',
+                        padding: '4px 10px', borderRadius: '6px',
+                        background: 'rgba(255,204,0,0.1)', color: '#ffcc00',
+                        border: '1px solid rgba(255,204,0,0.2)'
+                      }}>
+                        {o.payment_status}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                        <p style={{ margin: 0 }}>🎬 <b>Evento:</b> <span style={{ color: '#fff' }}>{o.event_title}</span></p>
+                        <p style={{ margin: 0 }}>📅 <b>Función:</b> <span style={{ color: '#fff' }}>{dateFormatted}</span></p>
+                        <p style={{ margin: 0 }}>🎟️ <b>Cantidad:</b> <span style={{ color: '#fff' }}>{totalT} entradas ({o.desglose || `${o.ticket_count_adult} Ad / ${o.ticket_count_child} Ni`})</span></p>
+                        <p style={{ margin: 0 }}>📞 <b>Whatsapp:</b> <span style={{ color: '#fff' }}>{o.customer_whatsapp || 'N/A'}</span></p>
+                        <p style={{ margin: 0 }}>📧 <b>Email:</b> <span style={{ color: '#fff' }}>{o.customer_email || 'N/A'}</span></p>
+                        <p style={{ margin: 0, fontSize: '1rem', color: 'var(--accent)', fontWeight: '800', marginTop: '6px' }}>💰 Monto: ${parseFloat(o.amount_total || 0).toFixed(2)}</p>
+                      </div>
+
+                      {/* Sección Comprobante */}
+                      {o.comprobante_url ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Comprobante Cargado:</label>
+                          {o.comprobante_url.toLowerCase().endsWith('.pdf') ? (
+                            <button 
+                              type="button" 
+                              onClick={() => setSelectedReceiptUrl(o.comprobante_url)}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                                padding: '10px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
+                                background: 'rgba(255,255,255,0.03)', color: '#fff', cursor: 'pointer',
+                                fontSize: '0.8rem', fontWeight: 'bold'
+                              }}
+                            >
+                              📄 Abrir Comprobante PDF
+                            </button>
+                          ) : (
+                            <div 
+                              onClick={() => setSelectedReceiptUrl(o.comprobante_url)}
+                              style={{ 
+                                width: '120px', height: '120px', borderRadius: '10px', 
+                                border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden', 
+                                cursor: 'pointer', position: 'relative', background: '#000'
+                              }}
+                              title="Haz clic para agrandar"
+                            >
+                              <img 
+                                src={getImageUrl(o.comprobante_url)} 
+                                alt="Comprobante" 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                              />
+                              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '9px', textAlign: 'center', padding: '3px 0' }}>
+                                Agrandar 🔍
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          ⚠️ Sin comprobante cargado (Reserva de Staff/POS)
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '15px', marginTop: '5px' }}>
+                      <button
+                        onClick={() => handleUpdateStatus(o.id, o.payment_status, 'Pagado')}
+                        style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                          padding: '10px', borderRadius: '10px', border: '1px solid rgba(52,199,89,0.25)', cursor: 'pointer',
+                          background: 'rgba(52,199,89,0.15)', color: '#34c759', fontWeight: '700', fontSize: '0.82rem',
+                          transition: 'var(--transition-smooth)'
+                        }}
+                      >
+                        <Check size={14} /> Aprobar Pago y Generar QRs
+                      </button>
+                      <button
+                        onClick={() => handleUpdateStatus(o.id, o.payment_status, 'Anulado')}
+                        style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                          padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,59,48,0.25)', cursor: 'pointer',
+                          background: 'rgba(255,59,48,0.1)', color: '#ff3b30', fontWeight: '700', fontSize: '0.82rem',
+                          transition: 'var(--transition-smooth)'
+                        }}
+                      >
+                        <X size={14} /> Rechazar / Anular Reserva
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* PESTAÑA: CONFIGURACIÓN CUENTAS BANCARIAS */}
+      {activeTab === 'bancos' && (
+        <div className="fade-in">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+            {/* Formulario Crear/Editar */}
+            <div className="glass-panel" style={{ padding: '24px' }}>
+              <h3 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: '800', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {editingBank ? '✏️ Editar Cuenta Bancaria' : '➕ Agregar Cuenta Bancaria'}
+              </h3>
+              
+              <form onSubmit={handleSaveBankAccount} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label>Nombre del Banco *</label>
+                    <input 
+                      type="text" 
+                      value={bankForm.bank_name} 
+                      onChange={(e) => setBankForm({ ...bankForm, bank_name: e.target.value })} 
+                      placeholder="Ej: Banco Pichincha"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label>Tipo de Cuenta *</label>
+                    <select 
+                      value={bankForm.account_type} 
+                      onChange={(e) => setBankForm({ ...bankForm, account_type: e.target.value })}
+                      style={{ padding: '14px 16px', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '12px' }}
+                    >
+                      <option value="Ahorros">Ahorros</option>
+                      <option value="Corriente">Corriente</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label>Número de Cuenta *</label>
+                    <input 
+                      type="text" 
+                      value={bankForm.account_number} 
+                      onChange={(e) => setBankForm({ ...bankForm, account_number: e.target.value })} 
+                      placeholder="Ej: 2200888333"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label>Nombre Titular *</label>
+                    <input 
+                      type="text" 
+                      value={bankForm.owner_name} 
+                      onChange={(e) => setBankForm({ ...bankForm, owner_name: e.target.value })} 
+                      placeholder="Ej: Studio 5 Film"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label>Identificación Titular (Cédula/RUC) *</label>
+                    <input 
+                      type="text" 
+                      value={bankForm.owner_id} 
+                      onChange={(e) => setBankForm({ ...bankForm, owner_id: e.target.value })} 
+                      placeholder="Ej: 1722883344"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label>Correo Notificaciones (Opcional)</label>
+                    <input 
+                      type="email" 
+                      value={bankForm.owner_email} 
+                      onChange={(e) => setBankForm({ ...bankForm, owner_email: e.target.value })} 
+                      placeholder="Ej: tesoreria@studio5.com"
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '10px 0 20px 0' }}>
+                  <button 
+                    type="button" 
+                    onClick={() => setBankForm({ ...bankForm, is_active: !bankForm.is_active })}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', color: bankForm.is_active ? 'var(--success)' : 'var(--text-muted)' }}
+                  >
+                    {bankForm.is_active ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                  </button>
+                  <span style={{ fontSize: '0.85rem', color: '#ccc', fontWeight: '500' }}>
+                    {bankForm.is_active ? 'Cuenta Activa (Visible al público)' : 'Cuenta Inactiva (Oculta al público)'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="submit" disabled={isSavingBank} className="btn-primary" style={{ flex: 2 }}>
+                    <Save size={16} /> {editingBank ? 'Actualizar Cuenta' : 'Guardar Cuenta'}
+                  </button>
+                  {editingBank && (
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setEditingBank(null);
+                        setBankForm({ bank_name: '', account_type: 'Ahorros', account_number: '', owner_name: '', owner_id: '', owner_email: '', is_active: true });
+                      }}
+                      className="btn-secondary" 
+                      style={{ flex: 1 }}
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            {/* Listado de Cuentas */}
+            <div className="glass-panel" style={{ padding: '24px' }}>
+              <h3 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: '800', marginBottom: '18px' }}>Cuentas Configuradas</h3>
+              
+              {loadingBanks ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '30px 0' }}>
+                  <div className="spinner" />
+                </div>
+              ) : bankAccounts.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '20px' }}>No hay cuentas bancarias registradas.</p>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px' }}>
+                  {bankAccounts.map((acc) => (
+                    <div key={acc.id} className="glass-card" style={{ 
+                      background: 'rgba(255,255,255,0.01)', 
+                      borderColor: acc.is_active ? 'rgba(52,199,89,0.2)' : 'var(--glass-border)',
+                      padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: '800', color: '#fff', fontSize: '0.92rem' }}>{acc.bank_name}</span>
+                        <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', color: 'var(--accent)', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>{acc.account_type}</span>
+                      </div>
+                      
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <p style={{ margin: 0 }}>🔢 <b>Número:</b> <span style={{ color: '#fff' }}>{acc.account_number}</span></p>
+                        <p style={{ margin: 0 }}>👤 <b>Titular:</b> <span style={{ color: '#fff' }}>{acc.owner_name}</span></p>
+                        <p style={{ margin: 0 }}>🆔 <b>Cédula/RUC:</b> <span style={{ color: '#fff' }}>{acc.owner_id}</span></p>
+                        {acc.owner_email && <p style={{ margin: 0 }}>📧 <b>Correo:</b> <span style={{ color: '#fff' }}>{acc.owner_email}</span></p>}
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '5px' }}>
+                        <button 
+                          onClick={() => handleToggleBankActive(acc)}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                            color: acc.is_active ? 'var(--success)' : 'var(--text-muted)', fontSize: '0.72rem', fontWeight: '700'
+                          }}
+                        >
+                          {acc.is_active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />} {acc.is_active ? 'Activa' : 'Oculta'}
+                        </button>
+                        
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button 
+                            onClick={() => handleStartEditBank(acc)} 
+                            style={{ background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)', color: 'var(--accent)', borderRadius: '6px', padding: '5px 9px', cursor: 'pointer', display: 'flex' }}
+                            title="Editar"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteBankAccount(acc.id, acc.bank_name)} 
+                            style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.2)', color: 'var(--error)', borderRadius: '6px', padding: '5px 9px', cursor: 'pointer', display: 'flex' }}
+                            title="Eliminar"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Visor de Comprobante */}
+      {selectedReceiptUrl && (
+        <div 
+          onClick={() => setSelectedReceiptUrl(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(10px)',
+            display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 20000,
+            padding: '20px'
+          }}
+          className="fade-in"
+        >
+          <div 
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative', width: '100%', maxWidth: '700px', maxHeight: '90vh',
+              background: '#151515', border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '20px', padding: '15px', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span style={{ fontWeight: '700', color: '#fff', fontSize: '0.95rem' }}>Comprobante de Pago</span>
+              <button 
+                onClick={() => setSelectedReceiptUrl(null)}
+                style={{
+                  background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '50%',
+                  width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', cursor: 'pointer', fontWeight: 'bold'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#080808', borderRadius: '12px', padding: '10px' }}>
+              {selectedReceiptUrl.toLowerCase().endsWith('.pdf') ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                  <p style={{ color: '#ccc', marginBottom: '15px' }}>El comprobante es un archivo PDF.</p>
+                  <a 
+                    href={getImageUrl(selectedReceiptUrl)} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="btn-primary"
+                    style={{ display: 'inline-flex', padding: '10px 20px', width: 'auto' }}
+                  >
+                    Abrir PDF en Nueva Pestaña <ExternalLink size={16} />
+                  </a>
+                </div>
+              ) : (
+                <img 
+                  src={getImageUrl(selectedReceiptUrl)} 
+                  alt="Comprobante" 
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '8px' }} 
+                />
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Swal from 'sweetalert2';
 import html2canvas from 'html2canvas';
-import { ChevronLeft, Download, Send, Armchair, CreditCard, Calendar } from 'lucide-react';
+import { ChevronLeft, Download, Send, Armchair, CreditCard, Calendar, ChevronDown, Copy, Upload, Trash2, Check, Info } from 'lucide-react';
 
 const getImageUrl = (url) => {
   if (!url) return '';
@@ -14,6 +14,106 @@ const getImageUrl = (url) => {
   const apiUrl = import.meta.env.VITE_API_URL || '';
   const backendUrl = apiUrl.replace(/\/api$/, '');
   return `${backendUrl}${url}`;
+};
+
+// Componente de Select Moderno y Premium
+const CustomSelect = ({ value, onChange, options, label }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find(opt => opt.value === value) || options[0];
+
+  return (
+    <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
+      {label && <label>{label}</label>}
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          padding: '14px 16px',
+          background: 'rgba(0, 0, 0, 0.4)',
+          border: isOpen ? '1px solid var(--accent)' : '1px solid var(--glass-border)',
+          borderRadius: '12px',
+          color: 'var(--text-primary)',
+          fontSize: '0.95rem',
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: isOpen ? '0 0 12px var(--accent-glow)' : 'none',
+          transition: 'var(--transition-smooth)'
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {selectedOption.icon && <selectedOption.icon size={16} color="var(--accent)" />}
+          {selectedOption.label}
+        </span>
+        <ChevronDown size={16} style={{ 
+          color: 'var(--accent)', 
+          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.3s ease'
+        }} />
+      </div>
+      
+      {isOpen && (
+        <>
+          <div 
+            onClick={() => setIsOpen(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 999
+            }}
+          />
+          <div 
+            className="fade-in"
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              marginTop: '6px',
+              background: 'rgba(10, 10, 10, 0.98)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              zIndex: 1000,
+              boxShadow: '0 10px 25px rgba(0,0,0,0.8)'
+            }}
+          >
+            {options.map((opt) => (
+              <div 
+                key={opt.value}
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                style={{
+                  padding: '12px 16px',
+                  cursor: 'pointer',
+                  color: opt.value === value ? 'var(--accent)' : 'var(--text-primary)',
+                  background: opt.value === value ? 'rgba(222, 184, 65, 0.08)' : 'transparent',
+                  transition: 'background 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontWeight: opt.value === value ? '700' : '500',
+                  fontSize: '0.9rem'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+                onMouseLeave={e => e.currentTarget.style.background = opt.value === value ? 'rgba(222, 184, 65, 0.08)' : 'transparent'}
+              >
+                {opt.icon && <opt.icon size={15} />}
+                {opt.label}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 };
 
 const DetalleObra = () => {
@@ -62,6 +162,32 @@ const DetalleObra = () => {
   const [billingName, setBillingName] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
   const [billingEmail, setBillingEmail] = useState('');
+
+  // Nuevos estados para transferencia bancaria
+  const [comprobanteBase64, setComprobanteBase64] = useState('');
+  const [comprobanteName, setComprobanteName] = useState('');
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [loadingBanks, setLoadingBanks] = useState(false);
+
+  // Cargar cuentas bancarias activas al seleccionar transferencia
+  useEffect(() => {
+    if (metodoPago === 'Transferencia') {
+      const fetchBankAccounts = async () => {
+        setLoadingBanks(true);
+        try {
+          const res = await api.get('/bank-accounts');
+          if (res.data.status === 'OK') {
+            setBankAccounts(res.data.bankAccounts);
+          }
+        } catch (err) {
+          console.error('Error al cargar cuentas bancarias:', err);
+        } finally {
+          setLoadingBanks(false);
+        }
+      };
+      fetchBankAccounts();
+    }
+  }, [metodoPago]);
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -280,9 +406,7 @@ const DetalleObra = () => {
     let refNum = payphoneTxId;
 
     if (metodoPago === 'Transferencia') {
-      bankName = banco === 'Otro' ? bancoOtro : banco;
-      refNum = numTransaccion;
-      met = `Transf. ${bankName} (${refNum})`;
+      met = 'Transferencia Bancaria';
     } else if (metodoPago === 'Payphone') {
       met = 'Payphone';
     }
@@ -306,13 +430,20 @@ const DetalleObra = () => {
       billing_id_number: isFinalConsumer ? null : billingIdNumber,
       billing_name: isFinalConsumer ? null : billingName,
       billing_address: isFinalConsumer ? null : billingAddress,
-      billing_email: isFinalConsumer ? null : billingEmail
+      billing_email: isFinalConsumer ? null : billingEmail,
+      // Comprobante
+      comprobante: metodoPago === 'Transferencia' ? comprobanteBase64 : null
     };
 
     try {
       const res = await api.post('/orders', payload);
       if (res.data.status === 'OK') {
-        Swal.fire('¡Compra Exitosa!', 'Tu pago ha sido procesado por Payphone.', 'success');
+        const isPending = res.data.order?.payment_status === 'Pendiente';
+        if (isPending) {
+          Swal.fire('¡Reserva Registrada!', 'Tu comprobante ha sido recibido. Se encuentra pendiente de verificación.', 'success');
+        } else {
+          Swal.fire('¡Compra Exitosa!', 'Tu reserva ha sido procesada con éxito.', 'success');
+        }
         setSuccessData(res.data);
       } else {
         Swal.fire('Error', res.data.message || 'No se pudo procesar la orden', 'error');
@@ -352,6 +483,44 @@ const DetalleObra = () => {
     }, 500);
   };
 
+  // Auxiliar para copiar texto del panel de transferencias
+  const handleCopy = (text, fieldName) => {
+    navigator.clipboard.writeText(text);
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: `${fieldName} copiado al portapapeles`,
+      showConfirmButton: false,
+      timer: 1500,
+      background: '#151515',
+      color: '#fff'
+    });
+  };
+
+  // Auxiliar para manejar la subida del comprobante bancario
+  const handleReceiptFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      Swal.fire('Error', 'Por favor selecciona un archivo de imagen (PNG, JPG) o PDF.', 'error');
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      Swal.fire('Archivo muy grande', 'El comprobante no debe pesar más de 8MB.', 'warning');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setComprobanteBase64(event.target.result);
+      setComprobanteName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleRegisterClick = (e) => {
     e.preventDefault();
 
@@ -382,6 +551,46 @@ const DetalleObra = () => {
     const dateFormatted = new Date(schedule_time).toLocaleDateString('es-EC', {
       day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
     });
+
+    const isPending = order.payment_status === 'Pendiente';
+
+    if (isPending) {
+      return (
+        <div className="glass-panel fade-in" style={{ textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
+          <div style={{
+            width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(255, 204, 0, 0.1)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto',
+            border: '2px solid var(--warning)'
+          }}>
+            <Info size={32} color="var(--warning)" />
+          </div>
+          <h2 style={{ color: 'var(--warning)', marginBottom: '10px' }}>¡Reserva Registrada!</h2>
+          <p style={{ color: '#ccc', marginBottom: '20px', fontSize: '0.95rem' }}>
+            Tu reserva <b style={{ color: 'var(--accent)' }}>#{order.order_num}</b> ha sido recibida con éxito.
+          </p>
+          
+          <div style={{
+            background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: '16px', padding: '20px', textAlign: 'left', marginBottom: '25px'
+          }}>
+            <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '6px' }}>Detalles de la Reserva</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '6px 0' }}>🎬 <b>Evento:</b> {event.title}</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '6px 0' }}>📅 <b>Función:</b> {dateFormatted}</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '6px 0' }}>📍 <b>Lugar:</b> {event.venue}</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '6px 0' }}>🎟️ <b>Cantidad:</b> {order.ticket_count_adult + order.ticket_count_child} entradas</p>
+            <p style={{ fontSize: '0.95rem', color: 'var(--accent)', fontWeight: '700', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>💰 Total a Reservar: ${parseFloat(order.amount_total).toFixed(2)}</p>
+          </div>
+
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: '1.5', marginBottom: '25px' }}>
+            Hemos enviado un correo a <b>{order.customer_email || 'tu email'}</b> confirmando que tu comprobante ha sido subido. Los tickets definitivos con códigos QR se te enviarán una vez aprobado el pago por la administración.
+          </p>
+
+          <button onClick={() => navigate('/')} className="btn-primary">
+            Volver a Cartelera
+          </button>
+        </div>
+      );
+    }
 
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${order.order_num}&color=000000&bgcolor=ffffff`;
     const seatLabels = tickets.map(t => t.seat_label).filter(s => s !== null);
@@ -642,49 +851,185 @@ const DetalleObra = () => {
           <form onSubmit={handleRegisterClick}>
         {/* Vista Admin/Staff: Selección de tipo de operación */}
         {isStaff && (
-          <>
-            <label>Tipo Operación (POS)</label>
-            <select value={tipoVenta} onChange={(e) => setTipoVenta(e.target.value)}>
-              <option value="Venta">Venta Pagada</option>
-              <option value="Pendiente">Reserva Pendiente</option>
-              <option value="Cortesia">Cortesía</option>
-            </select>
-          </>
+          <CustomSelect 
+            value={tipoVenta} 
+            onChange={setTipoVenta} 
+            options={[
+              { value: 'Venta', label: 'Venta Pagada' },
+              { value: 'Pendiente', label: 'Reserva Pendiente' },
+              { value: 'Cortesia', label: 'Cortesía' }
+            ]} 
+            label="Tipo Operación (POS)" 
+          />
         )}
 
         {/* Métodos de Pago Diferenciados (Admin/Staff vs. Compradores Públicos) */}
         {tipoVenta !== 'Cortesia' && (
           <>
-            <label>Método de Pago</label>
             {isStaff ? (
               // Métodos para el personal en boletería/POS
-              <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
-                <option value="Efectivo">Efectivo (Directo)</option>
-                <option value="Transferencia">Transferencia Bancaria</option>
-              </select>
+              <CustomSelect 
+                value={metodoPago} 
+                onChange={setMetodoPago} 
+                options={[
+                  { value: 'Efectivo', label: 'Efectivo (Directo)' },
+                  { value: 'Transferencia', label: 'Transferencia Bancaria' }
+                ]} 
+                label="Método de Pago" 
+              />
             ) : (
               // Métodos para el Comprador Web (tipo Meet2go)
-              <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
-                <option value="Payphone">💳 Tarjeta de Crédito/Débito (Payphone)</option>
-                <option value="Transferencia">🏦 Transferencia Bancaria (Reserva)</option>
-              </select>
+              <CustomSelect 
+                value={metodoPago} 
+                onChange={setMetodoPago} 
+                options={[
+                  { value: 'Payphone', label: 'Tarjeta de Crédito/Débito (Payphone)', icon: CreditCard },
+                  { value: 'Transferencia', label: 'Transferencia Bancaria (Reserva)', icon: Calendar }
+                ]} 
+                label="Método de Pago" 
+              />
             )}
 
             {metodoPago === 'Transferencia' && (
-              <div className="fade-in" style={{ background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '12px', marginBottom: '15px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <label>Banco de Destino</label>
-                <select value={banco} onChange={(e) => setBanco(e.target.value)}>
-                  <option value="Pichincha">Banco Pichincha</option>
-                  <option value="Guayaquil">Banco Guayaquil</option>
-                  <option value="Otro">Otro Banco</option>
-                </select>
+              <div className="fade-in" style={{ 
+                background: 'rgba(255,255,255,0.02)', 
+                padding: '20px', 
+                borderRadius: '16px', 
+                marginBottom: '20px', 
+                border: '1px solid rgba(255,255,255,0.08)' 
+              }}>
+                <h4 style={{ color: 'var(--accent)', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Datos para Transferencia Bancaria
+                </h4>
 
-                {banco === 'Otro' && (
-                  <input type="text" value={bancoOtro} onChange={(e) => setBancoOtro(e.target.value)} placeholder="Nombre del Banco" required />
+                {loadingBanks ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '15px 0' }}>
+                    <div className="spinner" style={{ width: '25px', height: '25px' }} />
+                  </div>
+                ) : bankAccounts.length === 0 ? (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No hay cuentas bancarias configuradas por el administrador.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                    {bankAccounts.map((acc) => (
+                      <div key={acc.id} style={{ 
+                        background: 'rgba(0,0,0,0.3)', 
+                        borderRadius: '12px', 
+                        padding: '12px 14px', 
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        position: 'relative'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
+                          <span style={{ fontWeight: '700', fontSize: '0.85rem', color: '#fff' }}>{acc.bank_name}</span>
+                          <span style={{ fontSize: '0.7rem', background: 'rgba(222,184,65,0.1)', color: 'var(--accent)', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>{acc.account_type}</span>
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Cuenta: <b style={{ color: '#fff' }}>{acc.account_number}</b></span>
+                            <button 
+                              type="button" 
+                              onClick={() => handleCopy(acc.account_number, 'Número de cuenta')}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', display: 'flex', alignItems: 'center' }}
+                              title="Copiar número de cuenta"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          </div>
+                          
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Titular: <b style={{ color: '#fff' }}>{acc.owner_name}</b></span>
+                          </div>
+                          
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Cédula/RUC: <b style={{ color: '#fff' }}>{acc.owner_id}</b></span>
+                            <button 
+                              type="button" 
+                              onClick={() => handleCopy(acc.owner_id, 'Identificación')}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', display: 'flex', alignItems: 'center' }}
+                              title="Copiar identificación"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          </div>
+                          
+                          {acc.owner_email && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Correo: <b style={{ color: '#fff' }}>{acc.owner_email}</b></span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
-                <label>Ref. Transacción / Comprobante</label>
-                <input type="text" value={numTransaccion} onChange={(e) => setNumTransaccion(e.target.value)} placeholder={isStaff ? "Código de referencia" : "Código del comprobante transferido"} required />
+                {/* Recuadro de carga de Comprobante */}
+                <div>
+                  <label style={{ marginBottom: '8px' }}>Subir Comprobante de Pago {!isStaff && <span style={{ color: 'var(--error)' }}>*</span>}</label>
+                  
+                  {!comprobanteBase64 ? (
+                    <div 
+                      style={{
+                        border: '2px dashed rgba(255,255,255,0.15)',
+                        borderRadius: '12px',
+                        padding: '24px 16px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        background: 'rgba(0,0,0,0.2)',
+                        transition: 'var(--transition-smooth)'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'}
+                      onClick={() => document.getElementById('comprobante-upload').click()}
+                    >
+                      <Upload size={28} color="var(--text-muted)" style={{ marginBottom: '8px', margin: '0 auto' }} />
+                      <p style={{ fontSize: '0.82rem', color: '#fff', fontWeight: '600', marginTop: '6px' }}>Selecciona tu comprobante de pago</p>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>Formatos soportados: JPG, PNG, PDF (Máx. 8MB)</p>
+                      <input 
+                        id="comprobante-upload"
+                        type="file" 
+                        accept="image/*,application/pdf"
+                        onChange={handleReceiptFileChange}
+                        style={{ display: 'none' }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      background: 'rgba(0,0,0,0.3)', 
+                      borderRadius: '12px', 
+                      padding: '12px 16px', 
+                      border: '1px solid rgba(52,199,89,0.3)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        <div style={{ background: 'rgba(52,199,89,0.1)', color: 'var(--success)', borderRadius: '8px', padding: '8px', display: 'flex' }}>
+                          <Check size={16} />
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{comprobanteName}</p>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--success)' }}>Listo para enviar</p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setComprobanteBase64('');
+                          setComprobanteName('');
+                        }}
+                        style={{
+                          background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.2)',
+                          borderRadius: '8px', padding: '6px', color: 'var(--error)', cursor: 'pointer',
+                          display: 'flex'
+                        }}
+                        title="Eliminar comprobante"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </>
@@ -915,9 +1260,9 @@ const DetalleObra = () => {
         <button 
           type="submit" 
           className="btn-primary" 
-          disabled={isProcessing || (event.has_assigned_seats ? selectedSeats.length === 0 : disponibles <= 0)}
+          disabled={isProcessing || (event.has_assigned_seats ? selectedSeats.length === 0 : disponibles <= 0) || (metodoPago === 'Transferencia' && !isStaff && !comprobanteBase64)}
         >
-          {isProcessing ? 'PROCESANDO...' : `PAGAR $${(metodoPago === 'Payphone' && surchargeEnable ? calculateTotal() + calculatePayphoneSurcharge(calculateTotal()) : calculateTotal()).toFixed(2)}`}
+          {isProcessing ? 'PROCESANDO...' : (metodoPago === 'Transferencia' ? `RESERVAR POR $${calculateTotal().toFixed(2)}` : `PAGAR $${(metodoPago === 'Payphone' && surchargeEnable ? calculateTotal() + calculatePayphoneSurcharge(calculateTotal()) : calculateTotal()).toFixed(2)}`)}
         </button>
       </form>
         </div>

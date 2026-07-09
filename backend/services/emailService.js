@@ -102,3 +102,106 @@ exports.sendTicketEmail = async ({ email, customerName, orderNum, eventTitle, ev
     return false;
   }
 };
+
+// Función para enviar correo de reserva pendiente de transferencia
+exports.sendPendingTransferEmail = async ({ email, customerName, orderNum, eventTitle, eventVenue, scheduleTime, ticketCount, ticketDesglose, amountTotal }) => {
+  if (!email || !email.includes('@')) {
+    console.log('Correo omitido o inválido:', email);
+    return false;
+  }
+
+  const { query } = require('../config/db');
+  let bankAccounts = [];
+  try {
+    const result = await query('SELECT * FROM bank_accounts WHERE is_active = true ORDER BY bank_name ASC');
+    bankAccounts = result.rows;
+  } catch (err) {
+    console.error('Error fetching bank accounts for email:', err);
+  }
+
+  let bankAccountsHtml = '';
+  if (bankAccounts.length > 0) {
+    bankAccountsHtml = `
+      <div style="background-color: #111; padding: 20px; border-radius: 16px; max-width: 450px; margin: 20px auto; border: 1px solid #222; text-align: left;">
+        <h4 style="color: #F1A51C; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 5px; font-family: sans-serif;">Datos de Transferencia Bancaria</h4>
+    `;
+    for (let acc of bankAccounts) {
+      bankAccountsHtml += `
+        <div style="margin-bottom: 15px; font-size: 14px; color: #ccc; font-family: sans-serif; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;">
+          <p style="margin: 3px 0;">🏦 <b>Banco:</b> ${acc.bank_name}</p>
+          <p style="margin: 3px 0;">📂 <b>Tipo:</b> ${acc.account_type}</p>
+          <p style="margin: 3px 0;">🔢 <b>Número de Cuenta:</b> ${acc.account_number}</p>
+          <p style="margin: 3px 0;">👤 <b>Beneficiario:</b> ${acc.owner_name}</p>
+          <p style="margin: 3px 0;">🆔 <b>Cédula/RUC:</b> ${acc.owner_id}</p>
+          ${acc.owner_email ? `<p style="margin: 3px 0;">📧 <b>Correo:</b> ${acc.owner_email}</p>` : ''}
+        </div>
+      `;
+    }
+    bankAccountsHtml += `</div>`;
+  }
+
+  const fromName = process.env.SMTP_FROM_NAME || 'Studio 5 Film & Art';
+
+  const formattedDate = new Date(scheduleTime).toLocaleString('es-EC', {
+    timeZone: 'America/Guayaquil',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const htmlBody = `
+    <div style="background-color: #050505; padding: 40px 20px; text-align: center; font-family: sans-serif; color: white;">
+      <h2 style="color: #F1A51C; margin-bottom: 5px;">¡Reserva registrada con éxito, ${customerName}!</h2>
+      <p style="color: #ccc; margin-top: 0; margin-bottom: 25px;">Tu orden <b>#${orderNum}</b> ha sido recibida y está <b>pendiente de comprobación de pago</b>.</p>
+      
+      <div style="background-color: #111; padding: 20px; border-radius: 16px; max-width: 450px; margin: 0 auto 30px auto; border: 1px solid #222; text-align: left;">
+        <h3 style="color: #fff; margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 10px; text-transform: uppercase;">${eventTitle}</h3>
+        <p style="color: #aaa; font-size: 15px; margin: 10px 0;">📅 <b>Función:</b> ${formattedDate}</p>
+        <p style="color: #aaa; font-size: 15px; margin: 10px 0;">📍 <b>Lugar:</b> ${eventVenue}</p>
+        <p style="color: #aaa; font-size: 15px; margin: 10px 0;">🎟️ <b>Cantidad:</b> ${ticketCount} (${ticketDesglose})</p>
+        <p style="color: #F1A51C; font-size: 16px; margin: 15px 0 0 0; font-weight: bold; border-top: 1px solid #222; padding-top: 10px;">💰 Total a Pagar: $${parseFloat(amountTotal || 0).toFixed(2)}</p>
+      </div>
+
+      <div style="max-width: 450px; margin: 0 auto; text-align: left; font-size: 14px; line-height: 1.6; color: #ccc; font-family: sans-serif;">
+        <p>⚠️ <b>Nota Importante:</b> Tu e-ticket premium con los códigos de acceso QR se generará y enviará a tu correo una vez que nuestro departamento de administración valide la transferencia bancaria.</p>
+      </div>
+
+      ${bankAccountsHtml}
+
+      <div style="margin-top: 40px; color: #555; font-size: 12px; border-top: 1px solid #222; padding-top: 20px;">
+        Este es un correo automático. Por favor no respondas a este mensaje.<br>
+        &copy; 2026 ${fromName}
+      </div>
+    </div>
+  `;
+
+  try {
+    const smtpUser = process.env.SMTP_USER || 'ventas@studio5film.com';
+    const smtpPass = process.env.SMTP_PASS || '@Ventas12345';
+
+    if (!smtpUser || !smtpPass) {
+      console.log('----- EMAIL SIMULATION (PENDING) -----');
+      console.log('To:', email);
+      console.log('Subject:', `Reserva pendiente de confirmación para ${eventTitle}`);
+      console.log('Content size:', htmlBody.length, 'bytes');
+      console.log('--------------------------------------');
+      return true;
+    }
+
+    await transporter.sendMail({
+      from: `"${fromName}" <${smtpUser}>`,
+      to: email,
+      subject: `Tu reserva para ${eventTitle} (Orden #${orderNum} - Pendiente de Pago)`,
+      html: htmlBody
+    });
+
+    console.log(`Correo de reserva pendiente enviado con éxito a ${email}`);
+    return true;
+  } catch (err) {
+    console.error('Error al enviar el correo electrónico de reserva pendiente:', err);
+    return false;
+  }
+};
