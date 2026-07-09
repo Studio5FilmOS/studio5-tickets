@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
-import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog } from 'lucide-react';
+import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff } from 'lucide-react';
 import AdminUsers from './AdminUsers';
+import { subscribeToPush, unsubscribeFromPush, isPushSubscribed } from '../../services/pushService';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('ventas'); // 'ventas', 'crear', 'eventos', 'banners'
   const [orders, setOrders] = useState([]);
   const [events, setEvents] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
   
   // Estados para filtros de ventas
   const [filterEventId, setFilterEventId] = useState('ALL');
@@ -425,6 +428,11 @@ const AdminDashboard = () => {
       fetchData();
     }
   }, [activeTab]);
+
+  // Verificar estado de suscripción push al cargar
+  useEffect(() => {
+    isPushSubscribed().then(subscribed => setPushSubscribed(subscribed));
+  }, []);
 
   // Generar cuadrícula de asientos de la A a la Z
   const generateGrid = () => {
@@ -1032,10 +1040,58 @@ const AdminDashboard = () => {
         }}>
           <ShieldCheck size={22} color="#DEB841" />
         </div>
-        <div>
+        <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>Panel de Administración</h1>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Studio 5 · Sistema de Gestión</p>
         </div>
+        {/* Botón de notificaciones push */}
+        <button
+          id="btn-push-notifications"
+          onClick={async () => {
+            setPushLoading(true);
+            try {
+              const token = localStorage.getItem('token');
+              if (pushSubscribed) {
+                await unsubscribeFromPush(token);
+                setPushSubscribed(false);
+                Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Notificaciones desactivadas', showConfirmButton: false, timer: 2500 });
+              } else {
+                const ok = await subscribeToPush(token);
+                if (ok) {
+                  setPushSubscribed(true);
+                  // Enviar notificación de prueba
+                  await api.post('/push/test');
+                  Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: '🔔 Notificaciones activadas', text: 'Recibirás alertas de ventas y comprobantes', showConfirmButton: false, timer: 3500 });
+                } else {
+                  Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'Permiso denegado', text: 'Activa las notificaciones en la configuración del navegador', showConfirmButton: false, timer: 4000 });
+                }
+              }
+            } catch (err) {
+              console.error('Error gestionando push:', err);
+            } finally {
+              setPushLoading(false);
+            }
+          }}
+          title={pushSubscribed ? 'Desactivar notificaciones push' : 'Activar notificaciones push'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '7px',
+            padding: '9px 15px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+            background: pushSubscribed
+              ? 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))'
+              : 'rgba(255,255,255,0.06)',
+            color: pushSubscribed ? '#22c55e' : 'var(--text-muted)',
+            fontSize: '0.8rem', fontWeight: 600,
+            border: `1px solid ${pushSubscribed ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)'}`,
+            transition: 'all 0.2s ease',
+            opacity: pushLoading ? 0.6 : 1
+          }}
+          disabled={pushLoading}
+        >
+          {pushSubscribed ? <Bell size={15} /> : <BellOff size={15} />}
+          <span style={{ whiteSpace: 'nowrap' }}>
+            {pushLoading ? '...' : (pushSubscribed ? 'Notificaciones ON' : 'Activar alertas')}
+          </span>
+        </button>
       </div>
 
       {/* Tabs Premium */}

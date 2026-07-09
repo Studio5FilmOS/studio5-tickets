@@ -138,6 +138,7 @@ const ticketRoutes = require('./routes/ticketRoutes');
 const promotionRoutes = require('./routes/promotionRoutes');
 const userRoutes = require('./routes/userRoutes');
 const bankAccountRoutes = require('./routes/bankAccountRoutes');
+const pushRoutes = require('./routes/pushRoutes');
 
 // Vincular Rutas a endpoints de la API
 app.use('/api/auth', authRoutes);
@@ -147,6 +148,7 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/admin/users', userRoutes);
 app.use('/api/bank-accounts', bankAccountRoutes);
+app.use('/api/push', pushRoutes);
 
 // Servir archivos estáticos del Frontend compilado
 const path = require('path');
@@ -170,6 +172,47 @@ app.use((err, req, res, next) => {
 // Inicializar base de datos, ejecutar migraciones e iniciar servidor
 const initDatabase = require('./config/initDb');
 
+// ─── Job de monitoreo de almacenamiento (cada hora) ───────────────────────────
+const startStorageMonitor = () => {
+  const fs = require('fs');
+  const uploadsDir = path.join(__dirname, 'public', 'uploads');
+  const WARN_THRESHOLD_MB = 800; // Notificar si supera 800 MB (~80% de 1 GB)
+  
+  const checkStorage = () => {
+    try {
+      let totalBytes = 0;
+      const walkDir = (dir) => {
+        if (!fs.existsSync(dir)) return;
+        fs.readdirSync(dir).forEach(file => {
+          const fullPath = path.join(dir, file);
+          try {
+            const stat = fs.statSync(fullPath);
+            if (stat.isDirectory()) walkDir(fullPath);
+            else totalBytes += stat.size;
+          } catch (_) {}
+        });
+      };
+      walkDir(uploadsDir);
+      const totalMB = totalBytes / (1024 * 1024);
+      console.log(`📁 Almacenamiento uploads: ${totalMB.toFixed(1)} MB`);
+      if (totalMB > WARN_THRESHOLD_MB) {
+        const { sendPushToAdmins } = require('./services/pushService');
+        sendPushToAdmins(
+          '⚠️ Almacenamiento casi lleno',
+          `El volumen de uploads ocupa ${totalMB.toFixed(0)} MB. Considera limpiar eventos finalizados.`,
+          { tag: 'storage-warning', url: 'http://72.62.170.115:3000/projects/studio5/app/studio5-tickets/storage' }
+        );
+      }
+    } catch (err) {
+      console.error('Error en monitoreo de almacenamiento:', err.message);
+    }
+  };
+
+  // Revisar al inicio y luego cada hora
+  setTimeout(checkStorage, 30000);
+  setInterval(checkStorage, 60 * 60 * 1000);
+};
+
 initDatabase()
   .then(() => runMigrations())
   .then(() => {
@@ -184,6 +227,7 @@ initDatabase()
       console.log(`Servidor de Tickets corriendo en el puerto ${PORT}`);
       console.log(`Modo: ${process.env.NODE_ENV || 'development'}`);
     });
+    startStorageMonitor();
   })
   .catch(err => {
     console.error('❌ Error durante la inicialización del servidor:', err);

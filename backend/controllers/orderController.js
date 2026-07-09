@@ -1,5 +1,6 @@
 const { query, pool } = require('../config/db');
 const { sendTicketEmail, sendPendingTransferEmail } = require('../services/emailService');
+const { sendPushToAdmins } = require('../services/pushService');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
@@ -380,7 +381,7 @@ exports.createOrder = async (req, res) => {
     await client.query('COMMIT');
     client.release();
 
-    // 7. Enviar correo electrónico
+    // 7. Enviar correo electrónico + notificación push al admin
     if (paymentStatus === 'Pendiente' && email && email.includes('@')) {
       sendPendingTransferEmail({
         email,
@@ -393,6 +394,14 @@ exports.createOrder = async (req, res) => {
         ticketDesglose: desglose,
         amountTotal: finalAmount
       }).catch(err => console.error('Error al enviar email de transferencia pendiente:', err));
+
+      // Push al admin: comprobante pendiente de revisión
+      sendPushToAdmins(
+        '🧾 Comprobante por revisar',
+        `${nombre} envió un comprobante de transferencia por $${finalAmount.toFixed(2)} — ${event.title}`,
+        { tag: 'transfer-pending', url: '/admin?tab=transferencias' }
+      ).catch(() => {});
+
     } else if (paymentStatus !== 'Pendiente' && email && email.includes('@')) {
       sendTicketEmail({
         email,
@@ -405,6 +414,13 @@ exports.createOrder = async (req, res) => {
         ticketDesglose: desglose,
         tickets: createdTickets
       }).catch(err => console.error('Error al enviar email en background:', err));
+
+      // Push al admin: venta directa confirmada
+      sendPushToAdmins(
+        '💳 Nueva venta confirmada',
+        `${nombre} compró ${totalQty} entrada(s) para ${event.title} — $${finalAmount.toFixed(2)}`,
+        { tag: 'new-sale', url: '/admin?tab=ventas' }
+      ).catch(() => {});
     }
 
     res.status(201).json({
@@ -573,6 +589,13 @@ exports.updateOrderStatus = async (req, res) => {
           ticketDesglose: desglose,
           tickets: tickets
         }).catch(err => console.error('Error al enviar email al actualizar orden:', err));
+
+        // Push al admin: pago con tarjeta confirmado vía Payphone
+        sendPushToAdmins(
+          '💳 Pago con tarjeta confirmado',
+          `${order.customer_name} pagó $${order.amount_total} con tarjeta — ${event.title}`,
+          { tag: 'card-payment', url: '/admin?tab=ventas' }
+        ).catch(() => {});
       }
     }
 

@@ -71,6 +71,23 @@ const applyMigrations = async () => {
     console.error('Error seeding bank_accounts table:', err.message);
   }
 
+  // Tabla de suscripciones push (notificaciones web)
+  await safe(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT UNIQUE NOT NULL,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  // Columna comprobante_url en orders (si no existe ya)
+  await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS comprobante_url TEXT;");
+
   console.log('✅ Migraciones de columnas aplicadas correctamente.');
 };
 
