@@ -119,6 +119,40 @@ app.get('/api/debug-events', async (req, res) => {
   }
 });
 
+// Ruta de diagnóstico de archivos subidos (temporal)
+app.get('/api/debug-uploads', (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const uploadsDir = path.join(__dirname, 'public', 'uploads');
+    
+    const getFiles = (dir) => {
+      if (!fs.existsSync(dir)) return { exists: false, files: [] };
+      const items = fs.readdirSync(dir);
+      const files = [];
+      items.forEach(item => {
+        const fullPath = path.join(dir, item);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          files.push({ name: item, isDir: true, contents: getFiles(fullPath) });
+        } else {
+          files.push({ name: item, size: stat.size, isDir: false });
+        }
+      });
+      return { exists: true, files };
+    };
+
+    res.json({
+      uploadsDir,
+      structure: getFiles(uploadsDir),
+      publicDirExists: fs.existsSync(path.join(__dirname, 'public')),
+      publicContents: fs.existsSync(path.join(__dirname, 'public')) ? fs.readdirSync(path.join(__dirname, 'public')) : []
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Ruta para obtener la configuración pública de Payphone
 app.get('/api/config/payphone', (req, res) => {
   res.json({
