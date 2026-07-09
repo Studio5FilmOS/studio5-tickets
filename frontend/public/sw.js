@@ -36,8 +36,8 @@ self.addEventListener('activate', (event) => {
 
 // Interceptar peticiones para servir desde caché si está fuera de línea
 self.addEventListener('fetch', (event) => {
-  // Ignorar peticiones de la API de backend para evitar cachear datos dinámicos o POSTs
-  if (event.request.url.includes('/api/')) {
+  // Ignorar peticiones de la API de backend y subidas dinámicas de usuario
+  if (event.request.url.includes('/api/') || event.request.url.includes('/uploads/')) {
     return;
   }
 

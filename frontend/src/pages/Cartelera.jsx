@@ -10,7 +10,8 @@ const getImageUrl = (url) => {
   }
   const apiUrl = import.meta.env.VITE_API_URL || '';
   const backendUrl = apiUrl.replace(/\/api$/, '');
-  return `${backendUrl}${url}`;
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return `${backendUrl}${cleanUrl}`;
 };
 
 const Cartelera = () => {
