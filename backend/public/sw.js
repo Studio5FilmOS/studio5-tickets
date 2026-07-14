@@ -36,30 +36,67 @@ self.addEventListener('activate', (event) => {
 
 // Interceptar peticiones para servir desde caché si está fuera de línea
 self.addEventListener('fetch', (event) => {
-  // Ignorar peticiones de la API de backend y subidas dinámicas de usuario
-  if (event.request.url.includes('/api/') || event.request.url.includes('/uploads/')) {
+  // Solo interceptar peticiones GET
+  if (event.request.method !== 'GET') {
     return;
   }
 
+  const url = event.request.url;
+  const isSameOrigin = url.startsWith(self.location.origin);
+  const isGoogleFont = url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com');
+
+  // Ignorar peticiones externas (como pasarela Payphone, etc.)
+  if (!isSameOrigin && !isGoogleFont) {
+    return;
+  }
+
+  // Ignorar peticiones de la API de backend y archivos dinámicos de uploads
+  if (url.includes('/api/') || url.includes('/uploads/')) {
+    return;
+  }
+
+  const isHtmlNavigation = 
+    event.request.mode === 'navigate' || 
+    (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'));
+
+  if (isHtmlNavigation) {
+    // Estrategia: Red-Primero (Network-First) para navegación HTML
+    // Esto asegura que si el usuario está online, siempre obtenga el index.html más reciente
+    // y evita problemas de versiones cruzadas en actualizaciones de producción.
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              // Guardar el index.html fresco en el caché para uso offline
+              cache.put('/index.html', responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // Si no hay red (offline), servir el index.html desde el caché
+          return caches.match('/index.html');
+        })
+    );
+    return;
+  }
+
+  // Estrategia: Caché-Primero (Cache-First) para assets estáticos (JS, CSS, imágenes locales, fuentes)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
       return fetch(event.request).then((networkResponse) => {
-        // Cachear dinámicamente nuevos recursos estáticos
-        if (event.request.method === 'GET' && networkResponse.status === 200) {
-          return caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, networkResponse.clone());
-            return networkResponse;
+        if (networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
           });
         }
         return networkResponse;
-      }).catch(() => {
-        // Fallback offline para navegación HTML
-        if (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html')) {
-          return caches.match('/index.html');
-        }
       });
     })
   );
