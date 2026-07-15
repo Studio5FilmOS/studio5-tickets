@@ -299,7 +299,7 @@ const DetalleObra = () => {
             lang: "es",
             defaultMethod: "card",
             email: email || '',
-            phoneNumber: whatsapp ? whatsapp.replace(/\D/g, '') : '',
+            phoneNumber: whatsapp ? whatsapp.replace(/\D/g, '') : '0000000000',
             ...(isFinalConsumer ? {} : { documentId: billingIdNumber || '' })
           });
           ppb.render('payphone-element');
@@ -536,7 +536,12 @@ const DetalleObra = () => {
     }
 
     if (metodoPago === 'Payphone') {
-      // Si el método es Payphone, desplegamos la simulación del botón/widget de pago con tarjeta
+      // Payphone requiere número de celular para renderizar su widget
+      if (!whatsapp || whatsapp.replace(/\D/g, '').length < 7) {
+        Swal.fire('Número requerido', 'Por favor ingresa tu número de WhatsApp/celular antes de pagar con tarjeta. Payphone lo necesita para procesar el cobro.', 'warning');
+        return;
+      }
+      // Si el método es Payphone, desplegamos el widget de pago con tarjeta
       setShowPayphoneModal(true);
     } else {
       // Si es efectivo/reserva o transferencia, procesamos directo
@@ -1041,8 +1046,14 @@ const DetalleObra = () => {
 
         <div style={{ display: 'flex', gap: '15px' }}>
           <div style={{ flex: '1' }}>
-            <label>WhatsApp</label>
-            <input type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="Ej: 0995123456" />
+            <label>WhatsApp {metodoPago === 'Payphone' && <span style={{ color: 'var(--error)', fontWeight: 'bold' }}>*</span>}</label>
+            <input
+              type="tel"
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+              placeholder={metodoPago === 'Payphone' ? 'Requerido para pago con tarjeta' : 'Ej: 0995123456'}
+              style={metodoPago === 'Payphone' && !whatsapp ? { borderColor: 'var(--error)' } : {}}
+            />
           </div>
           <div style={{ flex: '1' }}>
             <label>Email (Recomendado)</label>
