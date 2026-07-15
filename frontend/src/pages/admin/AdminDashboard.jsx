@@ -1354,7 +1354,19 @@ const AdminDashboard = () => {
                       </div>
 
                       {/* Acciones */}
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {o.comprobante_url && (
+                          <button
+                            onClick={() => setSelectedReceiptUrl(o.comprobante_url)}
+                            style={{
+                              flex: '1 1 100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                              padding: '8px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer',
+                              background: 'rgba(255,255,255,0.08)', color: '#fff', fontWeight: '700', fontSize: '0.78rem'
+                            }}
+                          >
+                            <Receipt size={13} /> Ver Comprobante
+                          </button>
+                        )}
                         {o.payment_status === 'Pendiente' && (
                           <button
                             onClick={() => handleUpdateStatus(o.id, o.payment_status, 'Pagado')}
