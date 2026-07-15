@@ -111,11 +111,13 @@ exports.resendPendingEmails = async (req, res) => {
         });
 
       } catch (emailErr) {
+        const errMsg = emailErr && (emailErr.message || String(emailErr));
+        console.error(`[resend] Error en ${order.order_num}:`, errMsg);
         results.push({
           order_num:  order.order_num,
           email:      order.customer_email,
           status:     'ERROR',
-          error:      emailErr.message,
+          error:      errMsg,
           tipo,
           payment_status: order.payment_status,
           dry_run:    dryRun
