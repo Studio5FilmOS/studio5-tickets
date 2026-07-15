@@ -54,7 +54,7 @@ const verifyPayphoneTransaction = (transactionId, clientTxId) => {
       return resolve(true);
     }
 
-    const host = payphoneEnv === 'production' ? 'pay.payphone.app' : 'pay.payphonetodoesposible.com';
+    const host = 'pay.payphonetodoesposible.com';
     const path = '/api/button/V2/Confirm';
     const payload = JSON.stringify({
       id: parseInt(transactionId) || 0,

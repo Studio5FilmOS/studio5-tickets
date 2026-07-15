@@ -9,7 +9,7 @@ const https = require('https');
 exports.verifyTransaction = (transactionId, clientTxId) => {
   return new Promise((resolve, reject) => {
     const env = process.env.PAYPHONE_ENV || 'sandbox';
-    const host = env === 'production' ? 'pay.payphone.app' : 'pay.payphonetodoesposible.com';
+    const host = 'pay.payphonetodoesposible.com';
     const path = '/api/button/V2/Confirm';
     const token = process.env.PAYPHONE_TOKEN;
 
