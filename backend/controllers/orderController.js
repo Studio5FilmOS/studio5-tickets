@@ -83,8 +83,18 @@ const verifyPayphoneTransaction = (transactionId, clientTxId) => {
       res.on('end', () => {
         try {
           const response = JSON.parse(data);
-          // Si el estado devuelto por Payphone es Approved, la transacción es válida
-          if (res.statusCode === 200 && response.transactionStatus === 'Approved') {
+          console.log(`Payphone Confirm Response:`, response);
+          
+          // Si el estado devuelto por Payphone es Approved, o el statusCode es 3 (Aprobado), la transacción es válida
+          const isApproved = res.statusCode === 200 && (
+            response.transactionStatus === 'Approved' || 
+            response.transactionStatus === 'Aprobado' || 
+            response.statusCode === 3 || 
+            response.status === 'success' ||
+            response.status === 'Approved'
+          );
+
+          if (isApproved) {
             console.log(`Payphone: Transacción ${transactionId} verificada con éxito.`);
             resolve(true);
           } else {
@@ -92,7 +102,7 @@ const verifyPayphoneTransaction = (transactionId, clientTxId) => {
             resolve(false);
           }
         } catch (err) {
-          console.error('Payphone: Error al parsear respuesta:', err);
+          console.error('Payphone: Error al parsear respuesta:', err, data);
           resolve(false);
         }
       });

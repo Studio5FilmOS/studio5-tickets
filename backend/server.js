@@ -111,7 +111,12 @@ app.get('/api/debug-events', async (req, res) => {
         DB_HOST: process.env.DB_HOST,
         DB_DATABASE: process.env.DB_DATABASE,
         DB_USER: process.env.DB_USER,
-        NODE_ENV: process.env.NODE_ENV
+        NODE_ENV: process.env.NODE_ENV,
+        SMTP_HOST: process.env.SMTP_HOST,
+        SMTP_PORT: process.env.SMTP_PORT,
+        SMTP_SECURE: process.env.SMTP_SECURE,
+        SMTP_USER: process.env.SMTP_USER,
+        SMTP_PASS: process.env.SMTP_PASS ? (process.env.SMTP_PASS.slice(0, 3) + '...' + process.env.SMTP_PASS.slice(-2)) : undefined
       }
     });
   } catch (err) {
