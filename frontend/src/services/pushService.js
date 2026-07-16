@@ -24,25 +24,26 @@ export const subscribeToPush = async (token) => {
     return false;
   }
 
-  // Pedir clave pública VAPID al backend
+  // 1. Solicitar permiso de Inmediato (antes de cualquier fetch asíncrono)
+  // Esto es un requisito de seguridad de navegadores modernos como Chrome
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    console.warn('Permiso de notificaciones denegado.');
+    return false;
+  }
+
+  // 2. Pedir clave pública VAPID al backend
   const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`);
   const { publicKey } = await vapidRes.json();
 
-  // Registrar/obtener el Service Worker
+  // 3. Registrar/obtener el Service Worker
   const registration = await navigator.serviceWorker.ready;
 
-  // Verificar si ya existe una suscripción activa
+  // 4. Verificar si ya existe una suscripción activa
   let subscription = await registration.pushManager.getSubscription();
 
   if (!subscription) {
-    // Solicitar permiso al usuario
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      console.warn('Permiso de notificaciones denegado.');
-      return false;
-    }
-
-    // Crear nueva suscripción
+    // 5. Crear nueva suscripción
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(publicKey)
