@@ -16,5 +16,10 @@ router.get('/', authMiddleware, roleMiddleware(['admin', 'staff']), orderControl
 
 // Actualizar estado de orden (Admin - Aprobar/Anular)
 router.patch('/:id/status', authMiddleware, roleMiddleware(['admin']), orderController.updateOrderStatus);
+// Editar detalles de orden (Admin/Staff)
+router.patch('/:id', authMiddleware, roleMiddleware(['admin', 'staff']), orderController.updateOrder);
+
+// Subir comprobante a orden existente (Admin/Staff)
+router.post('/:id/receipt', authMiddleware, roleMiddleware(['admin', 'staff']), orderController.uploadReceipt);
 
 module.exports = router;

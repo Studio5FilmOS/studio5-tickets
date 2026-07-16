@@ -127,23 +127,31 @@ const DetalleObra = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Helper para persistencia en móviles
+  const getDraft = (key, defaultVal) => {
+    try {
+      const draft = JSON.parse(sessionStorage.getItem(`draft_order_${id}`));
+      return draft && draft[key] !== undefined ? draft[key] : defaultVal;
+    } catch { return defaultVal; }
+  };
+
   // Estados del Formulario de Compra
-  const [scheduleId, setScheduleId] = useState('');
-  const [tipoVenta, setTipoVenta] = useState('Venta');
-  const [metodoPago, setMetodoPago] = useState(''); // Se establecerá por defecto según rol
-  const [banco, setBanco] = useState('Pichincha');
-  const [bancoOtro, setBancoOtro] = useState('');
-  const [numTransaccion, setNumTransaccion] = useState('');
-  const [nombre, setNombre] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
-  const [email, setEmail] = useState('');
+  const [scheduleId, setScheduleId] = useState(() => getDraft('scheduleId', ''));
+  const [tipoVenta, setTipoVenta] = useState(() => getDraft('tipoVenta', 'Venta'));
+  const [metodoPago, setMetodoPago] = useState(() => getDraft('metodoPago', '')); 
+  const [banco, setBanco] = useState(() => getDraft('banco', 'Pichincha'));
+  const [bancoOtro, setBancoOtro] = useState(() => getDraft('bancoOtro', ''));
+  const [numTransaccion, setNumTransaccion] = useState(() => getDraft('numTransaccion', ''));
+  const [nombre, setNombre] = useState(() => getDraft('nombre', ''));
+  const [whatsapp, setWhatsapp] = useState(() => getDraft('whatsapp', ''));
+  const [email, setEmail] = useState(() => getDraft('email', ''));
   
   // Para eventos no numerados
-  const [cantAdultos, setCantAdultos] = useState(1);
-  const [cantNinos, setCantNinos] = useState(0);
+  const [cantAdultos, setCantAdultos] = useState(() => getDraft('cantAdultos', 1));
+  const [cantNinos, setCantNinos] = useState(() => getDraft('cantNinos', 0));
 
   // Para eventos numerados
-  const [selectedSeats, setSelectedSeats] = useState([]);
+  const [selectedSeats, setSelectedSeats] = useState(() => getDraft('selectedSeats', []));
 
   // Estados de Payphone
   const [showPayphoneModal, setShowPayphoneModal] = useState(false);
@@ -158,11 +166,25 @@ const DetalleObra = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Estados de Facturación
-  const [isFinalConsumer, setIsFinalConsumer] = useState(true);
-  const [billingIdNumber, setBillingIdNumber] = useState('');
-  const [billingName, setBillingName] = useState('');
-  const [billingAddress, setBillingAddress] = useState('');
-  const [billingEmail, setBillingEmail] = useState('');
+  const [isFinalConsumer, setIsFinalConsumer] = useState(() => getDraft('isFinalConsumer', true));
+  const [billingIdNumber, setBillingIdNumber] = useState(() => getDraft('billingIdNumber', ''));
+  const [billingName, setBillingName] = useState(() => getDraft('billingName', ''));
+  const [billingAddress, setBillingAddress] = useState(() => getDraft('billingAddress', ''));
+  const [billingEmail, setBillingEmail] = useState(() => getDraft('billingEmail', ''));
+
+  // Efecto para guardar en sessionStorage cada vez que cambian los campos
+  useEffect(() => {
+    const draft = {
+      scheduleId, tipoVenta, metodoPago, banco, bancoOtro, numTransaccion,
+      nombre, whatsapp, email, cantAdultos, cantNinos, selectedSeats,
+      isFinalConsumer, billingIdNumber, billingName, billingAddress, billingEmail
+    };
+    sessionStorage.setItem(`draft_order_${id}`, JSON.stringify(draft));
+  }, [
+    scheduleId, tipoVenta, metodoPago, banco, bancoOtro, numTransaccion,
+    nombre, whatsapp, email, cantAdultos, cantNinos, selectedSeats,
+    isFinalConsumer, billingIdNumber, billingName, billingAddress, billingEmail, id
+  ]);
 
   // Nuevos estados para transferencia bancaria
   const [comprobanteBase64, setComprobanteBase64] = useState('');
@@ -439,6 +461,9 @@ const DetalleObra = () => {
     try {
       const res = await api.post('/orders', payload);
       if (res.data.status === 'OK') {
+        // Limpiar sessionStorage tras compra exitosa
+        sessionStorage.removeItem(`draft_order_${id}`);
+        
         const isPending = res.data.order?.payment_status === 'Pendiente';
         if (isPending) {
           Swal.fire('¡Reserva Registrada!', 'Tu comprobante ha sido recibido. Se encuentra pendiente de verificación.', 'success');

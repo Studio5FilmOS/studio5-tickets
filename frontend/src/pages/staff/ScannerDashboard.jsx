@@ -441,6 +441,66 @@ const ManualRegistryTab = () => {
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [expandedOrder, setExpandedOrder] = useState(null);
 
+  // Estados para edición y comprobante
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [orderEditForm, setOrderEditForm] = useState({});
+  const [uploadingReceiptOrder, setUploadingReceiptOrder] = useState(null);
+  const [selectedReceiptUrl, setSelectedReceiptUrl] = useState(null);
+
+  const handleUpdateOrderDetails = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.patch(`/orders/${editingOrder.id}`, orderEditForm);
+      if (res.data.status === 'OK') {
+        Swal.fire('¡Éxito!', 'Los datos de la orden fueron actualizados.', 'success');
+        setEditingOrder(null);
+        fetchOrders();
+      } else {
+        Swal.fire('Error', res.data.message || 'Error al actualizar', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', err.response?.data?.message || 'Error de conexión', 'error');
+    }
+  };
+
+  const compressImage = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = ev => resolve(ev.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const handleUploadReceipt = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      Swal.fire('Error', 'Selecciona un archivo de imagen válido', 'error');
+      return;
+    }
+
+    Swal.fire({ title: 'Subiendo comprobante...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+      const base64 = await compressImage(file);
+      const res = await api.post(`/orders/${uploadingReceiptOrder.id}/receipt`, { comprobanteBase64: base64 });
+      
+      Swal.close();
+      if (res.data.status === 'OK') {
+        Swal.fire('¡Éxito!', 'Comprobante subido correctamente.', 'success');
+        setUploadingReceiptOrder(null);
+        fetchOrders();
+      } else {
+        Swal.fire('Error', res.data.message || 'Error al subir', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.close();
+      Swal.fire('Error', err.response?.data?.message || 'Error de conexión', 'error');
+    }
+  };
+
   const fetchOrders = async () => {
     setLoading(true);
     try {
@@ -765,20 +825,123 @@ const ManualRegistryTab = () => {
                       )}
                     </div>
 
-                    {o.payment_status !== 'Anulado' && (
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                      {o.payment_status !== 'Anulado' && (
+                        <button
+                          onClick={() => handleManualCheckIn(o.id, o.order_num)}
+                          className="btn-primary"
+                          style={{ padding: '8px', fontSize: '0.78rem', flex: '1 1 100%' }}
+                        >
+                          <UserCheck size={15} /> Registrar Ingreso Manual
+                        </button>
+                      )}
+                      
                       <button
-                        onClick={() => handleManualCheckIn(o.id, o.order_num)}
-                        className="btn-primary"
-                        style={{ padding: '10px', fontSize: '0.82rem' }}
+                        onClick={() => {
+                          setEditingOrder(o);
+                          setOrderEditForm({
+                            customer_name: o.customer_name || '',
+                            customer_email: o.customer_email || '',
+                            customer_whatsapp: o.customer_whatsapp || '',
+                            is_final_consumer: Boolean(o.is_final_consumer),
+                            billing_id_number: o.billing_id_number || '',
+                            billing_name: o.billing_name || '',
+                            billing_address: o.billing_address || '',
+                            billing_email: o.billing_email || ''
+                          });
+                        }}
+                        style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                          padding: '8px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer',
+                          background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', fontWeight: '700', fontSize: '0.78rem'
+                        }}
                       >
-                        <UserCheck size={15} /> Registrar Ingreso Manual
+                        Editar Datos
                       </button>
-                    )}
+
+                      {o.payment_status === 'Pendiente' && !o.comprobante_url && (
+                        <button
+                          onClick={() => setUploadingReceiptOrder(o)}
+                          style={{
+                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                            padding: '8px', borderRadius: '10px', border: '1px solid rgba(222,184,65,0.25)', cursor: 'pointer',
+                            background: 'rgba(222,184,65,0.15)', color: '#DEB841', fontWeight: '700', fontSize: '0.78rem'
+                          }}
+                        >
+                          Subir Comprobante
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal Editar Orden */}
+      {editingOrder && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '20px' }} className="fade-in">
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '20px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ color: '#fff', marginBottom: '5px' }}>Editar Datos</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{editingOrder.order_num}</p>
+            
+            <form onSubmit={handleUpdateOrderDetails} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
+              <label>Nombre del Cliente</label>
+              <input type="text" value={orderEditForm.customer_name} onChange={e => setOrderEditForm({...orderEditForm, customer_name: e.target.value})} required />
+              
+              <label>WhatsApp</label>
+              <input type="text" value={orderEditForm.customer_whatsapp} onChange={e => setOrderEditForm({...orderEditForm, customer_whatsapp: e.target.value})} />
+              
+              <label>Email</label>
+              <input type="email" value={orderEditForm.customer_email} onChange={e => setOrderEditForm({...orderEditForm, customer_email: e.target.value})} />
+              
+              <div style={{ margin: '15px 0' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#fff', fontSize: '0.9rem' }}>
+                  <input type="checkbox" checked={orderEditForm.is_final_consumer} onChange={e => setOrderEditForm({...orderEditForm, is_final_consumer: e.target.checked})} style={{ width: 'auto' }} />
+                  Consumidor Final
+                </label>
+              </div>
+
+              {!orderEditForm.is_final_consumer && (
+                <>
+                  <label>RUC/Cédula Facturación</label>
+                  <input type="text" value={orderEditForm.billing_id_number} onChange={e => setOrderEditForm({...orderEditForm, billing_id_number: e.target.value})} required />
+                  <label>Nombre Facturación</label>
+                  <input type="text" value={orderEditForm.billing_name} onChange={e => setOrderEditForm({...orderEditForm, billing_name: e.target.value})} required />
+                  <label>Dirección Facturación</label>
+                  <input type="text" value={orderEditForm.billing_address} onChange={e => setOrderEditForm({...orderEditForm, billing_address: e.target.value})} required />
+                  <label>Email Facturación</label>
+                  <input type="email" value={orderEditForm.billing_email} onChange={e => setOrderEditForm({...orderEditForm, billing_email: e.target.value})} required />
+                </>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button type="button" onClick={() => setEditingOrder(null)} className="btn-outline" style={{ flex: 1 }}>Cancelar</button>
+                <button type="submit" className="btn-primary" style={{ flex: 1 }}>Guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Subir Comprobante */}
+      {uploadingReceiptOrder && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '20px' }} className="fade-in">
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '350px', padding: '20px', textAlign: 'center' }}>
+            <h3 style={{ color: '#fff', marginBottom: '5px' }}>Subir Comprobante</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '5px 0 20px 0' }}>{uploadingReceiptOrder.order_num}</p>
+            
+            <input 
+              type="file" 
+              accept="image/*"
+              onChange={handleUploadReceipt}
+              style={{ display: 'block', width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', color: '#fff' }}
+            />
+
+            <button type="button" onClick={() => setUploadingReceiptOrder(null)} className="btn-outline" style={{ width: '100%', marginTop: '20px' }}>Cancelar</button>
+          </div>
         </div>
       )}
     </div>

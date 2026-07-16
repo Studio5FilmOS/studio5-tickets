@@ -626,3 +626,93 @@ exports.updateOrderStatus = async (req, res) => {
     });
   }
 };
+
+// Actualizar detalles de una orden (Admin/Staff)
+exports.updateOrder = async (req, res) => {
+  const { id } = req.params;
+  const {
+    customer_name,
+    customer_email,
+    customer_whatsapp,
+    is_final_consumer,
+    billing_id_number,
+    billing_name,
+    billing_address,
+    billing_email
+  } = req.body;
+
+  try {
+    const updateRes = await query(
+      `UPDATE orders SET 
+        customer_name = COALESCE($1, customer_name),
+        customer_email = COALESCE($2, customer_email),
+        customer_whatsapp = COALESCE($3, customer_whatsapp),
+        is_final_consumer = COALESCE($4, is_final_consumer),
+        billing_id_number = COALESCE($5, billing_id_number),
+        billing_name = COALESCE($6, billing_name),
+        billing_address = COALESCE($7, billing_address),
+        billing_email = COALESCE($8, billing_email),
+        updated_at = NOW()
+       WHERE id = $9 RETURNING *`,
+      [
+        customer_name, customer_email, customer_whatsapp, 
+        is_final_consumer, billing_id_number, billing_name, billing_address, billing_email,
+        id
+      ]
+    );
+
+    if (updateRes.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Orden no encontrada.' });
+    }
+
+    res.json({
+      status: 'OK',
+      message: 'Orden actualizada correctamente.',
+      order: updateRes.rows[0]
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Error al actualizar la orden',
+      error: err.message
+    });
+  }
+};
+
+// Subir comprobante a una orden existente
+exports.uploadReceipt = async (req, res) => {
+  const { id } = req.params;
+  const { comprobanteBase64 } = req.body;
+
+  if (!comprobanteBase64) {
+    return res.status(400).json({ status: 'ERROR', message: 'No se envió un comprobante válido.' });
+  }
+
+  try {
+    const comprobanteUrl = saveReceiptFile(comprobanteBase64);
+    if (!comprobanteUrl) {
+      return res.status(500).json({ status: 'ERROR', message: 'Error al procesar el archivo del comprobante.' });
+    }
+
+    const updateRes = await query(
+      "UPDATE orders SET comprobante_url = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+      [comprobanteUrl, id]
+    );
+
+    if (updateRes.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Orden no encontrada.' });
+    }
+
+    res.json({
+      status: 'OK',
+      message: 'Comprobante subido exitosamente.',
+      order: updateRes.rows[0]
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Error al subir el comprobante',
+      error: err.message
+    });
+  }
+};
