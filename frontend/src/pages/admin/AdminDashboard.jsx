@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
 import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff } from 'lucide-react';
@@ -2421,7 +2422,7 @@ const AdminDashboard = () => {
       )}
 
       {/* Modal Visor de Comprobante */}
-      {selectedReceiptUrl && (
+      {selectedReceiptUrl && createPortal(
         <div 
           onClick={() => setSelectedReceiptUrl(null)}
           style={{
@@ -2478,12 +2479,13 @@ const AdminDashboard = () => {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Editar Orden */}
-      {editingOrder && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }} className="fade-in">
+      {editingOrder && createPortal(
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '20px' }} className="fade-in">
           <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '20px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ color: '#fff', marginBottom: '5px' }}>Editar Datos</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{editingOrder.order_num}</p>
@@ -2524,12 +2526,13 @@ const AdminDashboard = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Subir Comprobante */}
-      {uploadingReceiptOrder && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }} className="fade-in">
+      {uploadingReceiptOrder && createPortal(
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '20px' }} className="fade-in">
           <div className="glass-panel" style={{ width: '100%', maxWidth: '350px', padding: '20px', textAlign: 'center' }}>
             <h3 style={{ color: '#fff', marginBottom: '5px' }}>Subir Comprobante</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '5px 0 20px 0' }}>{uploadingReceiptOrder.order_num}</p>
@@ -2543,7 +2546,8 @@ const AdminDashboard = () => {
 
             <button type="button" onClick={() => setUploadingReceiptOrder(null)} className="btn-outline" style={{ width: '100%', marginTop: '20px' }}>Cancelar</button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

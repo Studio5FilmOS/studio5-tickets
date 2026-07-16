@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
@@ -893,7 +894,7 @@ const ManualRegistryTab = () => {
       )}
 
       {/* Modal Editar Orden */}
-      {editingOrder && (
+      {editingOrder && createPortal(
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '20px' }} className="fade-in">
           <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '20px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ color: '#fff', marginBottom: '5px' }}>Editar Datos</h3>
@@ -935,11 +936,12 @@ const ManualRegistryTab = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Subir Comprobante */}
-      {uploadingReceiptOrder && (
+      {uploadingReceiptOrder && createPortal(
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '20px' }} className="fade-in">
           <div className="glass-panel" style={{ width: '100%', maxWidth: '350px', padding: '20px', textAlign: 'center' }}>
             <h3 style={{ color: '#fff', marginBottom: '5px' }}>Subir Comprobante</h3>
@@ -954,7 +956,8 @@ const ManualRegistryTab = () => {
 
             <button type="button" onClick={() => setUploadingReceiptOrder(null)} className="btn-outline" style={{ width: '100%', marginTop: '20px' }}>Cancelar</button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
