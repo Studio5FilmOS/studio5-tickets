@@ -75,6 +75,18 @@ const AdminDashboard = () => {
   const [status, setStatus] = useState('active');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Bloquear scroll de fondo cuando hay modales abiertos
+  useEffect(() => {
+    if (editingOrder || uploadingReceiptOrder || selectedReceiptUrl) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [editingOrder, uploadingReceiptOrder, selectedReceiptUrl]);
+
   // Estados nuevos para el selector dinámico de fechas
   const [schedulesList, setSchedulesList] = useState([]);
   const [tempDate, setTempDate] = useState('');

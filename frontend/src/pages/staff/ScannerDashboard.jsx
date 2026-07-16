@@ -447,6 +447,18 @@ const ManualRegistryTab = () => {
   const [uploadingReceiptOrder, setUploadingReceiptOrder] = useState(null);
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState(null);
 
+  // Bloquear scroll de fondo cuando hay modales abiertos
+  useEffect(() => {
+    if (editingOrder || uploadingReceiptOrder || selectedReceiptUrl) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [editingOrder, uploadingReceiptOrder, selectedReceiptUrl]);
+
   const handleUpdateOrderDetails = async (e) => {
     e.preventDefault();
     try {
