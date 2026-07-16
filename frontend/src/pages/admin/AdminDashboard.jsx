@@ -1130,14 +1130,14 @@ const AdminDashboard = () => {
                 setPushSubscribed(false);
                 Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Notificaciones desactivadas', showConfirmButton: false, timer: 2500 });
               } else {
-                const ok = await subscribeToPush(token);
-                if (ok) {
+                const result = await subscribeToPush(token);
+                if (result.success) {
                   setPushSubscribed(true);
                   // Enviar notificación de prueba
                   await api.post('/push/test');
                   Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: '🔔 Notificaciones activadas', text: 'Recibirás alertas de ventas y comprobantes', showConfirmButton: false, timer: 3500 });
                 } else {
-                  Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'Permiso denegado', text: 'Activa las notificaciones en la configuración del navegador', showConfirmButton: false, timer: 4000 });
+                  Swal.fire({ toast: true, position: 'top-end', icon: 'error', title: 'No se pudo activar', text: result.reason, showConfirmButton: false, timer: 6000 });
                 }
               }
             } catch (err) {

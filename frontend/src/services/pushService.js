@@ -19,49 +19,51 @@ const urlBase64ToUint8Array = (base64String) => {
  * @returns {boolean} true si se activó, false si se denegó o ya estaba activo
  */
 export const subscribeToPush = async (token) => {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('Push notifications no soportadas en este navegador.');
-    return false;
-  }
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return { success: false, reason: 'Navegador no soporta notificaciones push (o modo incógnito).' };
+    }
 
-  // 1. Solicitar permiso de Inmediato (antes de cualquier fetch asíncrono)
-  // Esto es un requisito de seguridad de navegadores modernos como Chrome
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') {
-    console.warn('Permiso de notificaciones denegado.');
-    return false;
-  }
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      return { success: false, reason: `Permiso en el navegador: ${permission}` };
+    }
 
-  // 2. Pedir clave pública VAPID al backend
-  const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`);
-  const { publicKey } = await vapidRes.json();
+    const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`);
+    if (!vapidRes.ok) return { success: false, reason: 'Error al obtener VAPID del servidor.' };
+    
+    const { publicKey } = await vapidRes.json();
+    if (!publicKey) return { success: false, reason: 'El servidor no tiene VAPID_PUBLIC_KEY configurado.' };
 
-  // 3. Registrar/obtener el Service Worker
-  const registration = await navigator.serviceWorker.ready;
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
 
-  // 4. Verificar si ya existe una suscripción activa
-  let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+    }
 
-  if (!subscription) {
-    // 5. Crear nueva suscripción
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey)
+    const saveRes = await fetch(`${API_BASE}/api/push/subscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ subscription })
     });
+
+    const result = await saveRes.json();
+    if (result.status === 'OK') {
+      return { success: true };
+    } else {
+      return { success: false, reason: `Backend rechazó suscripción: ${result.message}` };
+    }
+  } catch (err) {
+    console.error('Push Error:', err);
+    return { success: false, reason: `Error interno: ${err.message}` };
   }
-
-  // Guardar suscripción en el backend
-  const saveRes = await fetch(`${API_BASE}/api/push/subscribe`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ subscription })
-  });
-
-  const result = await saveRes.json();
-  return result.status === 'OK';
 };
 
 /**
