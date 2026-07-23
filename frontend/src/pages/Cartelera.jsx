@@ -54,16 +54,261 @@ const Cartelera = () => {
   const getNextSchedule = (schedules) => {
     if (!schedules || schedules.length === 0) return null;
     const upcoming = schedules
-      .filter(s => new Date(s.schedule_time) > new Date() && s.available_capacity > 0)
+      .filter(s => new Date(s.schedule_time) > new Date())
       .sort((a, b) => new Date(a.schedule_time) - new Date(b.schedule_time));
     return upcoming[0] || null;
   };
 
+  const isSchedulePast = (schedule_time) => {
+    return new Date(schedule_time) <= new Date();
+  };
+
+  const isPromoActive = (evt) => {
+    return evt.promo_type !== 'Ninguna' && (!evt.promo_deadline || new Date(evt.promo_deadline) > new Date());
+  };
+
+  const EventCard = ({ evt, index, failedImages, setFailedImages, navigate }) => {
+    // Definimos el horario seleccionado por defecto (el próximo disponible, o el último si todos pasaron)
+    const upcoming = getNextSchedule(evt.schedules);
+    const [selectedScheduleId, setSelectedScheduleId] = useState(upcoming ? upcoming.id : (evt.schedules[0]?.id || null));
+    
+    const selectedSchedule = evt.schedules.find(s => s.id === selectedScheduleId) || evt.schedules[0];
+    
+    const isPast = selectedSchedule ? isSchedulePast(selectedSchedule.schedule_time) : false;
+    const available = selectedSchedule ? selectedSchedule.available_capacity : 0;
+    const isSoldOut = isPast || available === 0;
+    const hasPromo = isPromoActive(evt);
+
+    return (
+      <div
+        style={{
+          borderRadius: '22px', overflow: 'hidden',
+          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(255,255,255,0.025)',
+          transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+          animation: `fadeIn 0.4s ease ${index * 0.07}s both`,
+          display: 'flex', flexDirection: 'column'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'translateY(-3px)';
+          e.currentTarget.style.borderColor = 'rgba(222,184,65,0.25)';
+          e.currentTarget.style.boxShadow = '0 16px 40px rgba(0,0,0,0.5), 0 0 20px rgba(222,184,65,0.08)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+          e.currentTarget.style.boxShadow = 'none';
+        }}
+      >
+        {/* Imagen / Banner */}
+        <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', overflow: 'hidden', background: 'rgba(30,30,30,0.9)' }}>
+          {evt.banner_url && !failedImages[evt.id] ? (
+            <img
+              src={getImageUrl(evt.banner_url)}
+              alt={evt.title}
+              loading="eager"
+              onError={() => {
+                setFailedImages(prev => ({ ...prev, [evt.id]: true }));
+              }}
+              style={{
+                width: '100%', height: '100%', objectFit: 'cover',
+                transition: 'transform 0.5s ease', display: 'block'
+              }}
+            />
+          ) : (
+            /* Fallback placeholder cuando la imagen no carga */
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              background: 'linear-gradient(135deg, rgba(222,184,65,0.08) 0%, rgba(10,10,10,0.95) 100%)',
+              flexDirection: 'column', gap: '8px'
+            }}>
+              <Ticket size={32} color="rgba(222,184,65,0.3)" />
+              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.2)', fontWeight: '600' }}>{evt.title}</span>
+            </div>
+          )}
+
+          {/* Gradiente inferior */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%',
+            background: 'linear-gradient(to top, rgba(5,5,5,0.95) 0%, transparent 100%)'
+          }} />
+
+          {/* Badges sobre imagen */}
+          <div style={{
+            position: 'absolute', top: '12px', left: '12px', right: '12px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'
+          }}>
+            {/* Badge izquierdo */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {hasPromo && (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  background: 'rgba(222,184,65,0.9)', color: '#000',
+                  padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '800',
+                  backdropFilter: 'blur(8px)'
+                }}>
+                  <Flame size={11} /> {evt.promo_type}
+                </div>
+              )}
+            </div>
+
+            {/* Badge derecho: estado */}
+            <div style={{
+              background: isSoldOut
+                ? 'rgba(255,59,48,0.85)'
+                : 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(12px)',
+              padding: '5px 12px', borderRadius: '10px', fontSize: '0.7rem',
+              fontWeight: '700', color: isSoldOut ? '#fff' : '#34c759',
+              border: `1px solid ${isSoldOut ? 'rgba(255,59,48,0.4)' : 'rgba(52,199,89,0.3)'}`,
+              letterSpacing: '0.5px'
+            }}>
+              {isPast ? '✗ PASADA' : (isSoldOut ? '✗ AGOTADO' : `● ${available} disp.`)}
+            </div>
+          </div>
+
+          {/* Si está agotado, overlay */}
+          {isSoldOut && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(1px)'
+            }} />
+          )}
+        </div>
+
+        {/* Contenido inferior */}
+        <div style={{ padding: '18px 20px 20px', flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+          {/* Título */}
+          <h2 style={{
+            fontSize: '1.2rem', fontWeight: 800, color: isSoldOut ? 'var(--text-muted)' : '#fff',
+            marginBottom: '8px', lineHeight: 1.2, letterSpacing: '-0.2px'
+          }}>
+            {evt.title}
+          </h2>
+
+          {/* Venue */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+            <MapPin size={13} color="var(--accent)" strokeWidth={2} />
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+              {evt.venue}
+            </span>
+          </div>
+
+          {/* Funciones disponibles (Chips seleccionables) */}
+          <div style={{ marginBottom: '14px', flexGrow: 1 }}>
+            <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '600', marginBottom: '8px' }}>
+              Selecciona tu función
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {evt.schedules.slice(0, 6).map(sch => {
+                const d = new Date(sch.schedule_time);
+                const past = isSchedulePast(sch.schedule_time);
+                const isSelected = sch.id === selectedScheduleId;
+                const availableSch = sch.available_capacity > 0 && !past;
+                
+                return (
+                  <button
+                    key={sch.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedScheduleId(sch.id);
+                    }}
+                    style={{
+                      padding: '5px 10px', borderRadius: '8px', fontSize: '0.72rem',
+                      fontWeight: '600', lineHeight: 1.3, cursor: 'pointer',
+                      background: isSelected 
+                        ? 'rgba(222,184,65,0.2)' 
+                        : (availableSch ? 'rgba(255,255,255,0.05)' : 'rgba(255,59,48,0.05)'),
+                      border: `1px solid ${isSelected ? '#DEB841' : (availableSch ? 'rgba(255,255,255,0.1)' : 'rgba(255,59,48,0.15)')}`,
+                      color: isSelected ? '#DEB841' : (availableSch ? '#ccc' : 'rgba(255,59,48,0.6)'),
+                      opacity: past ? 0.6 : 1
+                    }}
+                  >
+                    <div>{d.toLocaleDateString('es-EC', { day: 'numeric', month: 'short' })}</div>
+                    <div style={{ opacity: 0.75 }}>
+                      {d.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </button>
+                );
+              })}
+              {evt.schedules.length > 6 && (
+                <div style={{
+                  padding: '5px 10px', borderRadius: '8px', fontSize: '0.72rem',
+                  fontWeight: '600', color: 'var(--accent)', lineHeight: 1.3,
+                  background: 'rgba(222,184,65,0.06)', border: '1px solid rgba(222,184,65,0.15)'
+                }}>
+                  +{evt.schedules.length - 6} más
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CTA */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 'auto'
+          }}>
+            <div>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>
+                Desde
+              </span>
+              {hasPromo && evt.price_promo > 0 ? (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px' }}>
+                  <span style={{
+                    fontSize: '0.85rem', fontWeight: '600',
+                    color: 'rgba(255,255,255,0.35)',
+                    textDecoration: 'line-through',
+                    textDecorationColor: 'rgba(255,59,48,0.6)'
+                  }}>
+                    ${parseFloat(evt.price_adult || 0).toFixed(2)}
+                  </span>
+                  <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#DEB841' }}>
+                    ${parseFloat(evt.price_promo).toFixed(2)}
+                  </span>
+                </div>
+              ) : (
+                <span style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--accent)' }}>
+                  ${parseFloat(evt.price_adult || 0).toFixed(2)}
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/evento/${evt.id}?schedule=${selectedScheduleId}`);
+              }}
+              disabled={isSoldOut}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '10px 18px', borderRadius: '12px',
+                background: isSoldOut
+                  ? 'rgba(255,255,255,0.05)'
+                  : 'linear-gradient(135deg, #DEB841, #b08d2b)',
+                color: isSoldOut ? 'var(--text-muted)' : '#000',
+                fontWeight: '700', fontSize: '0.85rem', cursor: isSoldOut ? 'not-allowed' : 'pointer',
+                boxShadow: isSoldOut ? 'none' : '0 4px 14px rgba(222,184,65,0.3)',
+                border: 'none'
+              }}>
+              {isPast ? 'Pasada' : (isSoldOut ? 'Agotado' : 'Reservar')}
+              {!isSoldOut && <ChevronRight size={16} />}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const filteredEvents = events.filter(evt => {
+    // Si activeFilter es algo que no sea 'all', determinamos si califica
+    const hasActiveUpcoming = evt.schedules.some(s => s.available_capacity > 0 && !isSchedulePast(s.schedule_time));
     const totalAvail = evt.schedules.reduce((a, s) => a + s.available_capacity, 0);
-    if (activeFilter === 'available') return totalAvail > 0;
-    if (activeFilter === 'soldout') return totalAvail === 0;
-    if (activeFilter === 'promo') return evt.promo_type !== 'Ninguna';
+    
+    if (activeFilter === 'available') return hasActiveUpcoming;
+    if (activeFilter === 'soldout') return !hasActiveUpcoming;
+    if (activeFilter === 'promo') return isPromoActive(evt);
     return true;
   });
 
@@ -176,235 +421,16 @@ const Cartelera = () => {
         </div>
       ) : (
         <div className="cartelera-grid">
-          {filteredEvents.map((evt, index) => {
-            const totalAvailable = evt.schedules.reduce((acc, s) => acc + s.available_capacity, 0);
-            const isSoldOut = totalAvailable === 0;
-            const hasPromo = evt.promo_type !== 'Ninguna';
-            const nextSchedule = getNextSchedule(evt.schedules);
-
-            return (
-              <div
-                key={evt.id}
-                onClick={() => navigate(`/evento/${evt.id}`)}
-                style={{
-                  borderRadius: '22px', overflow: 'hidden', cursor: 'pointer',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  background: 'rgba(255,255,255,0.025)',
-                  transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                  animation: `fadeIn 0.4s ease ${index * 0.07}s both`
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.transform = 'translateY(-3px)';
-                  e.currentTarget.style.borderColor = 'rgba(222,184,65,0.25)';
-                  e.currentTarget.style.boxShadow = '0 16px 40px rgba(0,0,0,0.5), 0 0 20px rgba(222,184,65,0.08)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                {/* Imagen / Banner */}
-                <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', overflow: 'hidden', background: 'rgba(30,30,30,0.9)' }}>
-                  {evt.banner_url && !failedImages[evt.id] ? (
-                    <img
-                      src={getImageUrl(evt.banner_url)}
-                      alt={evt.title}
-                      loading="eager"
-                      onError={() => {
-                        setFailedImages(prev => ({ ...prev, [evt.id]: true }));
-                      }}
-                      style={{
-                        width: '100%', height: '100%', objectFit: 'cover',
-                        transition: 'transform 0.5s ease', display: 'block'
-                      }}
-                    />
-                  ) : (
-                    /* Fallback placeholder cuando la imagen no carga */
-                    <div style={{
-                      position: 'absolute', inset: 0,
-                      display: 'flex',
-                      alignItems: 'center', justifyContent: 'center',
-                      background: 'linear-gradient(135deg, rgba(222,184,65,0.08) 0%, rgba(10,10,10,0.95) 100%)',
-                      flexDirection: 'column', gap: '8px'
-                    }}>
-                      <Ticket size={32} color="rgba(222,184,65,0.3)" />
-                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.2)', fontWeight: '600' }}>{evt.title}</span>
-                    </div>
-                  )}
-
-                  {/* Gradiente inferior */}
-                  <div style={{
-                    position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%',
-                    background: 'linear-gradient(to top, rgba(5,5,5,0.95) 0%, transparent 100%)'
-                  }} />
-
-                  {/* Badges sobre imagen */}
-                  <div style={{
-                    position: 'absolute', top: '12px', left: '12px', right: '12px',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'
-                  }}>
-                    {/* Badge izquierdo */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {hasPromo && (
-                        <div style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '5px',
-                          background: 'rgba(222,184,65,0.9)', color: '#000',
-                          padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '800',
-                          backdropFilter: 'blur(8px)'
-                        }}>
-                          <Flame size={11} /> {evt.promo_type}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Badge derecho: estado */}
-                    <div style={{
-                      background: isSoldOut
-                        ? 'rgba(255,59,48,0.85)'
-                        : 'rgba(0,0,0,0.55)',
-                      backdropFilter: 'blur(12px)',
-                      padding: '5px 12px', borderRadius: '10px', fontSize: '0.7rem',
-                      fontWeight: '700', color: isSoldOut ? '#fff' : '#34c759',
-                      border: `1px solid ${isSoldOut ? 'rgba(255,59,48,0.4)' : 'rgba(52,199,89,0.3)'}`,
-                      letterSpacing: '0.5px'
-                    }}>
-                      {isSoldOut ? '✗ AGOTADO' : `● ${totalAvailable} disp.`}
-                    </div>
-                  </div>
-
-                  {/* Si está agotado, overlay */}
-                  {isSoldOut && (
-                    <div style={{
-                      position: 'absolute', inset: 0,
-                      background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(1px)'
-                    }} />
-                  )}
-                </div>
-
-                {/* Contenido inferior */}
-                <div style={{ padding: '18px 20px 20px' }}>
-                  {/* Título */}
-                  <h2 style={{
-                    fontSize: '1.2rem', fontWeight: 800, color: isSoldOut ? 'var(--text-muted)' : '#fff',
-                    marginBottom: '8px', lineHeight: 1.2, letterSpacing: '-0.2px'
-                  }}>
-                    {evt.title}
-                  </h2>
-
-                  {/* Venue */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-                    <MapPin size={13} color="var(--accent)" strokeWidth={2} />
-                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-                      {evt.venue}
-                    </span>
-                  </div>
-
-                  {/* Próxima función */}
-                  {nextSchedule && (
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '7px',
-                      background: 'rgba(222,184,65,0.07)', border: '1px solid rgba(222,184,65,0.18)',
-                      padding: '7px 12px', borderRadius: '10px', marginBottom: '14px'
-                    }}>
-                      <Clock size={13} color="#DEB841" />
-                      <span style={{ fontSize: '0.78rem', color: '#DEB841', fontWeight: '600' }}>
-                        Próx:{' '}
-                        {new Date(nextSchedule.schedule_time).toLocaleDateString('es-EC', {
-                          weekday: 'short', day: 'numeric', month: 'short',
-                          hour: '2-digit', minute: '2-digit'
-                        })}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Horarios (chips compactos) */}
-                  <div style={{ marginBottom: '14px' }}>
-                    <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '600', marginBottom: '8px' }}>
-                      Funciones disponibles
-                    </p>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {evt.schedules.slice(0, 6).map(sch => {
-                        const d = new Date(sch.schedule_time);
-                        const available = sch.available_capacity > 0;
-                        return (
-                          <div
-                            key={sch.id}
-                            style={{
-                              padding: '5px 10px', borderRadius: '8px', fontSize: '0.72rem',
-                              fontWeight: '600', lineHeight: 1.3,
-                              background: available ? 'rgba(255,255,255,0.05)' : 'rgba(255,59,48,0.05)',
-                              border: `1px solid ${available ? 'rgba(255,255,255,0.1)' : 'rgba(255,59,48,0.15)'}`,
-                              color: available ? '#ccc' : 'rgba(255,59,48,0.6)'
-                            }}
-                          >
-                            <div>{d.toLocaleDateString('es-EC', { day: 'numeric', month: 'short' })}</div>
-                            <div style={{ opacity: 0.75 }}>
-                              {d.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {evt.schedules.length > 6 && (
-                        <div style={{
-                          padding: '5px 10px', borderRadius: '8px', fontSize: '0.72rem',
-                          fontWeight: '600', color: 'var(--accent)', lineHeight: 1.3,
-                          background: 'rgba(222,184,65,0.06)', border: '1px solid rgba(222,184,65,0.15)'
-                        }}>
-                          +{evt.schedules.length - 6} más
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* CTA */}
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.06)'
-                  }}>
-                    <div>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>
-                        Desde
-                      </span>
-                      {hasPromo && evt.price_promo > 0 ? (
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px' }}>
-                          <span style={{
-                            fontSize: '0.85rem', fontWeight: '600',
-                            color: 'rgba(255,255,255,0.35)',
-                            textDecoration: 'line-through',
-                            textDecorationColor: 'rgba(255,59,48,0.6)'
-                          }}>
-                            ${parseFloat(evt.price_adult || 0).toFixed(2)}
-                          </span>
-                          <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#DEB841' }}>
-                            ${parseFloat(evt.price_promo).toFixed(2)}
-                          </span>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--accent)' }}>
-                          ${parseFloat(evt.price_adult || 0).toFixed(2)}
-                        </span>
-                      )}
-                    </div>
-
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: '8px',
-                      padding: '10px 18px', borderRadius: '12px',
-                      background: isSoldOut
-                        ? 'rgba(255,255,255,0.05)'
-                        : 'linear-gradient(135deg, #DEB841, #b08d2b)',
-                      color: isSoldOut ? 'var(--text-muted)' : '#000',
-                      fontWeight: '700', fontSize: '0.85rem',
-                      boxShadow: isSoldOut ? 'none' : '0 4px 14px rgba(222,184,65,0.3)'
-                    }}>
-                      {isSoldOut ? 'Agotado' : 'Reservar'}
-                      {!isSoldOut && <ChevronRight size={16} />}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {filteredEvents.map((evt, index) => (
+            <EventCard 
+              key={evt.id} 
+              evt={evt} 
+              index={index} 
+              failedImages={failedImages} 
+              setFailedImages={setFailedImages}
+              navigate={navigate}
+            />
+          ))}
         </div>
       )}
 

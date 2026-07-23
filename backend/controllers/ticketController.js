@@ -37,7 +37,7 @@ exports.getTicketByCode = async (req, res) => {
 
 // Escanear QR Único de Compra
 exports.validateTicket = async (req, res) => {
-  const { ticketCode } = req.body;
+  const { ticketCode, byOrderId } = req.body;
 
   if (!ticketCode) {
     return res.status(400).json({
@@ -47,14 +47,29 @@ exports.validateTicket = async (req, res) => {
   }
 
   try {
-    const orderRes = await query(
-      `SELECT o.*, e.title as event_title, e.venue as event_venue, e.has_assigned_seats, es.schedule_time
-       FROM orders o
-       JOIN events e ON e.id = o.event_id
-       JOIN event_schedules es ON es.id = o.schedule_id
-       WHERE o.order_num = $1`,
-      [ticketCode]
-    );
+    let orderRes;
+    
+    if (byOrderId) {
+      orderRes = await query(
+        `SELECT o.*, e.title as event_title, e.venue as event_venue, e.has_assigned_seats, es.schedule_time
+         FROM orders o
+         JOIN events e ON e.id = o.event_id
+         JOIN event_schedules es ON es.id = o.schedule_id
+         WHERE o.id = $1`,
+        [ticketCode]
+      );
+    } else {
+      orderRes = await query(
+        `SELECT o.*, e.title as event_title, e.venue as event_venue, e.has_assigned_seats, es.schedule_time
+         FROM orders o
+         JOIN events e ON e.id = o.event_id
+         JOIN event_schedules es ON es.id = o.schedule_id
+         LEFT JOIN tickets t ON t.order_id = o.id
+         WHERE o.order_num = $1 OR t.ticket_code = $1
+         LIMIT 1`,
+        [ticketCode]
+      );
+    }
 
     if (orderRes.rows.length === 0) {
       return res.json({
@@ -69,6 +84,26 @@ exports.validateTicket = async (req, res) => {
       return res.json({
         status: 'ERROR',
         message: `❌ ACCESO DENEGADO\nEsta compra fue ANULADA.\nCliente: ${order.customer_name}`
+      });
+    }
+
+    // Validar que la fecha de la función no sea ni muy pasada ni muy futura
+    // Permite un margen de +/- 1.5 días para considerar cambios de zona horaria o eventos que terminan en la madrugada
+    const scheduleDate = new Date(order.schedule_time);
+    const today = new Date();
+    const diffDays = (scheduleDate.getTime() - today.getTime()) / (1000 * 3600 * 24);
+
+    if (diffDays < -1.5) {
+      return res.json({
+        status: 'ERROR',
+        message: `❌ ACCESO DENEGADO\nBoleto de función pasada (${scheduleDate.toLocaleDateString('es-EC')}).`
+      });
+    }
+
+    if (diffDays > 1.5) {
+      return res.json({
+        status: 'ERROR',
+        message: `❌ ACCESO DENEGADO\nBoleto de función futura (${scheduleDate.toLocaleDateString('es-EC')}).`
       });
     }
 

@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS events (
     promo_deadline TIMESTAMPTZ,
     require_billing BOOLEAN NOT NULL DEFAULT FALSE,
     status VARCHAR(50) NOT NULL DEFAULT 'active',
+    is_archived BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

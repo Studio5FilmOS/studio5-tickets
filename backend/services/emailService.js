@@ -23,21 +23,18 @@ exports.sendTicketEmail = async ({ email, customerName, orderNum, eventTitle, ev
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const fromName = process.env.SMTP_FROM_NAME || 'Studio 5 Film & Art';
 
-  let ticketsHtml = '';
-  for (let t of tickets) {
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(t.ticket_code)}&color=000000&bgcolor=ffffff`;
-    const ticketUrl = `${frontendUrl}/boleto/${t.ticket_code}`;
+  const orderQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(orderNum)}&color=000000&bgcolor=ffffff`;
+  const orderUrl = `${frontendUrl}/orden/${orderNum}`;
 
-    ticketsHtml += `
-      <div style="background-color: #1a1a1a; padding: 20px; border-radius: 16px; max-width: 400px; margin: 15px auto; border: 1px solid #333; color: white; font-family: sans-serif;">
-        <h4 style="color: #F1A51C; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">E-TICKET INDIVIDUAL</h4>
-        <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">${t.ticket_type}</div>
-        <img src="${qrUrl}" style="width: 180px; height: 180px; margin: 10px 0; border: 8px solid white; border-radius: 8px;" alt="QR Code">
-        <div style="color: #F1A51C; font-weight: bold; font-size: 16px; letter-spacing: 1px; margin-bottom: 10px;">${t.ticket_code}</div>
-        <a href="${ticketUrl}" target="_blank" style="background-color: #F1A51C; color: black; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 14px;">VER EN EL CELULAR</a>
-      </div>
-    `;
-  }
+  let ticketsHtml = `
+    <div style="background-color: #1a1a1a; padding: 20px; border-radius: 16px; max-width: 400px; margin: 15px auto; border: 1px solid #333; color: white; font-family: sans-serif;">
+      <h4 style="color: #F1A51C; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">E-TICKET DE ACCESO</h4>
+      <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">Orden #${orderNum}</div>
+      <img src="${orderQrUrl}" style="width: 180px; height: 180px; margin: 10px 0; border: 8px solid white; border-radius: 8px;" alt="QR Code">
+      <div style="color: #F1A51C; font-weight: bold; font-size: 16px; letter-spacing: 1px; margin-bottom: 10px;">${ticketCount} Entrada(s)</div>
+      <a href="${orderUrl}" target="_blank" style="background-color: #F1A51C; color: black; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 14px;">VER BOLETOS Y ENTRAR AL EVENTO</a>
+    </div>
+  `;
 
   const formattedDate = new Date(scheduleTime).toLocaleString('es-EC', {
     timeZone: 'America/Guayaquil',

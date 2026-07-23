@@ -16,6 +16,12 @@ const runMigrations = async () => {
     console.log('Migration: require_billing already exists or could not be added:', err.message);
   }
   try {
+    await query('ALTER TABLE events ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;');
+    console.log('Migration: Added is_archived to events');
+  } catch (err) {
+    console.log('Migration: is_archived could not be added:', err.message);
+  }
+  try {
     await query('ALTER TABLE orders ADD COLUMN is_final_consumer BOOLEAN NOT NULL DEFAULT TRUE;');
     await query('ALTER TABLE orders ADD COLUMN billing_id_number VARCHAR(50);');
     await query('ALTER TABLE orders ADD COLUMN billing_name VARCHAR(255);');

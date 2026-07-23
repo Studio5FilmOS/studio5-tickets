@@ -7,6 +7,7 @@ import { Play, ScanLine, Flame, ShieldAlert, LogIn, LogOut } from 'lucide-react'
 import Cartelera from './pages/Cartelera';
 import DetalleObra from './pages/DetalleObra';
 import BoletoView from './pages/BoletoView';
+import OrdenView from './pages/OrdenView';
 import Login from './pages/Login';
 import ScannerDashboard from './pages/staff/ScannerDashboard';
 import MomentoWow from './pages/staff/MomentoWow';
@@ -19,7 +20,7 @@ const BottomNavigation = () => {
   const location = useLocation();
 
   // No mostrar barra de navegación en e-tickets ni en interactividad pública
-  if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/interaccion/') || location.pathname.startsWith('/payphone-redirect')) {
+  if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/orden/') || location.pathname.startsWith('/interaccion/') || location.pathname.startsWith('/payphone-redirect')) {
     return null;
   }
 
@@ -104,7 +105,7 @@ const Sidebar = () => {
   const location = useLocation();
 
   // No mostrar barra lateral en e-tickets ni en interactividad pública
-  if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/interaccion/') || location.pathname.startsWith('/payphone-redirect')) {
+  if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/orden/') || location.pathname.startsWith('/interaccion/') || location.pathname.startsWith('/payphone-redirect')) {
     return null;
   }
 
@@ -197,6 +198,7 @@ const App = () => {
                 <Route path="/" element={<Cartelera />} />
                 <Route path="/evento/:id" element={<DetalleObra />} />
                 <Route path="/boleto/:code" element={<BoletoView />} />
+                <Route path="/orden/:code" element={<OrdenView />} />
                 <Route path="/login" element={<Login />} />
                 
                 {/* NUEVA RUTA PÚBLICA PARA QR DE SALA */}

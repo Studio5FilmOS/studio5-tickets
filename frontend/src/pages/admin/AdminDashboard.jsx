@@ -16,6 +16,7 @@ const AdminDashboard = () => {
   
   // Estados para filtros de ventas
   const [filterEventId, setFilterEventId] = useState('ALL');
+  const [filterScheduleId, setFilterScheduleId] = useState('ALL');
   const [filterPaymentStatus, setFilterPaymentStatus] = useState('ALL');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -347,6 +348,7 @@ const AdminDashboard = () => {
     try {
       const params = new URLSearchParams();
       if (filterEventId !== 'ALL') params.append('event_id', filterEventId);
+      if (filterScheduleId !== 'ALL') params.append('schedule_id', filterScheduleId);
       if (filterDateFrom) params.append('date_from', filterDateFrom);
       if (filterDateTo) params.append('date_to', filterDateTo);
 
@@ -751,13 +753,13 @@ const AdminDashboard = () => {
   // Helper: eliminar o archivar evento
   const handleDeleteEvent = async (eventId, eventTitle) => {
     const confirmRes = await Swal.fire({
-      title: `¿Eliminar "${eventTitle}"?`,
-      text: "Si el evento ya tiene ventas registradas, se desactivará automáticamente para preservar el historial. Si no tiene ventas, se eliminará permanentemente.",
+      title: `¿Archivar "${eventTitle}"?`,
+      text: "El evento será archivado. Sus imágenes se borrarán para ahorrar espacio, pero el historial de ventas y clientes se mantendrá.",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ff3b30',
       cancelButtonColor: '#333',
-      confirmButtonText: 'Sí, continuar',
+      confirmButtonText: 'Sí, archivar evento',
       cancelButtonText: 'Cancelar'
     });
 
@@ -766,50 +768,12 @@ const AdminDashboard = () => {
     try {
       const res = await api.delete(`/events/${eventId}`);
       if (res.data.status === 'OK') {
-        if (res.data.action === 'archived') {
-          // Tiene ventas — preguntar si quiere borrado forzado (para datos de prueba)
-          const forceRes = await Swal.fire({
-            title: '⚠️ Evento con Ventas',
-            html: `<p>${res.data.message}</p><br/><p style="color:#ff9f0a;font-size:0.85rem"><strong>¿Son ventas de prueba?</strong><br/>Si este era un evento de prueba y quieres borrarlo definitivamente junto con sus órdenes de prueba, usa el botón rojo de abajo.</p>`,
-            icon: 'info',
-            showCancelButton: true,
-            showDenyButton: true,
-            confirmButtonText: 'OK, dejar inactivo',
-            denyButtonText: '🗑️ Borrar forzado (pruebas)',
-            denyButtonColor: '#ff3b30',
-            cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#555',
-          });
-
-          if (forceRes.isDenied) {
-            // Confirmar borrado forzado con doble advertencia
-            const finalConfirm = await Swal.fire({
-              title: '¡ÚLTIMO AVISO!',
-              html: `<p>Esto borrará <strong>permanentemente</strong> el evento <strong>"${eventTitle}"</strong> junto con <strong>TODAS sus órdenes y tickets</strong>.</p><p style="color:#ff3b30;margin-top:12px">Esta acción <u>NO SE PUEDE DESHACER</u>. ¿Confirmas?</p>`,
-              icon: 'error',
-              showCancelButton: true,
-              confirmButtonColor: '#ff3b30',
-              confirmButtonText: 'Sí, borrar todo permanentemente',
-              cancelButtonText: 'Cancelar'
-            });
-            if (finalConfirm.isConfirmed) {
-              const forceDeleteRes = await api.delete(`/events/${eventId}/force`);
-              if (forceDeleteRes.data.status === 'OK') {
-                Swal.fire('¡Eliminado!', forceDeleteRes.data.message, 'success');
-                fetchData();
-              }
-            }
-          } else if (forceRes.isConfirmed) {
-            fetchData();
-          }
-        } else {
-          Swal.fire('Eliminado', res.data.message, 'success');
-          fetchData();
-        }
+        Swal.fire('¡Archivado!', res.data.message, 'success');
+        fetchData();
       }
     } catch (err) {
-      console.error(err);
-      Swal.fire('Error', err.response?.data?.message || 'No se pudo eliminar el evento.', 'error');
+      console.error('Error al archivar evento:', err);
+      Swal.fire('Error', 'No se pudo archivar el evento.', 'error');
     }
   };
 
@@ -995,16 +959,17 @@ const AdminDashboard = () => {
   // Filtrado de órdenes
   const filteredOrders = orders.filter(o => {
     const matchEvent = filterEventId === 'ALL' || o.event_id === filterEventId;
+    const matchSchedule = filterScheduleId === 'ALL' || o.schedule_id === filterScheduleId;
     const matchStatus = filterPaymentStatus === 'ALL' || o.payment_status === filterPaymentStatus;
 
     const normalizedQuery = searchQuery.toLowerCase().trim();
     const matchQuery = !normalizedQuery || 
-      o.customer_name.toLowerCase().includes(normalizedQuery) ||
-      o.order_num.toLowerCase().includes(normalizedQuery) ||
+      (o.order_num && o.order_num.toLowerCase().includes(normalizedQuery)) ||
+      (o.customer_name && o.customer_name.toLowerCase().includes(normalizedQuery)) ||
       (o.customer_whatsapp && o.customer_whatsapp.includes(normalizedQuery)) ||
       (o.customer_email && o.customer_email.toLowerCase().includes(normalizedQuery));
 
-    return matchEvent && matchStatus && matchQuery;
+    return matchEvent && matchSchedule && matchStatus && matchQuery;
   });
 
   // Filtrado de transferencias pendientes
@@ -1236,7 +1201,7 @@ const AdminDashboard = () => {
                   <label style={{ fontSize: '0.65rem' }}>Evento</label>
                   <select 
                     value={filterEventId} 
-                    onChange={(e) => setFilterEventId(e.target.value)}
+                    onChange={(e) => { setFilterEventId(e.target.value); setFilterScheduleId('ALL'); }}
                     style={{ marginBottom: '0', padding: '10px' }}
                   >
                     <option value="ALL">Todos los eventos</option>
@@ -1245,6 +1210,24 @@ const AdminDashboard = () => {
                     ))}
                   </select>
                 </div>
+
+                {filterEventId !== 'ALL' && (
+                  <div style={{ flex: '1' }}>
+                    <label style={{ fontSize: '0.65rem' }}>Función (Horario)</label>
+                    <select 
+                      value={filterScheduleId} 
+                      onChange={(e) => setFilterScheduleId(e.target.value)}
+                      style={{ marginBottom: '0', padding: '10px' }}
+                    >
+                      <option value="ALL">Todas las funciones</option>
+                      {events.find(e => e.id === filterEventId)?.schedules?.map(sch => (
+                        <option key={sch.id} value={sch.id}>
+                          {new Date(sch.schedule_time).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div style={{ flex: '1' }}>
                   <label style={{ fontSize: '0.65rem' }}>Estado de Pago</label>
@@ -1321,7 +1304,7 @@ const AdminDashboard = () => {
                   <Search size={16} /> Aplicar Filtros
                 </button>
                 <button
-                  onClick={() => { setFilterEventId('ALL'); setFilterDateFrom(''); setFilterDateTo(''); setFilterPaymentStatus('ALL'); setTimeout(fetchData, 50); }}
+                  onClick={() => { setFilterEventId('ALL'); setFilterScheduleId('ALL'); setFilterDateFrom(''); setFilterDateTo(''); setFilterPaymentStatus('ALL'); setTimeout(fetchData, 50); }}
                   className="btn-secondary"
                   style={{ padding: '10px 14px' }}
                 >
@@ -1931,17 +1914,25 @@ const AdminDashboard = () => {
                   <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{evt.title}</div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{evt.venue} · {(evt.schedules || []).length} funciones</div>
                   <div style={{ display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '20px', background: evt.status === 'active' ? 'rgba(52,199,89,0.1)' : 'rgba(255,59,48,0.1)', color: evt.status === 'active' ? '#34c759' : '#ff3b30', border: `1px solid ${evt.status === 'active' ? 'rgba(52,199,89,0.2)' : 'rgba(255,59,48,0.2)'}` }}>{evt.status === 'active' ? 'Activo' : 'Inactivo'}</span>
+                    {evt.is_archived ? (
+                      <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '20px', background: 'rgba(128,128,128,0.1)', color: '#aaa', border: '1px solid rgba(128,128,128,0.3)' }}>📦 Archivado</span>
+                    ) : (
+                      <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '20px', background: evt.status === 'active' ? 'rgba(52,199,89,0.1)' : 'rgba(255,59,48,0.1)', color: evt.status === 'active' ? '#34c759' : '#ff3b30', border: `1px solid ${evt.status === 'active' ? 'rgba(52,199,89,0.2)' : 'rgba(255,59,48,0.2)'}` }}>{evt.status === 'active' ? 'Activo' : 'Inactivo'}</span>
+                    )}
                     {evt.require_billing && <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '20px', background: 'rgba(222,184,65,0.1)', color: 'var(--accent)', border: '1px solid rgba(222,184,65,0.2)' }}>🧾 Facturación</span>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => loadEventForEditing(evt)} style={{ background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)', color: 'var(--accent)', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    <Edit2 size={14} /> Editar
-                  </button>
-                  <button onClick={() => handleDeleteEvent(evt.id, evt.title)} style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.3)', color: '#ff3b30', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    <Trash2 size={14} /> Borrar
-                  </button>
+                  {!evt.is_archived && (
+                    <>
+                      <button onClick={() => loadEventForEditing(evt)} style={{ background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)', color: 'var(--accent)', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        <Edit2 size={14} /> Editar
+                      </button>
+                      <button onClick={() => handleDeleteEvent(evt.id, evt.title)} style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.3)', color: '#ff3b30', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        <Trash2 size={14} /> Archivar
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

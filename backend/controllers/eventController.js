@@ -27,7 +27,7 @@ exports.getAllEvents = async (req, res) => {
     let params = [];
     
     if (!isAdminOrStaff) {
-      sqlEvents = "SELECT * FROM events WHERE status = 'active' ORDER BY created_at DESC";
+      sqlEvents = "SELECT * FROM events WHERE status = 'active' AND is_archived = FALSE ORDER BY created_at DESC";
     }
 
     const eventsRes = await query(sqlEvents, params);
@@ -517,105 +517,40 @@ PASO 3 — FORMATO DE SALIDA:
   }
 };
 
-// Eliminar un evento (o desactivarlo si tiene órdenes asociadas)
+// Eliminar un evento (ahora usa Soft-Delete)
 exports.deleteEvent = async (req, res) => {
   const { id } = req.params;
 
   try {
-    // 1. Verificar si existen órdenes asociadas a este evento
-    const ordersCheck = await query('SELECT COUNT(*)::integer FROM orders WHERE event_id = $1', [id]);
-    const ordersCount = ordersCheck.rows[0].count;
-
-    // Obtener URLs de archivos del evento para limpiar después
+    // Obtener URLs de archivos del evento para limpiar y ahorrar espacio
     const eventData = await query('SELECT banner_url, ticket_template_url FROM events WHERE id = $1', [id]);
     const eventFiles = eventData.rows[0] || {};
 
-    if (ordersCount > 0) {
-      // Tiene órdenes, no se puede eliminar físicamente. Cambiar estado a inactivo
-      await query("UPDATE events SET status = 'inactive' WHERE id = $1", [id]);
-      return res.json({
-        status: 'OK',
-        action: 'archived',
-        message: 'El evento tiene ventas y no puede ser borrado físicamente para no perder el historial de tickets. Se ha cambiado su estado a "Inactivo" para retirarlo de cartelera.'
-      });
-    }
+    // 1. Marcar como archivado
+    await query("UPDATE events SET is_archived = TRUE, status = 'inactive', banner_url = '', ticket_template_url = '' WHERE id = $1", [id]);
 
-    // 2. Si no tiene órdenes, se puede borrar físicamente de forma segura
-    await query('DELETE FROM events WHERE id = $1', [id]);
-
-    // 3. Limpiar archivos físicos del evento
+    // 2. Limpiar archivos físicos del evento para no ocupar disco
     deleteUploadFile(eventFiles.banner_url);
     deleteUploadFile(eventFiles.ticket_template_url);
 
     res.json({
       status: 'OK',
-      action: 'deleted',
-      message: 'Evento e imágenes eliminados con éxito.'
+      action: 'archived',
+      message: 'Evento archivado e imágenes eliminadas con éxito. El historial de ventas se mantiene intacto.'
     });
   } catch (err) {
-    console.error('Error al eliminar evento:', err);
+    console.error('Error al archivar evento:', err);
     res.status(500).json({
       status: 'ERROR',
-      message: 'Error al eliminar el evento',
+      message: 'Error al archivar el evento',
       error: err.message
     });
   }
 };
 
-// Eliminar FORZADO un evento con todas sus órdenes y tickets (Solo Admin - datos de prueba)
+// Eliminar FORZADO un evento (ahora hace lo mismo que deleteEvent regular para mantener el CRM)
 exports.forceDeleteEvent = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const eventCheck = await query('SELECT id, title, banner_url, ticket_template_url FROM events WHERE id = $1', [id]);
-    if (eventCheck.rows.length === 0) {
-      return res.status(404).json({ status: 'ERROR', message: 'Evento no encontrado.' });
-    }
-
-    const eventRow = eventCheck.rows[0];
-    const eventTitle = eventRow.title;
-
-    // 0. Recolectar URLs de comprobantes de órdenes antes de borrar
-    const receiptsRes = await query(
-      'SELECT comprobante_url FROM orders WHERE event_id = $1 AND comprobante_url IS NOT NULL',
-      [id]
-    );
-    const receiptUrls = receiptsRes.rows.map(r => r.comprobante_url);
-
-    // 1. Borrar tickets vinculados a órdenes de este evento
-    await query(
-      'DELETE FROM tickets WHERE order_id IN (SELECT id FROM orders WHERE event_id = $1)',
-      [id]
-    );
-
-    // 2. Borrar órdenes del evento
-    await query('DELETE FROM orders WHERE event_id = $1', [id]);
-
-    // 3. Borrar funciones
-    await query('DELETE FROM event_schedules WHERE event_id = $1', [id]);
-
-    // 4. Borrar el evento
-    await query('DELETE FROM events WHERE id = $1', [id]);
-
-    // 5. Limpiar archivos físicos
-    deleteUploadFile(eventRow.banner_url);
-    deleteUploadFile(eventRow.ticket_template_url);
-    receiptUrls.forEach(url => deleteUploadFile(url));
-    console.log(`🗑️ Eliminados ${receiptUrls.length} comprobante(s) de transferencia del evento "${eventTitle}".`);
-
-    res.json({
-      status: 'OK',
-      action: 'force_deleted',
-      message: `El evento "${eventTitle}" y todos sus registros e imágenes han sido eliminados permanentemente.`
-    });
-  } catch (err) {
-    console.error('Error al eliminar evento forzado:', err);
-    res.status(500).json({
-      status: 'ERROR',
-      message: 'Error al eliminar el evento forzado',
-      error: err.message
-    });
-  }
+  return exports.deleteEvent(req, res);
 };
 
 // Restaurar venta de Lady Carrillo

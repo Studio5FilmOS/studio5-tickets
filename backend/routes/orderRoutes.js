@@ -8,8 +8,11 @@ const roleMiddleware = require('../middleware/roleMiddleware');
 // Crear Orden (Público - Comprador o POS Admin/Staff)
 router.post('/', optionalAuthMiddleware, orderController.createOrder);
 
-// Obtener detalle de orden
+// Obtener detalle de orden por ID UUID (Admin/Staff)
 router.get('/:id', optionalAuthMiddleware, orderController.getOrderById);
+
+// Obtener detalle de orden por order_num (Público)
+router.get('/numero/:orderNum', optionalAuthMiddleware, orderController.getOrderByNum);
 
 // Listar todas las órdenes (Staff/Admin)
 router.get('/', authMiddleware, roleMiddleware(['admin', 'staff']), orderController.getAllOrders);

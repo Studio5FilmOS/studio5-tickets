@@ -530,6 +530,44 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
+// Obtener detalle de una orden y sus tickets por order_num (Público)
+exports.getOrderByNum = async (req, res) => {
+  const { orderNum } = req.params;
+
+  try {
+    const orderRes = await query(
+      `SELECT o.*, e.title as event_title, e.venue as event_venue, e.banner_url, e.ticket_template_url, es.schedule_time
+       FROM orders o
+       JOIN events e ON e.id = o.event_id
+       JOIN event_schedules es ON es.id = o.schedule_id
+       WHERE o.order_num = $1`,
+      [orderNum]
+    );
+
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({
+        status: 'ERROR',
+        message: 'Orden no encontrada.'
+      });
+    }
+
+    const order = orderRes.rows[0];
+    const ticketsRes = await query('SELECT * FROM tickets WHERE order_id = $1 ORDER BY id ASC', [order.id]);
+
+    res.json({
+      status: 'OK',
+      order,
+      tickets: ticketsRes.rows
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Error al obtener la orden',
+      error: err.message
+    });
+  }
+};
+
 // Actualizar estado de pago/operación de la orden
 exports.updateOrderStatus = async (req, res) => {
   const { id } = req.params;
