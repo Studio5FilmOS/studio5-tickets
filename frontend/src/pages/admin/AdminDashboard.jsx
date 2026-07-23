@@ -1114,7 +1114,7 @@ const AdminDashboard = () => {
           title={pushSubscribed ? 'Desactivar notificaciones push' : 'Activar notificaciones push'}
           style={{
             display: 'flex', alignItems: 'center', gap: '7px',
-            padding: '9px 15px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+            padding: '9px 15px', borderRadius: '12px', cursor: 'pointer',
             background: pushSubscribed
               ? 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))'
               : 'rgba(255,255,255,0.06)',
