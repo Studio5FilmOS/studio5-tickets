@@ -437,6 +437,7 @@ const ManualRegistryTab = () => {
   const [orders, setOrders] = useState([]);
   const [events, setEvents] = useState([]);
   const [selectedEventId, setSelectedEventId] = useState('ALL');
+  const [selectedScheduleId, setSelectedScheduleId] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL');
@@ -554,7 +555,11 @@ const ManualRegistryTab = () => {
       e.schedules?.forEach(s => { capacityAvailable += s.available_capacity || 0; });
     });
   } else if (currentEvent) {
-    currentEvent.schedules?.forEach(s => { capacityAvailable += s.available_capacity || 0; });
+    currentEvent.schedules?.forEach(s => { 
+      if (selectedScheduleId === 'ALL' || s.id === selectedScheduleId) {
+        capacityAvailable += s.available_capacity || 0; 
+      }
+    });
   }
 
   // Vendidas, Pendientes, Cortesías, Validadas
@@ -565,6 +570,7 @@ const ManualRegistryTab = () => {
 
   orders.forEach(o => {
     if (selectedEventId !== 'ALL' && o.event_id !== selectedEventId) return;
+    if (selectedScheduleId !== 'ALL' && o.schedule_id !== selectedScheduleId) return;
 
     const ticketsQty = (parseInt(o.ticket_count_adult || 0) + parseInt(o.ticket_count_child || 0));
 
@@ -583,6 +589,7 @@ const ManualRegistryTab = () => {
 
   const filteredOrders = orders.filter(o => {
     const matchEvent = selectedEventId === 'ALL' || o.event_id === selectedEventId;
+    const matchSchedule = selectedScheduleId === 'ALL' || o.schedule_id === selectedScheduleId;
     const matchStatus = filterStatus === 'ALL' || o.payment_status === filterStatus;
     const q = searchQuery.toLowerCase();
     const matchQ = !q ||
@@ -590,7 +597,7 @@ const ManualRegistryTab = () => {
       o.order_num?.toLowerCase().includes(q) ||
       o.customer_whatsapp?.includes(q) ||
       o.customer_email?.toLowerCase().includes(q);
-    return matchEvent && matchStatus && matchQ;
+    return matchEvent && matchSchedule && matchStatus && matchQ;
   });
 
   const handleManualCheckIn = async (orderId, orderNum) => {
@@ -660,11 +667,11 @@ const ManualRegistryTab = () => {
   return (
     <div>
       {/* Selector de Evento */}
-      <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ marginBottom: selectedEventId !== 'ALL' ? '12px' : '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
         <label style={{ fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '1px' }}>Filtrar por Evento</label>
         <select 
           value={selectedEventId} 
-          onChange={(e) => setSelectedEventId(e.target.value)}
+          onChange={(e) => { setSelectedEventId(e.target.value); setSelectedScheduleId('ALL'); }}
           style={{
             padding: '11px 12px',
             background: 'rgba(255,255,255,0.05)',
@@ -682,6 +689,34 @@ const ManualRegistryTab = () => {
           ))}
         </select>
       </div>
+
+      {/* Selector de Función */}
+      {selectedEventId !== 'ALL' && (
+        <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '1px' }}>Filtrar por Función</label>
+          <select 
+            value={selectedScheduleId} 
+            onChange={(e) => setSelectedScheduleId(e.target.value)}
+            style={{
+              padding: '11px 12px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '10px',
+              color: 'var(--text-primary)',
+              fontSize: '0.9rem',
+              width: '100%',
+              boxSizing: 'border-box'
+            }}
+          >
+            <option value="ALL" style={{ background: '#111' }}>Todas las funciones</option>
+            {events.find(e => e.id === selectedEventId)?.schedules?.map(sch => (
+              <option key={sch.id} value={sch.id} style={{ background: '#111' }}>
+                {new Date(sch.schedule_time).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Tarjetas de Resumen (Dashboard Staff) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '24px' }}>
