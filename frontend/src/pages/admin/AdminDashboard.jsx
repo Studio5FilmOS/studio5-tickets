@@ -6,7 +6,7 @@ import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar,
 import AdminUsers from './AdminUsers';
 import { subscribeToPush, unsubscribeFromPush, isPushSubscribed } from '../../services/pushService';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme, getContrastTextColor } from '../../context/ThemeContext';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -32,6 +32,8 @@ const AdminDashboard = () => {
   const [themeForm, setThemeForm] = useState({
     primaryColor: theme.primaryColor || '#DEB841',
     secondaryColor: theme.secondaryColor || '#b08d2b',
+    textColor: theme.textColor || '#FFFFFF',
+    buttonStyle: theme.buttonStyle || 'gradient',
     logoUrl: theme.logoUrl || 'https://i.imgur.com/0z5756T.png',
     tenantName: theme.tenantName || 'Studio 5'
   });
@@ -2434,9 +2436,40 @@ const AdminDashboard = () => {
               </div>
 
               {/* Selector de Colores Personalizado */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px' }}>
+                {/* Estilo de Botón (Gradiente vs Sólido) */}
                 <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Color de Botones y Acentos Principales</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Estilo de Botones y Acentos</label>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setThemeForm({ ...themeForm, buttonStyle: 'gradient' })}
+                      style={{
+                        flex: 1, padding: '8px 10px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer',
+                        background: themeForm.buttonStyle === 'gradient' ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
+                        color: themeForm.buttonStyle === 'gradient' ? '#000' : '#fff',
+                        border: themeForm.buttonStyle === 'gradient' ? 'none' : '1px solid rgba(255,255,255,0.1)'
+                      }}
+                    >
+                      ✨ Gradiente Elegante
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setThemeForm({ ...themeForm, buttonStyle: 'solid' })}
+                      style={{
+                        flex: 1, padding: '8px 10px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer',
+                        background: themeForm.buttonStyle === 'solid' ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
+                        color: themeForm.buttonStyle === 'solid' ? '#000' : '#fff',
+                        border: themeForm.buttonStyle === 'solid' ? 'none' : '1px solid rgba(255,255,255,0.1)'
+                      }}
+                    >
+                      🟦 Color Sólido
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Color Principal (Botones y Destacados)</label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
                     <input
                       type="color"
@@ -2453,19 +2486,48 @@ const AdminDashboard = () => {
                   </div>
                 </div>
 
+                {themeForm.buttonStyle !== 'solid' && (
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Color Secundario (Gradientes)</label>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                      <input
+                        type="color"
+                        value={themeForm.secondaryColor}
+                        onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
+                        style={{ width: '42px', height: '42px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
+                      />
+                      <input
+                        type="text"
+                        value={themeForm.secondaryColor}
+                        onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
+                        style={{ marginBottom: 0, textTransform: 'uppercase', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Color Secundario / Gradientes</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Color de Textos y Títulos</label>
+                    <button
+                      type="button"
+                      onClick={() => setThemeForm({ ...themeForm, textColor: '#FFFFFF' })}
+                      style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.7rem', cursor: 'pointer' }}
+                    >
+                      Restaurar Blanco
+                    </button>
+                  </div>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
                     <input
                       type="color"
-                      value={themeForm.secondaryColor}
-                      onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
+                      value={themeForm.textColor || '#FFFFFF'}
+                      onChange={e => setThemeForm({ ...themeForm, textColor: e.target.value })}
                       style={{ width: '42px', height: '42px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
                     />
                     <input
                       type="text"
-                      value={themeForm.secondaryColor}
-                      onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
+                      value={themeForm.textColor || '#FFFFFF'}
+                      onChange={e => setThemeForm({ ...themeForm, textColor: e.target.value })}
                       style={{ marginBottom: 0, textTransform: 'uppercase', fontSize: '0.85rem' }}
                     />
                   </div>
@@ -2490,20 +2552,20 @@ const AdminDashboard = () => {
               
               <div style={{ marginTop: '15px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
                 <img src={themeForm.logoUrl} alt="Preview Logo" style={{ maxHeight: '36px', objectFit: 'contain' }} onError={(e) => e.target.src = 'https://i.imgur.com/0z5756T.png'} />
-                <span style={{ fontWeight: 900, fontSize: '1.1rem', color: '#fff' }}>{themeForm.tenantName}</span>
+                <span style={{ fontWeight: 900, fontSize: '1.1rem', color: themeForm.textColor || '#fff' }}>{themeForm.tenantName}</span>
               </div>
 
               <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${themeForm.primaryColor}55`, borderRadius: '12px', padding: '14px' }}>
-                <div style={{ color: themeForm.primaryColor, fontWeight: 800, fontSize: '0.95rem', marginBottom: '4px' }}>
+                <div style={{ color: themeForm.textColor || '#fff', fontWeight: 800, fontSize: '0.95rem', marginBottom: '4px' }}>
                   Gran Noche de Gala V2
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>📍 Teatro Principal · 20:00</p>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-                  <span style={{ color: '#fff', fontSize: '0.82rem', fontWeight: 'bold' }}>VIP: $25.00</span>
+                  <span style={{ color: themeForm.textColor || '#fff', fontSize: '0.82rem', fontWeight: 'bold' }}>VIP: $25.00</span>
                   <div style={{
                     padding: '8px 14px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.75rem',
-                    background: `linear-gradient(135deg, ${themeForm.primaryColor}, ${themeForm.secondaryColor})`,
-                    color: '#000'
+                    background: themeForm.buttonStyle === 'solid' ? themeForm.primaryColor : `linear-gradient(135deg, ${themeForm.primaryColor}, ${themeForm.secondaryColor})`,
+                    color: getContrastTextColor(themeForm.primaryColor)
                   }}>
                     COMPRAR BOLETOS
                   </div>

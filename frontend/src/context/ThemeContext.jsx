@@ -1,8 +1,25 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+// Función para calcular automáticamente si un color requiere texto claro u oscuro (WCAG Luminance)
+export const getContrastTextColor = (hexColor) => {
+  if (!hexColor) return '#FFFFFF';
+  let cleanHex = hexColor.replace('#', '').trim();
+  if (cleanHex.length === 3) {
+    cleanHex = cleanHex.split('').map(c => c + c).join('');
+  }
+  if (cleanHex.length !== 6) return '#FFFFFF';
+  const r = parseInt(cleanHex.substring(0, 2), 16);
+  const g = parseInt(cleanHex.substring(2, 4), 16);
+  const b = parseInt(cleanHex.substring(4, 6), 16);
+  
+  // Fórmula YIQ estándar
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 150 ? '#000000' : '#FFFFFF';
+};
 
 const defaultTheme = {
   primaryColor: '#DEB841',
   secondaryColor: '#b08d2b',
+  textColor: '#FFFFFF',
+  buttonStyle: 'gradient', // 'gradient' | 'solid'
   logoUrl: 'https://i.imgur.com/0z5756T.png',
   tenantName: 'Studio 5'
 };
@@ -23,12 +40,18 @@ export const ThemeProvider = ({ children }) => {
     const root = document.documentElement;
     const primary = themeData.primaryColor || defaultTheme.primaryColor;
     const secondary = themeData.secondaryColor || defaultTheme.secondaryColor;
+    const buttonStyle = themeData.buttonStyle || 'gradient';
+    const btnTextColor = getContrastTextColor(primary);
+    const titleTextColor = themeData.textColor || '#FFFFFF';
 
     root.style.setProperty('--primary-color', primary);
     root.style.setProperty('--accent', primary);
     root.style.setProperty('--accent-glow', `${primary}55`);
     root.style.setProperty('--secondary-color', secondary);
     root.style.setProperty('--accent-secondary', secondary);
+    root.style.setProperty('--btn-text-color', btnTextColor);
+    root.style.setProperty('--title-text-color', titleTextColor);
+    root.style.setProperty('--btn-bg', buttonStyle === 'solid' ? primary : `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`);
     root.style.setProperty('--logo-url', `url("${themeData.logoUrl || defaultTheme.logoUrl}")`);
   };
 
