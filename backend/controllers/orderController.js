@@ -340,11 +340,27 @@ exports.createOrder = async (req, res) => {
 
     // 8. Si el evento pertenece a un organizador y la orden está pagada, sumar tarifa por ticket a su deuda
     if (event.organizer_id && paymentStatus === 'Pagado') {
-      const debtAddition = totalQty * PLATFORM_FEE_PER_TICKET;
-      await client.query(
-        'UPDATE users SET debt_balance = debt_balance + $1, updated_at = NOW() WHERE id = $2',
-        [debtAddition, event.organizer_id]
-      );
+      let billableTickets = totalQty;
+      if (operation === 'Cortesia') {
+        const courtesyCountRes = await client.query(
+          `SELECT COALESCE(SUM(ticket_count_adult + ticket_count_child), 0)::integer as total_courtesies
+           FROM orders 
+           WHERE schedule_id = $1 AND operation_type = 'Cortesia' AND payment_status != 'Anulado' AND id != $2`,
+          [scheduleId, newOrder.id]
+        );
+        const previousCourtesies = courtesyCountRes.rows[0].total_courtesies;
+        const FREE_COURTESY_LIMIT = 4;
+        const freeSpotsRemaining = Math.max(0, FREE_COURTESY_LIMIT - previousCourtesies);
+        billableTickets = Math.max(0, totalQty - freeSpotsRemaining);
+      }
+
+      if (billableTickets > 0) {
+        const debtAddition = billableTickets * PLATFORM_FEE_PER_TICKET;
+        await client.query(
+          'UPDATE users SET debt_balance = debt_balance + $1, updated_at = NOW() WHERE id = $2',
+          [debtAddition, event.organizer_id]
+        );
+      }
     }
 
     await client.query('COMMIT');
@@ -588,9 +604,23 @@ exports.updateOrderStatus = async (req, res) => {
       const eventRes = await client.query('SELECT * FROM events WHERE id = $1', [order.event_id]);
       const event = eventRes.rows[0];
       if (event && event.organizer_id) {
-        const totalTickets = order.ticket_count_adult + order.ticket_count_child || tickets.length;
-        const fee = totalTickets * PLATFORM_FEE_PER_TICKET;
-        await client.query('UPDATE users SET debt_balance = debt_balance + $1 WHERE id = $2', [fee, event.organizer_id]);
+        let billableTickets = order.ticket_count_adult + order.ticket_count_child || tickets.length;
+        if (order.operation_type === 'Cortesia') {
+          const courtesyCountRes = await client.query(
+            `SELECT COALESCE(SUM(ticket_count_adult + ticket_count_child), 0)::integer as total_courtesies
+             FROM orders 
+             WHERE schedule_id = $1 AND operation_type = 'Cortesia' AND payment_status = 'Pagado' AND id != $2`,
+            [order.schedule_id, id]
+          );
+          const previousCourtesies = courtesyCountRes.rows[0].total_courtesies;
+          const FREE_COURTESY_LIMIT = 4;
+          const freeSpotsRemaining = Math.max(0, FREE_COURTESY_LIMIT - previousCourtesies);
+          billableTickets = Math.max(0, billableTickets - freeSpotsRemaining);
+        }
+        if (billableTickets > 0) {
+          const fee = billableTickets * PLATFORM_FEE_PER_TICKET;
+          await client.query('UPDATE users SET debt_balance = debt_balance + $1 WHERE id = $2', [fee, event.organizer_id]);
+        }
       }
     }
 

@@ -480,6 +480,65 @@ exports.revealClue = async (req, res) => {
   }
 };
 
+// 8. Crear nueva encuesta para el evento
+exports.createPoll = async (req, res) => {
+  const { eventId, question, options } = req.body;
+  if (!eventId || !question || !Array.isArray(options) || options.length < 2) {
+    return res.status(400).json({ status: 'ERROR', message: 'Debes ingresar una pregunta y al menos 2 opciones.' });
+  }
+
+  try {
+    const result = await query(
+      'INSERT INTO event_polls (event_id, question, options, is_active) VALUES ($1, $2, $3, FALSE) RETURNING *',
+      [eventId, question.trim(), JSON.stringify(options)]
+    );
+    res.json({ status: 'OK', message: 'Encuesta interactiva creada.', poll: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: 'Error al crear encuesta: ' + err.message });
+  }
+};
+
+// 9. Eliminar encuesta
+exports.deletePoll = async (req, res) => {
+  const { id } = req.params;
+  try {
+    await query('DELETE FROM poll_votes WHERE poll_id = $1', [id]);
+    await query('DELETE FROM event_polls WHERE id = $1', [id]);
+    res.json({ status: 'OK', message: 'Encuesta eliminada.' });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: 'Error al eliminar: ' + err.message });
+  }
+};
+
+// 10. Crear nueva pista
+exports.createClue = async (req, res) => {
+  const { eventId, title, content } = req.body;
+  if (!eventId || !title || !content) {
+    return res.status(400).json({ status: 'ERROR', message: 'Debes ingresar título y descripción de la pista.' });
+  }
+
+  try {
+    const result = await query(
+      'INSERT INTO event_clues (event_id, title, content, is_revealed) VALUES ($1, $2, $3, FALSE) RETURNING *',
+      [eventId, title.trim(), content.trim()]
+    );
+    res.json({ status: 'OK', message: 'Pista secreta creada.', clue: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: 'Error al crear pista: ' + err.message });
+  }
+};
+
+// 11. Eliminar pista
+exports.deleteClue = async (req, res) => {
+  const { id } = req.params;
+  try {
+    await query('DELETE FROM event_clues WHERE id = $1', [id]);
+    res.json({ status: 'OK', message: 'Pista eliminada.' });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: 'Error al eliminar pista: ' + err.message });
+  }
+};
+
 // Momento WOW anterior (Standby)
 exports.sendMassPista = async (req, res) => {
   res.json({

@@ -162,13 +162,13 @@ exports.getCustomerDatabase = async (req, res) => {
       customerQuery = `
         SELECT 
           o.customer_email as email,
-          o.customer_name as name,
-          MAX(o.customer_whatsapp) as phone,
+          COALESCE(o.customer_name, 'Cliente') as name,
+          COALESCE(MAX(o.customer_whatsapp), '') as phone,
           COUNT(DISTINCT o.id) as total_orders,
-          SUM(o.ticket_count_adult + o.ticket_count_child) as total_tickets,
-          SUM(o.amount_total) as total_spent,
+          COALESCE(SUM(COALESCE(o.ticket_count_adult, 0) + COALESCE(o.ticket_count_child, 0)), 0) as total_tickets,
+          COALESCE(SUM(o.amount_total), 0) as total_spent,
           MAX(o.created_at) as last_purchase,
-          STRING_AGG(DISTINCT e.title, ', ') as events_attended
+          COALESCE(STRING_AGG(DISTINCT e.title, ', '), '') as events_attended
         FROM orders o
         JOIN events e ON e.id = o.event_id
         WHERE e.organizer_id = $1 AND o.payment_status != 'Anulado' AND o.customer_email IS NOT NULL
@@ -181,13 +181,13 @@ exports.getCustomerDatabase = async (req, res) => {
       customerQuery = `
         SELECT 
           o.customer_email as email,
-          o.customer_name as name,
-          MAX(o.customer_whatsapp) as phone,
+          COALESCE(o.customer_name, 'Cliente') as name,
+          COALESCE(MAX(o.customer_whatsapp), '') as phone,
           COUNT(DISTINCT o.id) as total_orders,
-          SUM(o.ticket_count_adult + o.ticket_count_child) as total_tickets,
-          SUM(o.amount_total) as total_spent,
+          COALESCE(SUM(COALESCE(o.ticket_count_adult, 0) + COALESCE(o.ticket_count_child, 0)), 0) as total_tickets,
+          COALESCE(SUM(o.amount_total), 0) as total_spent,
           MAX(o.created_at) as last_purchase,
-          STRING_AGG(DISTINCT e.title, ', ') as events_attended
+          COALESCE(STRING_AGG(DISTINCT e.title, ', '), '') as events_attended
         FROM orders o
         JOIN events e ON e.id = o.event_id
         WHERE o.payment_status != 'Anulado' AND o.customer_email IS NOT NULL
