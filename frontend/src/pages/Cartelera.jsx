@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { MapPin, Clock, ChevronRight, Ticket, Flame, Star, Sparkles } from 'lucide-react';
+import { MapPin, Clock, ChevronRight, Ticket, Flame, Star, Sparkles, UserPlus } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import VersionModal from '../components/VersionModal';
 
 const getImageUrl = (url) => {
@@ -16,6 +17,7 @@ const getImageUrl = (url) => {
 };
 
 const Cartelera = () => {
+  const { user, isAuthenticated } = useAuth();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -393,6 +395,64 @@ const Cartelera = () => {
         forceOpen={showVersionModal} 
         onCloseCustom={() => setShowVersionModal(false)} 
       />
+
+      {/* Placa Permanente de Bienvenida & Registro Ticket Pro (Visible para visitantes) */}
+      {!isAuthenticated && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(26, 28, 38, 0.85), rgba(13, 14, 20, 0.92))',
+          border: '1px solid rgba(222, 184, 65, 0.25)',
+          borderRadius: '16px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.35), 0 0 15px rgba(222,184,65,0.05)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '250px' }}>
+            <div style={{
+              width: '38px', height: '38px', borderRadius: '10px',
+              background: 'rgba(222,184,65,0.15)', border: '1px solid rgba(222,184,65,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+            }}>
+              <Sparkles size={18} color="var(--accent)" />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                  STUDIO 5 TICKETS PRO · v2.0.0
+                </span>
+                <span style={{ fontSize: '0.62rem', background: 'rgba(52,199,89,0.15)', color: '#34c759', padding: '1px 6px', borderRadius: '10px', fontWeight: 700 }}>
+                  NUEVO
+                </span>
+              </div>
+              <p style={{ color: '#d1d5db', fontSize: '0.78rem', margin: 0, lineHeight: 1.3 }}>
+                Crea tu cuenta gratuita para guardar tus boletos QR en el celular y comprar en 1 clic.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => navigate('/registro')}
+              className="btn-primary"
+              style={{ padding: '8px 14px', fontSize: '0.76rem', width: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Ticket size={13} /> Crear Cuenta Gratis
+            </button>
+            <button
+              onClick={() => setShowVersionModal(true)}
+              className="btn-outline"
+              style={{ padding: '8px 12px', fontSize: '0.76rem', width: 'auto' }}
+              title="Ver todas las novedades de la versión 2.0"
+            >
+              Novedades
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filtros y Botón de Novedades */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '4px', alignItems: 'center' }}>
