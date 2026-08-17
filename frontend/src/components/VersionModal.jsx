@@ -11,7 +11,7 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const STORAGE_KEY = 'studio5_v2_titanium_announcement_seen';
+  const STORAGE_KEY = 'studio5_v2_pro_announcement_seen';
 
   useEffect(() => {
     if (forceOpen) {
@@ -114,7 +114,7 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
             textTransform: 'uppercase',
             marginBottom: '12px'
           }}>
-            <Sparkles size={13} color="var(--accent)" /> STUDIO 5 TICKETS 2.0 · TITANIUM
+            <Sparkles size={13} color="var(--accent)" /> STUDIO 5 TICKETS PRO · v2.0.0
           </div>
 
           <h2 style={{
@@ -126,11 +126,11 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent'
           }}>
-            ¡Bienvenido a la Nueva Era de Boletaje!
+            ¡Bienvenido a la Nueva Era Pro!
           </h2>
 
           <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0, lineHeight: '1.4' }}>
-            Descubre las nuevas características diseñadas para elevar tu experiencia.
+            Descubre las nuevas características profesionales diseñadas para elevar tu experiencia.
           </p>
         </div>
 

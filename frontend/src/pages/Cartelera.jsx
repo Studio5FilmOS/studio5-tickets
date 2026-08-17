@@ -437,9 +437,9 @@ const Cartelera = () => {
             transition: 'all 0.25s',
             boxShadow: '0 0 10px rgba(222,184,65,0.1)'
           }}
-          title="Ver novedades de la versión 2.0 Titanium"
+          title="Ver novedades de Studio 5 Tickets Pro v2.0.0"
         >
-          <Sparkles size={13} color="var(--accent)" /> Novedades v2.0
+          <Sparkles size={13} color="var(--accent)" /> Novedades Pro 2.0
         </button>
       </div>
 
