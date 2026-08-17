@@ -377,7 +377,7 @@ const AdminDashboard = () => {
 
       const [ordersRes, eventsRes] = await Promise.all([
         api.get(`/orders?${params.toString()}`),
-        api.get('/events')
+        api.get('/events?manage=true')
       ]);
       
       if (ordersRes.data.status === 'OK') {
@@ -391,6 +391,51 @@ const AdminDashboard = () => {
       Swal.fire('Error', 'No se pudieron obtener los datos de administración.', 'error');
     } finally {
       setLoadingOrders(false);
+    }
+  };
+
+  // Función para que el organizador registre su tarjeta de garantía Payphone
+  const handleRegisterGuaranteeCard = async () => {
+    const { value: tokenVal } = await Swal.fire({
+      title: '💳 Registrar Tarjeta de Garantía Payphone',
+      html: `
+        <div style="text-align: left; font-size: 0.85rem; color: #ccc; margin-bottom: 12px; line-height: 1.5;">
+          <p style="margin-bottom: 8px;">Para crear y publicar eventos con tu marca blanca, es obligatorio vincular un <b>Token de Tarjeta de Crédito/Débito</b> Payphone.</p>
+          <p style="margin: 0; font-size: 0.76rem; color: #9ca3af;">💡 Las comisiones generadas ($0.50 por entrada vendida) se liquidarán automáticamente contra esta tarjeta al alcanzar el lote de $50.00 o en el corte mensual.</p>
+        </div>
+      `,
+      input: 'text',
+      inputPlaceholder: 'Ingresa el Token de Tarjeta o ID Payphone...',
+      inputValue: user?.token_tarjeta || '',
+      showCancelButton: true,
+      confirmButtonText: 'Guardar Tarjeta',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#DEB841',
+      inputValidator: (value) => {
+        if (!value || value.trim().length < 4) {
+          return 'Debes ingresar un token de tarjeta válido.';
+        }
+      }
+    });
+
+    if (tokenVal) {
+      try {
+        Swal.showLoading();
+        const res = await api.post('/users/my-guarantee-card', { token_tarjeta: tokenVal.trim() });
+        if (res.data.status === 'OK') {
+          const stored = localStorage.getItem('user');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            parsed.token_tarjeta = tokenVal.trim();
+            localStorage.setItem('user', JSON.stringify(parsed));
+          }
+          await Swal.fire('¡Tarjeta Registrada!', 'Tu tarjeta de garantía Payphone ha sido vinculada correctamente. Ya puedes crear y gestionar eventos.', 'success');
+          window.location.reload();
+        }
+      } catch (err) {
+        console.error(err);
+        Swal.fire('Error', err.response?.data?.message || 'No se pudo registrar la tarjeta.', 'error');
+      }
     }
   };
 
@@ -1255,12 +1300,32 @@ const AdminDashboard = () => {
           gap: '12px'
         }}>
           <div>
-            <h4 style={{ color: 'var(--accent)', fontWeight: 800, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h4 style={{ color: 'var(--accent)', fontWeight: 800, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 4px 0' }}>
               <ShieldCheck size={18} /> Productora / Marca Blanca: {user?.name}
             </h4>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>
-              Garantía Payphone: {user?.token_tarjeta ? <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>✅ Tarjeta Tokenizada y Activa</span> : <span style={{ color: 'var(--error)', fontWeight: 'bold' }}>⚠️ Sin Tarjeta de Garantía (Requerida para Publicar)</span>}
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                Garantía Payphone: {user?.token_tarjeta ? <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>✅ Tarjeta Tokenizada y Activa</span> : <span style={{ color: 'var(--error)', fontWeight: 'bold' }}>⚠️ Sin Tarjeta de Garantía (Requerida para Publicar)</span>}
+              </span>
+              <button
+                onClick={handleRegisterGuaranteeCard}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(222,184,65,0.3)',
+                  background: 'rgba(222,184,65,0.15)',
+                  color: 'var(--accent)',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                <DollarSign size={13} /> {user?.token_tarjeta ? 'Cambiar Tarjeta' : '💳 Registrar Tarjeta de Garantía'}
+              </button>
+            </div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Comisión Pendiente de Liquidación</span>
@@ -1297,7 +1362,24 @@ const AdminDashboard = () => {
         ]).map(tab => (
           <button
             key={tab.id}
-            onClick={() => { if (tab.id !== 'crear') setEditingEvent(null); setActiveTab(tab.id); }}
+            onClick={() => {
+              if (tab.id === 'crear' && isOrganizer && !user?.token_tarjeta) {
+                Swal.fire({
+                  title: '⚠️ Tarjeta de Garantía Requerida',
+                  text: 'Como organizador de marca blanca, es obligatorio registrar tu tarjeta de garantía Payphone antes de poder crear eventos.',
+                  icon: 'warning',
+                  showCancelButton: true,
+                  confirmButtonText: '💳 Registrar Tarjeta Ahora',
+                  cancelButtonText: 'Cerrar',
+                  confirmButtonColor: '#DEB841'
+                }).then((r) => {
+                  if (r.isConfirmed) handleRegisterGuaranteeCard();
+                });
+                return;
+              }
+              if (tab.id !== 'crear') setEditingEvent(null);
+              setActiveTab(tab.id);
+            }}
             style={{
               flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
               padding: '11px 14px', borderRadius: '11px', border: 'none', cursor: 'pointer',

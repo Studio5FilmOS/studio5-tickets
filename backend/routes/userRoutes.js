@@ -10,6 +10,9 @@ router.get('/my-tickets', authMiddleware, userController.getMyTickets);
 // 2. Base de Datos / CRM de Clientes (Admin y Organizadores)
 router.get('/customer-database', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.getCustomerDatabase);
 
+// 3. Tarjeta de Garantía Payphone del Organizador
+router.post('/my-guarantee-card', authMiddleware, userController.updateMyGuaranteeCard);
+
 // 3. Rutas exclusivas para Dueños Generales (Admin)
 router.get('/organizers-commission', authMiddleware, roleMiddleware(['admin']), userController.getOrganizersCommissionMetrics);
 router.get('/', authMiddleware, roleMiddleware(['admin']), userController.getAllUsers);

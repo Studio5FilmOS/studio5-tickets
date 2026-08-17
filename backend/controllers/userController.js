@@ -245,3 +245,30 @@ exports.getOrganizersCommissionMetrics = async (req, res) => {
     res.status(500).json({ status: 'ERROR', message: err.message });
   }
 };
+
+// 8. Actualizar la tarjeta de garantía del propio organizador
+exports.updateMyGuaranteeCard = async (req, res) => {
+  try {
+    const { token_tarjeta } = req.body;
+    if (!token_tarjeta || token_tarjeta.trim().length < 4) {
+      return res.status(400).json({
+        status: 'ERROR',
+        message: 'Debe ingresar un identificador de tarjeta o token de garantía válido.'
+      });
+    }
+
+    const result = await query(
+      'UPDATE users SET token_tarjeta = $1 WHERE id = $2 RETURNING id, name, email, role, token_tarjeta, debt_balance',
+      [token_tarjeta.trim(), req.user.id]
+    );
+
+    res.json({
+      status: 'OK',
+      message: 'Tarjeta de garantía Payphone registrada exitosamente.',
+      user: result.rows[0]
+    });
+  } catch (err) {
+    console.error('Error al actualizar tarjeta de garantía:', err);
+    res.status(500).json({ status: 'ERROR', message: err.message });
+  }
+};

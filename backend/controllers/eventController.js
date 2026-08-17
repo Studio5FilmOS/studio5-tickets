@@ -37,17 +37,21 @@ exports.getAllEvents = async (req, res) => {
   const isAdmin = user && user.role === 'admin';
   const isStaff = user && user.role === 'staff';
   const isOrganizer = user && user.role === 'organizer';
+  const isManageMode = req.query.manage === 'true';
 
   try {
-    let sqlEvents = 'SELECT * FROM events ORDER BY created_at DESC';
+    let sqlEvents;
     let params = [];
 
-    if (isOrganizer) {
-      // Organizadores solo ven sus propios eventos
+    if (isManageMode && isOrganizer) {
+      // En modo administración de su panel, el organizador SOLO ve sus propios eventos
       sqlEvents = 'SELECT * FROM events WHERE organizer_id = $1 ORDER BY created_at DESC';
       params = [user.id];
-    } else if (!isAdmin && !isStaff) {
-      // Clientes públicos solo ven eventos activos no archivados
+    } else if (isManageMode && (isAdmin || isStaff)) {
+      // En modo administración del dueño o staff, ve todos los eventos para gestión
+      sqlEvents = 'SELECT * FROM events ORDER BY created_at DESC';
+    } else {
+      // En la Cartelera Pública general, todos los usuarios y espectadores ven los eventos activos no archivados
       sqlEvents = "SELECT * FROM events WHERE status = 'active' AND is_archived = FALSE ORDER BY created_at DESC";
     }
 
@@ -192,13 +196,13 @@ exports.createEvent = async (req, res) => {
   const assignedOrganizerId = req.user && req.user.role === 'organizer' ? req.user.id : (organizer_id || null);
 
   // Validación de Token de Garantía Payphone para Organizadores
-  if (req.user && req.user.role === 'organizer' && (status === 'active' || status === 'published')) {
+  if (req.user && req.user.role === 'organizer') {
     const userRes = await query('SELECT token_tarjeta FROM users WHERE id = $1', [req.user.id]);
     const tokenTarjeta = userRes.rows[0]?.token_tarjeta;
     if (!tokenTarjeta) {
       return res.status(400).json({
         status: 'ERROR',
-        message: 'Es estrictamente obligatorio registrar y validar una tarjeta de garantía (token Payphone) en su perfil de Organizador antes de publicar un evento.'
+        message: 'Es estrictamente obligatorio registrar tu tarjeta de garantía Payphone antes de poder crear eventos en la plataforma.'
       });
     }
   }
