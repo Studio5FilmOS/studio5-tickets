@@ -530,7 +530,7 @@ const ManualRegistryTab = () => {
 
   const fetchEvents = async () => {
     try {
-      const res = await api.get('/events');
+      const res = await api.get('/events?manage=true');
       if (res.data.status === 'OK') {
         setEvents(res.data.events);
         if (res.data.events.length > 0 && selectedEventId === 'ALL') {

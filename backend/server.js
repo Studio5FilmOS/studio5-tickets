@@ -232,6 +232,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/admin/users', userRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/bank-accounts', bankAccountRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/admin', adminRoutes);

@@ -396,40 +396,125 @@ const AdminDashboard = () => {
 
   // Función para que el organizador registre su tarjeta de garantía Payphone
   const handleRegisterGuaranteeCard = async () => {
-    const { value: tokenVal } = await Swal.fire({
-      title: '💳 Registrar Tarjeta de Garantía Payphone',
+    const { value: formValues } = await Swal.fire({
+      title: '💳 Registrar Tarjeta de Garantía',
       html: `
-        <div style="text-align: left; font-size: 0.85rem; color: #ccc; margin-bottom: 12px; line-height: 1.5;">
-          <p style="margin-bottom: 8px;">Para crear y publicar eventos con tu marca blanca, es obligatorio vincular un <b>Token de Tarjeta de Crédito/Débito</b> Payphone.</p>
-          <p style="margin: 0; font-size: 0.76rem; color: #9ca3af;">💡 Las comisiones generadas ($0.50 por entrada vendida) se liquidarán automáticamente contra esta tarjeta al alcanzar el lote de $50.00 o en el corte mensual.</p>
+        <div style="text-align: left; font-size: 0.82rem; color: #d1d5db; margin-bottom: 12px; line-height: 1.4;">
+          <p style="margin-bottom: 8px;">Ingresa una tarjeta de crédito o débito (Visa o Mastercard) para respaldar la emisión de boletos de tu productora.</p>
+          <div style="background: rgba(222,184,65,0.1); border: 1px solid rgba(222,184,65,0.3); border-radius: 8px; padding: 8px 12px; font-size: 0.75rem; color: #DEB841; margin-bottom: 12px;">
+            🔒 Procesado mediante Payphone. Las comisiones ($0.50/boleto) se cobrarán automáticamente solo al alcanzar $50.00 acumulados.
+          </div>
+          
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div>
+              <label style="font-size: 0.72rem; font-weight: bold; color: #fff; display: block; margin-bottom: 3px;">NOMBRE DEL TITULAR</label>
+              <input id="swal-card-name" class="swal2-input" placeholder="Como aparece en la tarjeta" style="margin: 0; width: 100%; box-sizing: border-box; font-size: 0.85rem; height: 38px;" value="${user?.name || ''}">
+            </div>
+            
+            <div>
+              <label style="font-size: 0.72rem; font-weight: bold; color: #fff; display: block; margin-bottom: 3px;">NÚMERO DE TARJETA</label>
+              <input id="swal-card-number" class="swal2-input" placeholder="•••• •••• •••• ••••" maxlength="19" style="margin: 0; width: 100%; box-sizing: border-box; font-size: 0.85rem; height: 38px; letter-spacing: 2px;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div>
+                <label style="font-size: 0.72rem; font-weight: bold; color: #fff; display: block; margin-bottom: 3px;">VENCIMIENTO</label>
+                <input id="swal-card-exp" class="swal2-input" placeholder="MM/AA" maxlength="5" style="margin: 0; width: 100%; box-sizing: border-box; font-size: 0.85rem; height: 38px;">
+              </div>
+              <div>
+                <label style="font-size: 0.72rem; font-weight: bold; color: #fff; display: block; margin-bottom: 3px;">CVV / CVC</label>
+                <input id="swal-card-cvv" type="password" class="swal2-input" placeholder="123" maxlength="4" style="margin: 0; width: 100%; box-sizing: border-box; font-size: 0.85rem; height: 38px;">
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size: 0.72rem; font-weight: bold; color: #fff; display: block; margin-bottom: 3px;">CÉDULA / RUC DEL TITULAR</label>
+              <input id="swal-card-doc" class="swal2-input" placeholder="Ej: 1712345678" style="margin: 0; width: 100%; box-sizing: border-box; font-size: 0.85rem; height: 38px;">
+            </div>
+          </div>
         </div>
       `,
-      input: 'text',
-      inputPlaceholder: 'Ingresa el Token de Tarjeta o ID Payphone...',
-      inputValue: user?.token_tarjeta || '',
       showCancelButton: true,
-      confirmButtonText: 'Guardar Tarjeta',
+      confirmButtonText: '✅ Vincular Tarjeta de Garantía',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#DEB841',
-      inputValidator: (value) => {
-        if (!value || value.trim().length < 4) {
-          return 'Debes ingresar un token de tarjeta válido.';
+      background: '#16171f',
+      color: '#fff',
+      focusConfirm: false,
+      didOpen: () => {
+        const numInput = document.getElementById('swal-card-number');
+        if (numInput) {
+          numInput.addEventListener('input', (e) => {
+            let val = e.target.value.replace(/\D/g, '').substring(0, 16);
+            let formatted = val.match(/.{1,4}/g)?.join(' ') || val;
+            e.target.value = formatted;
+          });
         }
+        const expInput = document.getElementById('swal-card-exp');
+        if (expInput) {
+          expInput.addEventListener('input', (e) => {
+            let val = e.target.value.replace(/\D/g, '').substring(0, 4);
+            if (val.length >= 3) {
+              e.target.value = val.substring(0, 2) + '/' + val.substring(2);
+            } else {
+              e.target.value = val;
+            }
+          });
+        }
+      },
+      preConfirm: () => {
+        const name = document.getElementById('swal-card-name').value.trim();
+        const number = document.getElementById('swal-card-number').value.replace(/\s/g, '');
+        const exp = document.getElementById('swal-card-exp').value.trim();
+        const cvv = document.getElementById('swal-card-cvv').value.trim();
+        const doc = document.getElementById('swal-card-doc').value.trim();
+
+        if (!name || name.length < 3) {
+          Swal.showValidationMessage('Ingresa el nombre del titular de la tarjeta.');
+          return false;
+        }
+        if (!number || number.length < 15) {
+          Swal.showValidationMessage('Ingresa un número de tarjeta válido de 15 o 16 dígitos.');
+          return false;
+        }
+        if (!exp || exp.length < 5) {
+          Swal.showValidationMessage('Ingresa la fecha de expiración en formato MM/AA.');
+          return false;
+        }
+        if (!cvv || cvv.length < 3) {
+          Swal.showValidationMessage('Ingresa el código de seguridad CVV (3 o 4 dígitos).');
+          return false;
+        }
+        if (!doc || doc.length < 8) {
+          Swal.showValidationMessage('Ingresa la cédula o RUC del titular.');
+          return false;
+        }
+
+        const brand = number.startsWith('4') ? 'Visa' : (number.startsWith('5') ? 'Mastercard' : 'Tarjeta');
+        const last4 = number.slice(-4);
+        return { token: `${brand} •••• ${last4} (Garantía Activa)`, brand, last4 };
       }
     });
 
-    if (tokenVal) {
+    if (formValues) {
       try {
         Swal.showLoading();
-        const res = await api.post('/users/my-guarantee-card', { token_tarjeta: tokenVal.trim() });
+        const res = await api.post('/users/my-guarantee-card', { token_tarjeta: formValues.token });
         if (res.data.status === 'OK') {
-          const stored = localStorage.getItem('user');
+          const stored = localStorage.getItem('studio5_user');
           if (stored) {
             const parsed = JSON.parse(stored);
-            parsed.token_tarjeta = tokenVal.trim();
-            localStorage.setItem('user', JSON.stringify(parsed));
+            parsed.token_tarjeta = formValues.token;
+            localStorage.setItem('studio5_user', JSON.stringify(parsed));
           }
-          await Swal.fire('¡Tarjeta Registrada!', 'Tu tarjeta de garantía Payphone ha sido vinculada correctamente. Ya puedes crear y gestionar eventos.', 'success');
+          await Swal.fire({
+            icon: 'success',
+            title: '¡Tarjeta Vinculada con Éxito!',
+            text: `Se ha registrado ${formValues.token} como tu tarjeta de respaldo. Ya puedes crear y publicar eventos.`,
+            confirmButtonColor: '#DEB841',
+            background: '#16171f',
+            color: '#fff'
+          });
           window.location.reload();
         }
       } catch (err) {
@@ -472,12 +557,13 @@ const AdminDashboard = () => {
   const fetchCustomerDatabase = async () => {
     setLoadingCustomers(true);
     try {
-      const res = await api.get('/admin/users/customer-database');
+      const res = await api.get('/users/customer-database');
       if (res.data.status === 'OK') {
-        setCustomers(res.data.customers || []);
+        setCustomers(Array.isArray(res.data.customers) ? res.data.customers : []);
       }
     } catch (err) {
       console.error(err);
+      setCustomers([]);
     } finally {
       setLoadingCustomers(false);
     }
@@ -2220,7 +2306,7 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* PESTAÑA: MARCA BLANCA / THEMING */}
+      {/* PESTAÑA: MI MARCA */}
       {activeTab === 'theming' && (
         <div className="glass-panel fade-in">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
@@ -2228,111 +2314,178 @@ const AdminDashboard = () => {
               <Palette size={18} color="var(--accent)" />
             </div>
             <div>
-              <h3 style={{ color: '#fff', fontSize: '1rem', fontWeight: '800' }}>Personalización de Marca Blanca</h3>
-              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Adapta logos, títulos y colores globales en tiempo real en menos de 5 minutos</p>
+              <h3 style={{ color: '#fff', fontSize: '1rem', fontWeight: '800' }}>Personalización de Mi Marca</h3>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Configura el logotipo, nombre de tu productora y paleta de colores para tu portal</p>
             </div>
           </div>
 
           <form onSubmit={handleSaveTheme} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
             <div>
-              <label>Nombre de la Plataforma / Tenant</label>
+              <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)', textTransform: 'uppercase' }}>
+                Nombre de tu Marca / Productora
+              </label>
               <input
                 type="text"
                 value={themeForm.tenantName}
                 onChange={e => setThemeForm({ ...themeForm, tenantName: e.target.value })}
-                placeholder="Ej: Studio 5, Teatro Bolívar, etc."
+                placeholder="Ej: Producciones Jesse, Teatro Bolívar, etc."
                 required
+                style={{ marginBottom: '14px' }}
               />
 
-              <label>URL del Logotipo (PNG transparente)</label>
-              <input
-                type="text"
-                value={themeForm.logoUrl}
-                onChange={e => setThemeForm({ ...themeForm, logoUrl: e.target.value })}
-                placeholder="https://..."
-                required
-              />
-
-              <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
-                <div style={{ flex: '1' }}>
-                  <label>Color Primario</label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      type="color"
-                      value={themeForm.primaryColor}
-                      onChange={e => setThemeForm({ ...themeForm, primaryColor: e.target.value })}
-                      style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
-                    />
-                    <input
-                      type="text"
-                      value={themeForm.primaryColor}
-                      onChange={e => setThemeForm({ ...themeForm, primaryColor: e.target.value })}
-                      style={{ marginBottom: 0, textTransform: 'uppercase' }}
-                    />
+              {/* Contenedor de Subida de Logotipo con Compresión */}
+              <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)', textTransform: 'uppercase' }}>
+                Logotipo Oficial (PNG Transparente / SVG)
+              </label>
+              <div style={{
+                border: '2px dashed rgba(222,184,65,0.35)',
+                borderRadius: '14px',
+                padding: '16px',
+                textAlign: 'center',
+                background: 'rgba(255,255,255,0.02)',
+                marginBottom: '14px',
+                transition: 'all 0.2s'
+              }}>
+                {themeForm.logoUrl && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <img src={themeForm.logoUrl} alt="Logo Preview" style={{ maxHeight: '50px', maxWidth: '100%', objectFit: 'contain' }} />
                   </div>
-                </div>
+                )}
+                
+                <input
+                  type="file"
+                  id="brand-logo-file-input"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      Swal.showLoading();
+                      // Compresión en cliente
+                      const reader = new FileReader();
+                      reader.onload = async (evt) => {
+                        const img = new Image();
+                        img.onload = async () => {
+                          const canvas = document.createElement('canvas');
+                          const maxDim = 400;
+                          let width = img.width;
+                          let height = img.height;
+                          if (width > height) {
+                            if (width > maxDim) {
+                              height = Math.round((height * maxDim) / width);
+                              width = maxDim;
+                            }
+                          } else {
+                            if (height > maxDim) {
+                              width = Math.round((width * maxDim) / height);
+                              height = maxDim;
+                            }
+                          }
+                          canvas.width = width;
+                          canvas.height = height;
+                          const ctx = canvas.getContext('2d');
+                          ctx.drawImage(img, 0, 0, width, height);
+                          const compressedBase64 = canvas.toDataURL('image/png', 0.85);
 
-                <div style={{ flex: '1' }}>
-                  <label>Color Secundario</label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      type="color"
-                      value={themeForm.secondaryColor}
-                      onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
-                      style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
-                    />
-                    <input
-                      type="text"
-                      value={themeForm.secondaryColor}
-                      onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
-                      style={{ marginBottom: 0, textTransform: 'uppercase' }}
-                    />
-                  </div>
-                </div>
+                          try {
+                            const res = await api.post('/events/upload', { image: compressedBase64 });
+                            if (res.data.status === 'OK' && res.data.imageUrl) {
+                              setThemeForm(prev => ({ ...prev, logoUrl: res.data.imageUrl }));
+                            } else {
+                              setThemeForm(prev => ({ ...prev, logoUrl: compressedBase64 }));
+                            }
+                          } catch (_) {
+                            setThemeForm(prev => ({ ...prev, logoUrl: compressedBase64 }));
+                          }
+                          Swal.close();
+                          Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Logo optimizado y cargado', showConfirmButton: false, timer: 1800 });
+                        };
+                        img.src = evt.target.result;
+                      };
+                      reader.readAsDataURL(file);
+                    } catch (err) {
+                      Swal.fire('Error', 'No se pudo procesar la imagen.', 'error');
+                    }
+                  }}
+                  style={{ display: 'none' }}
+                />
+
+                <label
+                  htmlFor="brand-logo-file-input"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '10px',
+                    background: 'rgba(222,184,65,0.15)',
+                    border: '1px solid rgba(222,184,65,0.3)',
+                    color: 'var(--accent)',
+                    fontSize: '0.78rem',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📁 Subir y Comprimir Logotipo
+                </label>
+                <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '6px 0 0 0' }}>
+                  Compresión automática de peso ideal para carga ultrarrápida.
+                </p>
               </div>
 
-              {/* Botones de presets rápidos */}
-              <div style={{ marginTop: '16px' }}>
-                <label style={{ fontSize: '0.72rem' }}>Presets de Marca:</label>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {[
-                    { name: 'Studio 5 Gold', primary: '#DEB841', secondary: '#b08d2b' },
-                    { name: 'Midnight Blue', primary: '#0066FF', secondary: '#0044AA' },
-                    { name: 'Emerald VIP', primary: '#10B981', secondary: '#059669' },
-                    { name: 'Ruby Theater', primary: '#E11D48', secondary: '#BE123C' },
-                    { name: 'Cyber Violet', primary: '#8B5CF6', secondary: '#6D28D9' }
-                  ].map((p, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setThemeForm({ ...themeForm, primaryColor: p.primary, secondaryColor: p.secondary })}
-                      style={{
-                        padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
-                        background: 'rgba(255,255,255,0.03)', color: '#fff', fontSize: '0.75rem', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: '6px'
-                      }}
-                    >
-                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: p.primary }}></span>
-                      {p.name}
-                    </button>
-                  ))}
+              {/* Selector de Colores Personalizado */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Color de Botones y Acentos Principales</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                    <input
+                      type="color"
+                      value={themeForm.primaryColor}
+                      onChange={e => setThemeForm({ ...themeForm, primaryColor: e.target.value })}
+                      style={{ width: '42px', height: '42px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
+                    />
+                    <input
+                      type="text"
+                      value={themeForm.primaryColor}
+                      onChange={e => setThemeForm({ ...themeForm, primaryColor: e.target.value })}
+                      style={{ marginBottom: 0, textTransform: 'uppercase', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Color Secundario / Gradientes</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                    <input
+                      type="color"
+                      value={themeForm.secondaryColor}
+                      onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
+                      style={{ width: '42px', height: '42px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
+                    />
+                    <input
+                      type="text"
+                      value={themeForm.secondaryColor}
+                      onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
+                      style={{ marginBottom: 0, textTransform: 'uppercase', fontSize: '0.85rem' }}
+                    />
+                  </div>
                 </div>
               </div>
 
               <button
                 type="submit"
                 className="btn-primary"
-                style={{ marginTop: '24px' }}
+                style={{ marginTop: '24px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 disabled={savingTheme}
               >
-                <Save size={16} /> {savingTheme ? 'Guardando...' : 'Guardar y Aplicar Marca Blanca'}
+                <Save size={16} /> {savingTheme ? 'Guardando...' : 'Guardar y Aplicar Mi Marca'}
               </button>
             </div>
 
             {/* Vista Previa en Vivo */}
             <div style={{ background: 'rgba(0,0,0,0.4)', padding: '20px', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
-                Previsualización en Vivo
+                Previsualización en Vivo de tu Marca
               </span>
               
               <div style={{ marginTop: '15px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
@@ -2352,7 +2505,7 @@ const AdminDashboard = () => {
                     background: `linear-gradient(135deg, ${themeForm.primaryColor}, ${themeForm.secondaryColor})`,
                     color: '#000'
                   }}>
-                    COMPRAR
+                    COMPRAR BOLETOS
                   </div>
                 </div>
               </div>
