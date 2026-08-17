@@ -61,10 +61,16 @@ const BottomNavigation = () => {
           <span>Salir</span>
         </button>
       ) : (
-        <Link to="/login" className={`mobile-nav-item ${location.pathname === '/login' ? 'active' : ''}`}>
-          <LogIn size={20} />
-          <span>Entrar</span>
-        </Link>
+        <>
+          <Link to="/registro" className={`mobile-nav-item ${location.pathname === '/registro' ? 'active' : ''}`}>
+            <UserPlus size={20} />
+            <span>Registro</span>
+          </Link>
+          <Link to="/login" className={`mobile-nav-item ${location.pathname === '/login' ? 'active' : ''}`}>
+            <LogIn size={20} />
+            <span>Entrar</span>
+          </Link>
+        </>
       )}
     </nav>
   );

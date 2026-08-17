@@ -28,12 +28,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      // Si el token expira o es inválido, desloguear
-      console.warn('Sesión expirada o no autorizada. Limpiando almacenamiento.');
+    if (error.response && error.response.status === 401) {
+      // Si el token expiró o es inválido (401), desloguear
+      console.warn('Sesión expirada (401). Limpiando token.');
       localStorage.removeItem('studio5_token');
       localStorage.removeItem('studio5_user');
-      // Podríamos redirigir a /login, pero depende de la ruta. El contexto lo manejará mejor.
     }
     return Promise.reject(error);
   }
