@@ -754,7 +754,7 @@ const ManualRegistryTab = () => {
           onClick={() => { setFilterAttendance('ALL'); setFilterStatus('ALL'); }}
           className="glass-panel" 
           style={{ 
-            padding: '12px 14px', 
+            padding: '14px 16px', 
             borderLeft: '4px solid var(--accent)', 
             display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer',
             border: filterAttendance === 'ALL' && filterStatus === 'ALL' ? '1.5px solid var(--accent)' : '1px solid var(--glass-border)',
@@ -762,17 +762,16 @@ const ManualRegistryTab = () => {
             transition: 'all 0.2s'
           }}
         >
-          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Aforo Disponible</span>
-          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#fff' }}>{capacityAvailable}</span>
-          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Ver todos</span>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AFORO DISPONIBLE</span>
+          <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff' }}>{capacityAvailable}</span>
         </div>
 
-        {/* Vendidas / Por Ingresar */}
+        {/* Por Ingresar */}
         <div 
           onClick={() => { setFilterAttendance('PENDING_ENTRY'); setFilterStatus('ALL'); }}
           className="glass-panel" 
           style={{ 
-            padding: '12px 14px', 
+            padding: '14px 16px', 
             borderLeft: '4px solid #34c759', 
             display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer',
             border: filterAttendance === 'PENDING_ENTRY' ? '1.5px solid #34c759' : '1px solid var(--glass-border)',
@@ -780,17 +779,16 @@ const ManualRegistryTab = () => {
             transition: 'all 0.2s'
           }}
         >
-          <span style={{ fontSize: '0.65rem', color: '#34c759', fontWeight: '700', textTransform: 'uppercase' }}>⏳ Por Ingresar (Afuera)</span>
-          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#34c759' }}>{pendingEntryCount} <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>de {soldCount}</span></span>
-          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Filtrar pendientes de entrar</span>
+          <span style={{ fontSize: '0.68rem', color: '#34c759', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>⏳ POR INGRESAR</span>
+          <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#34c759' }}>{pendingEntryCount} <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>de {soldCount}</span></span>
         </div>
 
-        {/* Adentro (Validadas) */}
+        {/* Validadas */}
         <div 
           onClick={() => { setFilterAttendance('VALIDATED'); setFilterStatus('ALL'); }}
           className="glass-panel" 
           style={{ 
-            padding: '12px 14px', 
+            padding: '14px 16px', 
             borderLeft: '4px solid #0a84ff', 
             display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer',
             border: filterAttendance === 'VALIDATED' ? '1.5px solid #0a84ff' : '1px solid var(--glass-border)',
@@ -798,9 +796,8 @@ const ManualRegistryTab = () => {
             transition: 'all 0.2s'
           }}
         >
-          <span style={{ fontSize: '0.65rem', color: '#0a84ff', fontWeight: '700', textTransform: 'uppercase' }}>✅ Adentro (Validadas)</span>
-          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#0a84ff' }}>{validatedCount}</span>
-          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Ver solo validados</span>
+          <span style={{ fontSize: '0.68rem', color: '#0a84ff', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>✅ VALIDADAS</span>
+          <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#0a84ff' }}>{validatedCount}</span>
         </div>
 
         {/* Cortesías */}
@@ -808,7 +805,7 @@ const ManualRegistryTab = () => {
           onClick={() => { setFilterAttendance('CORTESIA'); setFilterStatus('ALL'); }}
           className="glass-panel" 
           style={{ 
-            padding: '12px 14px', 
+            padding: '14px 16px', 
             borderLeft: '4px solid #af52de', 
             display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer',
             border: filterAttendance === 'CORTESIA' ? '1.5px solid #af52de' : '1px solid var(--glass-border)',
@@ -816,9 +813,8 @@ const ManualRegistryTab = () => {
             transition: 'all 0.2s'
           }}
         >
-          <span style={{ fontSize: '0.65rem', color: '#af52de', fontWeight: '700', textTransform: 'uppercase' }}>🎁 Cortesías</span>
-          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#af52de' }}>{cortesiasCount}</span>
-          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Ver cortesías</span>
+          <span style={{ fontSize: '0.68rem', color: '#af52de', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🎁 CORTESÍAS</span>
+          <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#af52de' }}>{cortesiasCount}</span>
         </div>
 
         {/* Pagos Pendientes en Puerta */}
@@ -826,7 +822,7 @@ const ManualRegistryTab = () => {
           onClick={() => { setFilterAttendance('UNPAID'); setFilterStatus('ALL'); }}
           className="glass-panel" 
           style={{ 
-            padding: '12px 14px', 
+            padding: '14px 16px', 
             borderLeft: '4px solid #ff9f0a', 
             display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2', cursor: 'pointer',
             border: filterAttendance === 'UNPAID' ? '1.5px solid #ff9f0a' : '1px solid var(--glass-border)',
@@ -834,9 +830,8 @@ const ManualRegistryTab = () => {
             transition: 'all 0.2s'
           }}
         >
-          <span style={{ fontSize: '0.65rem', color: '#ff9f0a', fontWeight: '700', textTransform: 'uppercase' }}>💰 Pagos Pendientes en Puerta</span>
-          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#ff9f0a' }}>{pendingCount}</span>
-          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Cobrar y validar en puerta</span>
+          <span style={{ fontSize: '0.68rem', color: '#ff9f0a', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 PAGOS PENDIENTES EN PUERTA</span>
+          <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#ff9f0a' }}>{pendingCount}</span>
         </div>
       </div>
 
@@ -858,9 +853,9 @@ const ManualRegistryTab = () => {
       <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
         {[
           { id: 'ALL', label: '🔘 Todos' },
-          { id: 'VALIDATED', label: '✅ Validadas (100% Adentro)' },
-          { id: 'PENDING_ENTRY', label: '⏳ Por Ingresar (Afuera)' },
-          { id: 'PARTIAL', label: '🌓 Parciales (Incompletas)' },
+          { id: 'VALIDATED', label: '✅ Validadas' },
+          { id: 'PENDING_ENTRY', label: '⏳ Por Ingresar' },
+          { id: 'PARTIAL', label: '🌓 Parciales' },
           { id: 'UNPAID', label: '💰 Pendientes Pago' },
           { id: 'CORTESIA', label: '🎁 Cortesías' }
         ].map(chip => {
@@ -873,7 +868,7 @@ const ManualRegistryTab = () => {
                 setFilterStatus('ALL');
               }}
               style={{
-                padding: '6px 12px', borderRadius: '20px', fontSize: '0.72rem', fontWeight: '700',
+                padding: '6px 14px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '700',
                 cursor: 'pointer', border: `1px solid ${isSelected ? 'var(--accent)' : 'rgba(255,255,255,0.1)'}`,
                 background: isSelected ? 'rgba(222,184,65,0.18)' : 'rgba(255,255,255,0.03)',
                 color: isSelected ? 'var(--accent)' : 'var(--text-muted)',
@@ -896,7 +891,7 @@ const ManualRegistryTab = () => {
 
       {/* Contador */}
       <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-        Mostrando {filteredOrders.length} orden{filteredOrders.length !== 1 ? 'es' : ''} {filterAttendance !== 'ALL' && <b style={{ color: 'var(--accent)' }}>({filterAttendance})</b>}
+        Mostrando {filteredOrders.length} orden{filteredOrders.length !== 1 ? 'es' : ''}
       </p>
 
       {loading ? (
@@ -947,16 +942,16 @@ const ManualRegistryTab = () => {
                       </span>
                       {/* Badge de Ingreso / Asistencia */}
                       {isAllIn ? (
-                        <span style={{ fontSize: '0.65rem', fontWeight: 800, background: 'rgba(52,199,89,0.15)', color: '#34c759', border: '1px solid rgba(52,199,89,0.3)', padding: '2px 8px', borderRadius: '6px' }}>
-                          ✅ {checkedIn}/{totalT} INGRESADOS
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, background: 'rgba(52,199,89,0.15)', color: '#34c759', border: '1px solid rgba(52,199,89,0.3)', padding: '2px 8px', borderRadius: '6px' }}>
+                          ✅ {checkedIn}/{totalT} Validados
                         </span>
                       ) : isPartial ? (
-                        <span style={{ fontSize: '0.65rem', fontWeight: 800, background: 'rgba(255,204,0,0.15)', color: '#ffcc00', border: '1px solid rgba(255,204,0,0.3)', padding: '2px 8px', borderRadius: '6px' }}>
-                          ⏳ {checkedIn}/{totalT} ADENTRO (Faltan {totalT - checkedIn})
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, background: 'rgba(255,204,0,0.15)', color: '#ffcc00', border: '1px solid rgba(255,204,0,0.3)', padding: '2px 8px', borderRadius: '6px' }}>
+                          ⏳ {checkedIn}/{totalT} (Faltan {totalT - checkedIn})
                         </span>
                       ) : (
-                        <span style={{ fontSize: '0.65rem', fontWeight: 600, background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '6px' }}>
-                          🚪 0/{totalT} Adentro
+                        <span style={{ fontSize: '0.68rem', fontWeight: 600, background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '6px' }}>
+                          0/{totalT}
                         </span>
                       )}
                     </div>
