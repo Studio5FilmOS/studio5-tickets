@@ -1,4 +1,4 @@
-const CACHE_NAME = 'studio5-tickets-v2';
+const CACHE_NAME = 'studio5-tickets-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
