@@ -88,11 +88,15 @@ const TermsAndPolicies = () => {
 
             <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
               <h4 style={{ color: 'var(--accent)', fontSize: '0.9rem', margin: '0 0 6px 0', fontWeight: 700 }}>
-                💵 Tarifa de Comisión por Emisión Tecnológica
+                💵 Tarifa de Comisión por Emisión Tecnológica y Política de Cortesías
               </h4>
               <p style={{ margin: 0, fontSize: '0.82rem' }}>
-                La plataforma aplica una comisión fija de <strong>$0.50 USD por cada ticket pagado y emitido</strong> a través del sistema del organizador. No existen cobros sobre entradas de cortesía ni órdenes anuladas.
+                La plataforma aplica una comisión fija de <strong>$0.50 USD por cada boleto emitido</strong> a través del sistema del organizador.
               </p>
+              <ul style={{ margin: '6px 0 0 0', paddingLeft: '18px', fontSize: '0.82rem' }}>
+                <li><strong>Cortesías VIP Gratuitas:</strong> Cada función incluye un cupo de hasta <strong>4 cortesías libres de comisión de plataforma ($0.00)</strong> para invitados de la productora.</li>
+                <li><strong>Cortesías Adicionales:</strong> A partir de la 5ª entrada de cortesía emitida en una misma función, se aplicará la comisión estándar de <strong>$0.50 USD</strong> por entrada emitida.</li>
+              </ul>
             </div>
 
             <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -100,7 +104,7 @@ const TermsAndPolicies = () => {
                 💳 Tarjeta de Garantía y Liquidación por Lotes (Batch Billing)
               </h4>
               <ul style={{ margin: '6px 0 0 0', paddingLeft: '18px', fontSize: '0.82rem' }}>
-                <li>Para publicar eventos en la plataforma, el organizador debe registrar y tokenizar una tarjeta de crédito o débito válida como garantía.</li>
+                <li>Para publicar eventos en la plataforma, el organizador debe registrar una tarjeta de crédito o débito válida como garantía.</li>
                 <li>Las comisiones acumuladas se liquidan automáticamente a su tarjeta al alcanzar el umbral de <strong>$50.00 USD</strong> o al corte mensual.</li>
                 <li>Si un intento de cobro falla, el sistema notificará al organizador otorgando un período de gracia de 24 horas antes de suspender temporalmente la venta pública del evento.</li>
               </ul>
@@ -111,7 +115,7 @@ const TermsAndPolicies = () => {
                 🛡️ Deslinde de Responsabilidad Legal
               </h4>
               <p style={{ margin: 0, fontSize: '0.82rem' }}>
-                Studio 5 opera estrictamente como proveedor tecnológico de intermediación de software. La realización del evento, cumplimiento de aforos, permisos municipales, seguridad en sala y reprogramaciones son responsabilidad civil y legal exclusiva de la productora u organizador contratante.
+                Studio 5 opera estrictamente como proveedor tecnológico de software. La realización del evento, cumplimiento de aforos, permisos municipales, seguridad en sala y reprogramaciones son responsabilidad civil y legal exclusiva de la productora u organizador contratante.
               </p>
             </div>
           </div>
@@ -131,6 +135,38 @@ const TermsAndPolicies = () => {
           <p style={{ color: '#d1d5db', fontSize: '0.85rem', lineHeight: '1.7', margin: 0 }}>
             El personal de staff tiene acceso restringido al panel de escaneo y validación en tiempo real. No tienen permisos para modificar precios, alterar aforos ni acceder a los datos financieros de la plataforma o de las productoras.
           </p>
+        </div>
+
+        {/* Sección 4: Módulo Add-On "Experiencias en Vivo / Momento Wow" */}
+        <div className="glass-card" style={{ padding: '24px', borderLeft: '4px solid #f1a51c' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(241,165,28,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CheckCircle size={20} color="#f1a51c" />
+            </div>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+              4. Módulo Add-On "Experiencia en Vivo & Momento Wow"
+            </h2>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', color: '#d1d5db', fontSize: '0.85rem', lineHeight: '1.7' }}>
+            <p style={{ margin: 0 }}>
+              Las productoras pueden contratar la suite de interactividad en tiempo real para sus obras bajo los siguientes lineamientos:
+            </p>
+            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+              <li>
+                <strong>Modalidad y Tarifa:</strong> Se adquiere mediante <strong>Pago Único de $29.00 USD por Temporada / Producción</strong> mediante pasarela Payphone.
+              </li>
+              <li>
+                <strong>Definición y Duración de la Temporada:</strong> Una temporada comprende todas las funciones programadas de una misma producción desde la primera función hasta <strong>un plazo máximo continuo de 60 días calendario</strong>.
+              </li>
+              <li>
+                <strong>Alcance del Servicio:</strong> Incluye encuestas y votaciones del público en vivo ilimitadas, pistas del misterio desbloqueables y generación de códigos QR de sala en alta resolución para afiches y pantallas gigantes sin costo por espectador conectado.
+              </li>
+              <li>
+                <strong>Renovación:</strong> Si la obra extiende sus fechas más allá de los 60 días o abre una nueva temporada posterior, se requerirá una nueva activación de temporada.
+              </li>
+            </ul>
+          </div>
         </div>
 
       </div>
