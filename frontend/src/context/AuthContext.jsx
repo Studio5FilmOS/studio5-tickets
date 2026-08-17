@@ -17,7 +17,6 @@ export const AuthProvider = ({ children }) => {
         try {
           setUser(JSON.parse(savedUser));
           
-          // Opcional: Verificar validez en el servidor
           const res = await api.get('/auth/me');
           if (res.data.status === 'OK') {
             setUser(res.data.user);
@@ -34,7 +33,7 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
-  // Iniciar Sesión (Admin / Staff)
+  // Iniciar Sesión
   const login = async (email, password) => {
     try {
       const res = await api.post('/auth/login', { email, password });
@@ -48,7 +47,58 @@ export const AuthProvider = ({ children }) => {
       }
       return { success: false, message: res.data.message || 'Error al iniciar sesión' };
     } catch (err) {
+      if (err.response?.data?.status === 'UNVERIFIED') {
+        return { 
+          success: false, 
+          unverified: true, 
+          email: err.response.data.email, 
+          message: err.response.data.message 
+        };
+      }
       const errMsg = err.response?.data?.message || 'Error de conexión con el servidor.';
+      return { success: false, message: errMsg };
+    }
+  };
+
+  // Registro de usuario (Envía OTP)
+  const register = async (userData) => {
+    try {
+      const res = await api.post('/auth/register', userData);
+      if (res.data.status === 'PENDING_VERIFICATION') {
+        return { success: true, pendingVerification: true, email: res.data.email, message: res.data.message };
+      }
+      return { success: false, message: res.data.message };
+    } catch (err) {
+      const errMsg = err.response?.data?.message || 'Error al procesar el registro.';
+      return { success: false, message: errMsg };
+    }
+  };
+
+  // Verificar Código OTP de 6 dígitos
+  const verifyOtp = async (email, code) => {
+    try {
+      const res = await api.post('/auth/verify-otp', { email, code });
+      if (res.data.status === 'OK') {
+        const { token, user: verifiedUser } = res.data;
+        localStorage.setItem('studio5_token', token);
+        localStorage.setItem('studio5_user', JSON.stringify(verifiedUser));
+        setUser(verifiedUser);
+        return { success: true, user: verifiedUser, message: res.data.message };
+      }
+      return { success: false, message: res.data.message };
+    } catch (err) {
+      const errMsg = err.response?.data?.message || 'Código de verificación inválido o expirado.';
+      return { success: false, message: errMsg };
+    }
+  };
+
+  // Reenviar Código OTP
+  const resendOtp = async (email) => {
+    try {
+      const res = await api.post('/auth/resend-otp', { email });
+      return { success: res.data.status === 'OK', message: res.data.message };
+    } catch (err) {
+      const errMsg = err.response?.data?.message || 'Error al reenviar el código.';
       return { success: false, message: errMsg };
     }
   };
@@ -64,16 +114,20 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     login,
+    register,
+    verifyOtp,
+    resendOtp,
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',
-    isStaff: user?.role === 'staff' || user?.role === 'admin'
+    isOrganizer: user?.role === 'organizer',
+    isStaff: user?.role === 'staff' || user?.role === 'admin',
+    isBuyer: user?.role === 'buyer'
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Hook personalizado para usar el contexto
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

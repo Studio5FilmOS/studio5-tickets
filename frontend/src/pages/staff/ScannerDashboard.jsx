@@ -441,6 +441,7 @@ const ManualRegistryTab = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterAttendance, setFilterAttendance] = useState('ALL'); // 'ALL', 'VALIDATED' (Adentro 100%), 'PENDING_ENTRY' (Por ingresar), 'PARTIAL' (Parciales), 'UNPAID' (Pendientes cobro), 'CORTESIA'
   const [expandedOrder, setExpandedOrder] = useState(null);
 
   // Estados para edición y comprobante
@@ -562,17 +563,19 @@ const ManualRegistryTab = () => {
     });
   }
 
-  // Vendidas, Pendientes, Cortesías, Validadas
+  // Vendidas, Pendientes, Cortesías, Validadas, Por Ingresar
   let soldCount = 0;
   let pendingCount = 0;
   let cortesiasCount = 0;
   let validatedCount = 0;
+  let pendingEntryCount = 0;
 
   orders.forEach(o => {
     if (selectedEventId !== 'ALL' && o.event_id !== selectedEventId) return;
     if (selectedScheduleId !== 'ALL' && o.schedule_id !== selectedScheduleId) return;
 
     const ticketsQty = (parseInt(o.ticket_count_adult || 0) + parseInt(o.ticket_count_child || 0));
+    const checkedIn = parseInt(o.checked_in_count || 0);
 
     if (o.payment_status === 'Anulado') return;
 
@@ -584,20 +587,46 @@ const ManualRegistryTab = () => {
       soldCount += ticketsQty;
     }
 
-    validatedCount += parseInt(o.checked_in_count || 0);
+    validatedCount += checkedIn;
+    if (o.payment_status === 'Pagado' || o.operation_type === 'Cortesia') {
+      pendingEntryCount += Math.max(0, ticketsQty - checkedIn);
+    }
   });
 
   const filteredOrders = orders.filter(o => {
     const matchEvent = selectedEventId === 'ALL' || o.event_id === selectedEventId;
     const matchSchedule = selectedScheduleId === 'ALL' || o.schedule_id === selectedScheduleId;
+    
+    // Estado de pago
     const matchStatus = filterStatus === 'ALL' || o.payment_status === filterStatus;
+
+    // Estado de validación / asistencia
+    const totalT = parseInt(o.ticket_count_adult || 0) + parseInt(o.ticket_count_child || 0);
+    const checkedIn = parseInt(o.checked_in_count || 0);
+    const isAllIn = checkedIn >= totalT && totalT > 0;
+    const isPartial = checkedIn > 0 && checkedIn < totalT;
+
+    let matchAttendance = true;
+    if (filterAttendance === 'VALIDATED') {
+      matchAttendance = isAllIn;
+    } else if (filterAttendance === 'PENDING_ENTRY') {
+      matchAttendance = !isAllIn && o.payment_status !== 'Anulado';
+    } else if (filterAttendance === 'PARTIAL') {
+      matchAttendance = isPartial;
+    } else if (filterAttendance === 'UNPAID') {
+      matchAttendance = o.payment_status === 'Pendiente';
+    } else if (filterAttendance === 'CORTESIA') {
+      matchAttendance = o.operation_type === 'Cortesia' || o.payment_status === 'Cortesía';
+    }
+
     const q = searchQuery.toLowerCase();
     const matchQ = !q ||
       o.customer_name?.toLowerCase().includes(q) ||
       o.order_num?.toLowerCase().includes(q) ||
       o.customer_whatsapp?.includes(q) ||
       o.customer_email?.toLowerCase().includes(q);
-    return matchEvent && matchSchedule && matchStatus && matchQ;
+
+    return matchEvent && matchSchedule && matchStatus && matchAttendance && matchQ;
   });
 
   const handleManualCheckIn = async (orderId, orderNum) => {
@@ -718,27 +747,96 @@ const ManualRegistryTab = () => {
         </div>
       )}
 
-      {/* Tarjetas de Resumen (Dashboard Staff) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '24px' }}>
-        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid var(--accent)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {/* Tarjetas de Resumen Clicables e Interactivas */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '20px' }}>
+        {/* Aforo Disponible */}
+        <div 
+          onClick={() => { setFilterAttendance('ALL'); setFilterStatus('ALL'); }}
+          className="glass-panel" 
+          style={{ 
+            padding: '12px 14px', 
+            borderLeft: '4px solid var(--accent)', 
+            display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer',
+            border: filterAttendance === 'ALL' && filterStatus === 'ALL' ? '1.5px solid var(--accent)' : '1px solid var(--glass-border)',
+            boxShadow: filterAttendance === 'ALL' && filterStatus === 'ALL' ? '0 0 12px var(--accent-glow)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
           <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Aforo Disponible</span>
           <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#fff' }}>{capacityAvailable}</span>
+          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Ver todos</span>
         </div>
-        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid #34c759', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Vendidas</span>
-          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#34c759' }}>{soldCount}</span>
+
+        {/* Vendidas / Por Ingresar */}
+        <div 
+          onClick={() => { setFilterAttendance('PENDING_ENTRY'); setFilterStatus('ALL'); }}
+          className="glass-panel" 
+          style={{ 
+            padding: '12px 14px', 
+            borderLeft: '4px solid #34c759', 
+            display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer',
+            border: filterAttendance === 'PENDING_ENTRY' ? '1.5px solid #34c759' : '1px solid var(--glass-border)',
+            boxShadow: filterAttendance === 'PENDING_ENTRY' ? '0 0 12px rgba(52,199,89,0.3)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          <span style={{ fontSize: '0.65rem', color: '#34c759', fontWeight: '700', textTransform: 'uppercase' }}>⏳ Por Ingresar (Afuera)</span>
+          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#34c759' }}>{pendingEntryCount} <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>de {soldCount}</span></span>
+          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Filtrar pendientes de entrar</span>
         </div>
-        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid #0a84ff', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Adentro (Validadas)</span>
+
+        {/* Adentro (Validadas) */}
+        <div 
+          onClick={() => { setFilterAttendance('VALIDATED'); setFilterStatus('ALL'); }}
+          className="glass-panel" 
+          style={{ 
+            padding: '12px 14px', 
+            borderLeft: '4px solid #0a84ff', 
+            display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer',
+            border: filterAttendance === 'VALIDATED' ? '1.5px solid #0a84ff' : '1px solid var(--glass-border)',
+            boxShadow: filterAttendance === 'VALIDATED' ? '0 0 12px rgba(10,132,255,0.3)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          <span style={{ fontSize: '0.65rem', color: '#0a84ff', fontWeight: '700', textTransform: 'uppercase' }}>✅ Adentro (Validadas)</span>
           <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#0a84ff' }}>{validatedCount}</span>
+          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Ver solo validados</span>
         </div>
-        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid #af52de', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Cortesías</span>
+
+        {/* Cortesías */}
+        <div 
+          onClick={() => { setFilterAttendance('CORTESIA'); setFilterStatus('ALL'); }}
+          className="glass-panel" 
+          style={{ 
+            padding: '12px 14px', 
+            borderLeft: '4px solid #af52de', 
+            display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer',
+            border: filterAttendance === 'CORTESIA' ? '1.5px solid #af52de' : '1px solid var(--glass-border)',
+            boxShadow: filterAttendance === 'CORTESIA' ? '0 0 12px rgba(175,82,222,0.3)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          <span style={{ fontSize: '0.65rem', color: '#af52de', fontWeight: '700', textTransform: 'uppercase' }}>🎁 Cortesías</span>
           <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#af52de' }}>{cortesiasCount}</span>
+          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Ver cortesías</span>
         </div>
-        <div className="glass-panel" style={{ padding: '12px 14px', borderLeft: '4px solid #ff9f0a', display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
-          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Pagos Pendientes en Puerta</span>
+
+        {/* Pagos Pendientes en Puerta */}
+        <div 
+          onClick={() => { setFilterAttendance('UNPAID'); setFilterStatus('ALL'); }}
+          className="glass-panel" 
+          style={{ 
+            padding: '12px 14px', 
+            borderLeft: '4px solid #ff9f0a', 
+            display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2', cursor: 'pointer',
+            border: filterAttendance === 'UNPAID' ? '1.5px solid #ff9f0a' : '1px solid var(--glass-border)',
+            boxShadow: filterAttendance === 'UNPAID' ? '0 0 12px rgba(255,159,10,0.3)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          <span style={{ fontSize: '0.65rem', color: '#ff9f0a', fontWeight: '700', textTransform: 'uppercase' }}>💰 Pagos Pendientes en Puerta</span>
           <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#ff9f0a' }}>{pendingCount}</span>
+          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>👆 Cobrar y validar en puerta</span>
         </div>
       </div>
 
@@ -756,27 +854,41 @@ const ManualRegistryTab = () => {
         />
       </div>
 
-      {/* Filtros de estado */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        {['ALL', 'Pagado', 'Pendiente', 'Cortesía', 'Anulado'].map(s => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
-            style={{
-              padding: '6px 14px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600',
-              cursor: 'pointer', border: '1px solid',
-              background: filterStatus === s ? 'var(--accent)' : 'transparent',
-              color: filterStatus === s ? '#000' : 'var(--text-muted)',
-              borderColor: filterStatus === s ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
-              transition: 'all 0.2s'
-            }}
-          >
-            {s === 'ALL' ? 'Todos' : s}
-          </button>
-        ))}
+      {/* Filtros Rápidos de Asistencia e Ingreso */}
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {[
+          { id: 'ALL', label: '🔘 Todos' },
+          { id: 'VALIDATED', label: '✅ Validadas (100% Adentro)' },
+          { id: 'PENDING_ENTRY', label: '⏳ Por Ingresar (Afuera)' },
+          { id: 'PARTIAL', label: '🌓 Parciales (Incompletas)' },
+          { id: 'UNPAID', label: '💰 Pendientes Pago' },
+          { id: 'CORTESIA', label: '🎁 Cortesías' }
+        ].map(chip => {
+          const isSelected = filterAttendance === chip.id;
+          return (
+            <button
+              key={chip.id}
+              onClick={() => {
+                setFilterAttendance(chip.id);
+                setFilterStatus('ALL');
+              }}
+              style={{
+                padding: '6px 12px', borderRadius: '20px', fontSize: '0.72rem', fontWeight: '700',
+                cursor: 'pointer', border: `1px solid ${isSelected ? 'var(--accent)' : 'rgba(255,255,255,0.1)'}`,
+                background: isSelected ? 'rgba(222,184,65,0.18)' : 'rgba(255,255,255,0.03)',
+                color: isSelected ? 'var(--accent)' : 'var(--text-muted)',
+                transition: 'all 0.2s',
+                boxShadow: isSelected ? '0 0 10px rgba(222,184,65,0.2)' : 'none'
+              }}
+            >
+              {chip.label}
+            </button>
+          );
+        })}
+
         <button onClick={fetchOrders} style={{
           marginLeft: 'auto', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '20px', padding: '6px 12px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem'
+          borderRadius: '20px', padding: '6px 12px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem'
         }}>
           <RefreshCw size={13} /> Actualizar
         </button>
@@ -784,7 +896,7 @@ const ManualRegistryTab = () => {
 
       {/* Contador */}
       <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-        {filteredOrders.length} asistente{filteredOrders.length !== 1 ? 's' : ''} encontrado{filteredOrders.length !== 1 ? 's' : ''}
+        Mostrando {filteredOrders.length} orden{filteredOrders.length !== 1 ? 'es' : ''} {filterAttendance !== 'ALL' && <b style={{ color: 'var(--accent)' }}>({filterAttendance})</b>}
       </p>
 
       {loading ? (
@@ -794,13 +906,18 @@ const ManualRegistryTab = () => {
       ) : filteredOrders.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
           <Users size={32} style={{ marginBottom: '12px', opacity: 0.4 }} />
-          <p style={{ fontSize: '0.85rem' }}>No se encontraron registros.</p>
+          <p style={{ fontSize: '0.85rem' }}>No se encontraron registros con este filtro.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {filteredOrders.map(o => {
             const isExpanded = expandedOrder === o.id;
             const totalT = parseInt(o.ticket_count_adult || 0) + parseInt(o.ticket_count_child || 0);
+            const checkedIn = parseInt(o.checked_in_count || 0);
+            const isAllIn = checkedIn >= totalT && totalT > 0;
+            const isPartial = checkedIn > 0 && checkedIn < totalT;
+            const isNoneIn = checkedIn === 0;
+
             const dateStr = o.schedule_time
               ? new Date(o.schedule_time).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
               : 'Sin fecha';
@@ -809,7 +926,8 @@ const ManualRegistryTab = () => {
               <div
                 key={o.id}
                 style={{
-                  background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)',
+                  background: isAllIn ? 'rgba(52,199,89,0.03)' : (isPartial ? 'rgba(255,204,0,0.03)' : 'rgba(255,255,255,0.025)'),
+                  border: isAllIn ? '1px solid rgba(52,199,89,0.2)' : (isPartial ? '1px solid rgba(255,204,0,0.2)' : '1px solid rgba(255,255,255,0.07)'),
                   borderRadius: '16px', overflow: 'hidden', transition: 'all 0.3s'
                 }}
               >
@@ -822,11 +940,25 @@ const ManualRegistryTab = () => {
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                       {statusBadge(o.payment_status)}
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>
                         #{o.order_num}
                       </span>
+                      {/* Badge de Ingreso / Asistencia */}
+                      {isAllIn ? (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 800, background: 'rgba(52,199,89,0.15)', color: '#34c759', border: '1px solid rgba(52,199,89,0.3)', padding: '2px 8px', borderRadius: '6px' }}>
+                          ✅ {checkedIn}/{totalT} INGRESADOS
+                        </span>
+                      ) : isPartial ? (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 800, background: 'rgba(255,204,0,0.15)', color: '#ffcc00', border: '1px solid rgba(255,204,0,0.3)', padding: '2px 8px', borderRadius: '6px' }}>
+                          ⏳ {checkedIn}/{totalT} ADENTRO (Faltan {totalT - checkedIn})
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 600, background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '6px' }}>
+                          🚪 0/{totalT} Adentro
+                        </span>
+                      )}
                     </div>
                     <p style={{ fontSize: '0.9rem', fontWeight: '700', color: '#fff', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {o.customer_name}
@@ -867,21 +999,49 @@ const ManualRegistryTab = () => {
                       </div>
                       {o.desglose && (
                         <div style={{ gridColumn: '1/-1' }}>
-                          <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>🪑 Butacas</span>
+                          <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>🪑 Butacas / Localidad</span>
                           <span style={{ color: '#fff', fontWeight: '600' }}>{o.desglose}</span>
                         </div>
                       )}
                     </div>
 
+                    {/* Botones de acción inteligente */}
                     <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                       {o.payment_status !== 'Anulado' && (
-                        <button
-                          onClick={() => handleManualCheckIn(o.id, o.order_num)}
-                          className="btn-primary"
-                          style={{ padding: '8px', fontSize: '0.78rem', flex: '1 1 100%' }}
-                        >
-                          <UserCheck size={15} /> Registrar Ingreso Manual
-                        </button>
+                        isAllIn ? (
+                          <div style={{
+                            background: 'rgba(52,199,89,0.12)', border: '1px solid rgba(52,199,89,0.3)',
+                            color: '#34c759', padding: '10px 14px', borderRadius: '10px',
+                            textAlign: 'center', fontSize: '0.82rem', fontWeight: 800, width: '100%',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                          }}>
+                            <CheckCircle2 size={18} color="#34c759" /> Todos los boletos han sido validados ({checkedIn}/{totalT})
+                          </div>
+                        ) : isPartial ? (
+                          <button
+                            onClick={() => handleManualCheckIn(o.id, o.order_num)}
+                            className="btn-primary"
+                            style={{
+                              background: 'linear-gradient(135deg, #ff9f0a, #d48000)',
+                              color: '#000', padding: '10px', fontSize: '0.82rem',
+                              flex: '1 1 100%', fontWeight: 800,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                            }}
+                          >
+                            <UserCheck size={18} /> Validar restantes ({totalT - checkedIn} por ingresar · {checkedIn}/{totalT} adentro)
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleManualCheckIn(o.id, o.order_num)}
+                            className="btn-primary"
+                            style={{
+                              padding: '10px', fontSize: '0.82rem', flex: '1 1 100%', fontWeight: 800,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                            }}
+                          >
+                            <UserCheck size={18} /> Registrar Ingreso Manual ({totalT} entradas)
+                          </button>
+                        )
                       )}
                       
                       <button
@@ -1003,6 +1163,31 @@ const ManualRegistryTab = () => {
    ================================================================ */
 const ScannerDashboard = () => {
   const [activeTab, setActiveTab] = useState('manual');
+  const [events, setEvents] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState('ALL');
+  const [loadingEvents, setLoadingEvents] = useState(true);
+
+  useEffect(() => {
+    const loadEvents = async () => {
+      try {
+        const res = await api.get('/events');
+        if (res.data.status === 'OK') {
+          setEvents(res.data.events || []);
+          if (res.data.events.length > 0) {
+            setSelectedEventId(res.data.events[0].id);
+          }
+        }
+      } catch (err) {
+        console.error('Error al cargar eventos en Scanner:', err);
+      } finally {
+        setLoadingEvents(false);
+      }
+    };
+    loadEvents();
+  }, []);
+
+  const currentEvent = events.find(e => e.id === selectedEventId);
+  const isScanningBlocked = currentEvent && currentEvent.qr_scanning_enabled === false;
 
   return (
     <div className="fade-in" style={{ paddingBottom: '10px' }}>
@@ -1020,55 +1205,99 @@ const ScannerDashboard = () => {
       `}</style>
 
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
         <div style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           width: '54px', height: '54px', borderRadius: '16px',
-          background: 'linear-gradient(135deg, rgba(222,184,65,0.2), rgba(222,184,65,0.05))',
-          border: '1px solid rgba(222,184,65,0.3)', marginBottom: '12px'
+          background: isScanningBlocked 
+            ? 'linear-gradient(135deg, rgba(255,59,48,0.2), rgba(255,59,48,0.05))'
+            : 'linear-gradient(135deg, rgba(222,184,65,0.2), rgba(222,184,65,0.05))',
+          border: isScanningBlocked ? '1px solid rgba(255,59,48,0.4)' : '1px solid rgba(222,184,65,0.3)', 
+          marginBottom: '12px'
         }}>
-          <ScanLine size={26} color="#DEB841" />
+          {isScanningBlocked ? <AlertTriangle size={26} color="var(--error)" /> : <ScanLine size={26} color="var(--accent)" />}
         </div>
         <h2 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fff', letterSpacing: '0.5px' }}>
           Control de Portería
         </h2>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-          Studio 5 · Sistema de Acceso
+          Studio 5 · Sistema de Acceso Inteligente
         </p>
       </div>
 
-      {/* Tabs */}
-      <div style={{
-        display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '14px',
-        padding: '4px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.07)'
-      }}>
-        {[
-          { id: 'manual', icon: ClipboardList, label: 'Resumen de Sala' },
-          { id: 'scanner', icon: Camera, label: 'Escáner QR' }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+      {/* Selector de Evento en Cabecera */}
+      {events.length > 1 && (
+        <div style={{ marginBottom: '16px' }}>
+          <select 
+            value={selectedEventId} 
+            onChange={(e) => setSelectedEventId(e.target.value)}
             style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-              padding: '11px 14px', borderRadius: '11px', border: 'none', cursor: 'pointer',
-              fontWeight: '600', fontSize: '0.85rem', transition: 'all 0.25s',
-              background: activeTab === tab.id
-                ? 'linear-gradient(135deg, #DEB841, #b08d2b)'
-                : 'transparent',
-              color: activeTab === tab.id ? '#000' : 'var(--text-muted)',
-              boxShadow: activeTab === tab.id ? '0 4px 12px rgba(222,184,65,0.25)' : 'none'
+              width: '100%', padding: '10px 14px', borderRadius: '10px',
+              background: 'rgba(0,0,0,0.5)', border: '1px solid var(--glass-border)',
+              color: '#fff', fontSize: '0.9rem'
             }}
           >
-            <tab.icon size={16} /> {tab.label}
-          </button>
-        ))}
-      </div>
+            {events.map(ev => (
+              <option key={ev.id} value={ev.id} style={{ background: '#111' }}>
+                {ev.title} {ev.qr_scanning_enabled === false ? '⛔ (Bloqueado por Morosidad)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
-      {/* Contenido de tabs */}
-      <div key={activeTab} className="fade-in">
-        {activeTab === 'scanner' ? <QRScannerTab /> : <ManualRegistryTab />}
-      </div>
+      {/* Banner Kill Switch Anti-Morosidad */}
+      {isScanningBlocked ? (
+        <div className="killswitch-alert-banner">
+          <AlertTriangle size={48} color="#ff3b30" style={{ margin: '0 auto 12px' }} />
+          <h3 style={{ color: '#ff3b30', fontWeight: 900, fontSize: '1.25rem', marginBottom: '8px' }}>
+            ⛔ ACCESO Y ESCÁNER BLOQUEADOS
+          </h3>
+          <p style={{ color: '#f5f5f7', fontSize: '0.95rem', fontWeight: 600, maxWidth: '450px', margin: '0 auto 12px' }}>
+            El escaneo y validación de boletos para el evento <strong style={{ color: '#ffcc00' }}>"{currentEvent?.title}"</strong> ha sido desactivado automáticamente debido a saldo pendiente de liquidación.
+          </p>
+          <div style={{ background: 'rgba(0,0,0,0.4)', padding: '12px', borderRadius: '10px', display: 'inline-block', border: '1px solid rgba(255,59,48,0.3)' }}>
+            <span style={{ color: '#ffaaaa', fontSize: '0.85rem' }}>
+              Por favor, contacte inmediatamente al <strong>Organizador</strong> para que regularice el pago y reactive la puerta.
+            </span>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Tabs */}
+          <div style={{
+            display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '14px',
+            padding: '4px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.07)'
+          }}>
+            {[
+              { id: 'manual', icon: ClipboardList, label: 'Resumen de Sala' },
+              { id: 'scanner', icon: Camera, label: 'Escáner QR' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                  padding: '11px 14px', borderRadius: '11px', border: 'none', cursor: 'pointer',
+                  fontWeight: '600', fontSize: '0.85rem', transition: 'all 0.25s',
+                  background: activeTab === tab.id
+                    ? 'linear-gradient(135deg, var(--accent), var(--accent-secondary))'
+                    : 'transparent',
+                  color: activeTab === tab.id ? '#000' : 'var(--text-muted)',
+                  boxShadow: activeTab === tab.id ? '0 4px 12px var(--accent-glow)' : 'none'
+                }}
+              >
+                <tab.icon size={16} /> {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Contenido de tabs */}
+          <div key={activeTab} className="fade-in">
+            {activeTab === 'scanner' ? <QRScannerTab /> : <ManualRegistryTab />}
+          </div>
+        </>
+      )}
     </div>
   );
 };

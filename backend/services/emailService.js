@@ -202,3 +202,67 @@ exports.sendPendingTransferEmail = async ({ email, customerName, orderNum, event
     return false;
   }
 };
+
+// Función para enviar código de verificación OTP de 6 dígitos
+exports.sendVerificationOtpEmail = async ({ email, name, code }) => {
+  if (!email || !email.includes('@')) {
+    console.log('Correo omitido o inválido:', email);
+    return false;
+  }
+
+  const fromName = process.env.SMTP_FROM_NAME || 'Studio 5 Tickets';
+
+  const htmlBody = `
+    <div style="background-color: #0c0d14; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #ffffff; text-align: center;">
+      <div style="max-width: 460px; margin: 0 auto; background: #161822; border: 1px solid rgba(222,184,65,0.25); border-radius: 20px; padding: 36px 28px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);">
+        <div style="display: inline-block; width: 52px; height: 52px; line-height: 52px; border-radius: 50%; background: rgba(222,184,65,0.15); border: 1px solid #DEB841; font-size: 24px; margin-bottom: 16px;">
+          🔐
+        </div>
+        <h2 style="color: #ffffff; font-size: 22px; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -0.5px;">Verifica tu Cuenta</h2>
+        <p style="color: #9ca3af; font-size: 14px; line-height: 1.5; margin: 0 0 24px 0;">
+          Hola <strong style="color: #ffffff;">${name || 'Usuario'}</strong>, utiliza el siguiente código de seguridad de 6 dígitos para confirmar tu correo y activar tu cuenta:
+        </p>
+
+        <div style="background: linear-gradient(135deg, rgba(222,184,65,0.12), rgba(176,141,43,0.08)); border: 2px dashed #DEB841; border-radius: 14px; padding: 18px 24px; margin: 20px 0;">
+          <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 900; letter-spacing: 10px; color: #DEB841; display: inline-block; text-shadow: 0 0 15px rgba(222,184,65,0.4);">
+            ${code}
+          </span>
+        </div>
+
+        <p style="color: #6b7280; font-size: 12px; margin: 16px 0 0 0;">
+          ⏱️ Este código expira en <b>15 minutos</b>. Si no creaste esta cuenta, puedes ignorar este mensaje con total seguridad.
+        </p>
+      </div>
+
+      <div style="margin-top: 30px; color: #4b5563; font-size: 11px; text-align: center;">
+        &copy; 2026 ${fromName} · Seguridad y Autenticación Unificada
+      </div>
+    </div>
+  `;
+
+  try {
+    const smtpUser = process.env.SMTP_USER || 'ventas@studio5film.com';
+    const smtpPass = process.env.SMTP_PASS || '@Ventas12345';
+
+    if (!smtpUser || !smtpPass) {
+      console.log('----- EMAIL SIMULATION (OTP CODE) -----');
+      console.log('To:', email);
+      console.log('OTP Code:', code);
+      console.log('---------------------------------------');
+      return true;
+    }
+
+    await transporter.sendMail({
+      from: `"${fromName}" <${smtpUser}>`,
+      to: email,
+      subject: `${code} es tu código de verificación - ${fromName}`,
+      html: htmlBody
+    });
+
+    console.log(`✅ [Email Service] Código OTP enviado con éxito a ${email}`);
+    return true;
+  } catch (err) {
+    console.error('❌ [Email Service] Error al enviar código OTP:', err.message);
+    return false;
+  }
+};

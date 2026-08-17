@@ -1,9 +1,12 @@
 const { query, pool } = require('../config/db');
 const { sendTicketEmail, sendPendingTransferEmail } = require('../services/emailService');
 const { sendPushToAdmins } = require('../services/pushService');
-const https = require('https');
+const { sendWhatsAppTicketWebhook } = require('../services/whatsappService');
+const { verifyTransaction: verifyPayphoneGateway } = require('../services/payphoneService');
 const fs = require('fs');
 const path = require('path');
+
+const PLATFORM_FEE_PER_TICKET = parseFloat(process.env.PLATFORM_FEE_PER_TICKET || '0.50');
 
 // Helper para guardar el comprobante de transferencia desde Base64
 const saveReceiptFile = (base64Data) => {
@@ -39,102 +42,38 @@ const saveReceiptFile = (base64Data) => {
   }
 };
 
-// Helper para verificar transacciones con Payphone (Ecuador)
-const verifyPayphoneTransaction = (transactionId, clientTxId) => {
-  return new Promise((resolve, reject) => {
-    const payphoneToken = process.env.PAYPHONE_TOKEN;
-    const payphoneEnv = process.env.PAYPHONE_ENV || 'sandbox';
-    
-    // Si no hay token configurado, simulamos la aprobación para facilitar pruebas locales
-    if (!payphoneToken || payphoneToken === 'tu_token_de_desarrollador_payphone') {
-      console.log('----- PAYPHONE SIMULATION -----');
-      console.log(`Verificando TxId: ${transactionId} para la transacción: ${clientTxId}`);
-      console.log('Aprobando de forma simulada (sin credenciales .env)');
-      console.log('-------------------------------');
-      return resolve(true);
-    }
-
-    const host = 'pay.payphonetodoesposible.com';
-    const path = '/api/button/V2/Confirm';
-    const payload = JSON.stringify({
-      id: parseInt(transactionId) || 0,
-      clientTxId: clientTxId
-    });
-
-    const options = {
-      hostname: host,
-      port: 443,
-      path: path,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${payphoneToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        try {
-          const response = JSON.parse(data);
-          console.log(`Payphone Confirm Response:`, response);
-          
-          // Si el estado devuelto por Payphone es Approved, o el statusCode es 3 (Aprobado), la transacción es válida
-          const isApproved = res.statusCode === 200 && (
-            response.transactionStatus === 'Approved' || 
-            response.transactionStatus === 'Aprobado' || 
-            response.statusCode === 3 || 
-            response.status === 'success' ||
-            response.status === 'Approved'
-          );
-
-          if (isApproved) {
-            console.log(`Payphone: Transacción ${transactionId} verificada con éxito.`);
-            resolve(true);
-          } else {
-            console.warn(`Payphone: Transacción rechazada o inválida. Status: ${res.statusCode}`, response);
-            resolve(false);
-          }
-        } catch (err) {
-          console.error('Payphone: Error al parsear respuesta:', err, data);
-          resolve(false);
-        }
-      });
-    });
-
-    req.on('error', (err) => {
-      console.error('Payphone: Error de conexión con API:', err);
-      resolve(false);
-    });
-
-    req.write(payload);
-    req.end();
-  });
-};
-
 // Crear una venta o reserva
 exports.createOrder = async (req, res) => {
   const {
     idEvento, fecha: scheduleId, nombre, email, whatsapp,
     cantAdultos, cantNinos, tipoVenta, metodoPago, banco, numTransaccion,
-    seat_labels, clientTxId,
+    seat_labels, clientTxId, localidad_id,
     // Campos de facturación
     is_final_consumer, billing_id_number, billing_name, billing_address, billing_email,
     comprobante
   } = req.body;
 
   // Validación de campos básicos
-  if (!idEvento || !scheduleId || !nombre || cantAdultos === undefined) {
+  if (!idEvento || !scheduleId || !nombre) {
     return res.status(400).json({
       status: 'ERROR',
       message: 'Faltan campos obligatorios para registrar la venta.'
     });
+  }
+
+  const cAd = parseInt(cantAdultos) || 0;
+  const cNi = parseInt(cantNinos) || 0;
+  let totalQty = cAd + cNi;
+
+  if (totalQty <= 0 && (!seat_labels || seat_labels.length === 0)) {
+    return res.status(400).json({
+      status: 'ERROR',
+      message: 'La cantidad total de entradas debe ser mayor a 0.'
+    });
+  }
+
+  if (totalQty <= 0 && seat_labels && seat_labels.length > 0) {
+    totalQty = seat_labels.length;
   }
 
   // Si es transferencia y es comprador público, exigir comprobante
@@ -147,24 +86,13 @@ exports.createOrder = async (req, res) => {
     });
   }
 
-  const cAd = parseInt(cantAdultos) || 0;
-  const cNi = parseInt(cantNinos) || 0;
-  const totalQty = cAd + cNi;
-
-  if (totalQty <= 0) {
-    return res.status(400).json({
-      status: 'ERROR',
-      message: 'La cantidad total de entradas debe ser mayor a 0.'
-    });
-  }
-
   const client = await pool.connect();
 
   try {
-    // Iniciar transacción SQL para bloquear aforos
+    // Iniciar transacción SQL para control de concurrencia y aforos
     await client.query('BEGIN');
 
-    // 1. Obtener evento
+    // 1. Obtener evento con bloqueo de fila
     const eventRes = await client.query('SELECT * FROM events WHERE id = $1 FOR UPDATE', [idEvento]);
     if (eventRes.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -182,7 +110,37 @@ exports.createOrder = async (req, res) => {
     }
     const schedule = scheduleRes.rows[0];
 
-    // 3. Validación de aforos y asientos
+    // 3. Manejo de Localidad y Control de Concurrencia (Anti-Sobrevuelos)
+    let targetLocalidad = null;
+    if (localidad_id) {
+      const locRes = await client.query(
+        'SELECT * FROM localidades WHERE id = $1 AND event_id = $2 FOR UPDATE',
+        [localidad_id, idEvento]
+      );
+      if (locRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(404).json({ status: 'ERROR', message: 'La localidad seleccionada no existe para este evento.' });
+      }
+      targetLocalidad = locRes.rows[0];
+
+      if (targetLocalidad.aforo_disponible < totalQty) {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({
+          status: 'ERROR',
+          message: `Aforo insuficiente en la localidad "${targetLocalidad.nombre}". Solo quedan ${targetLocalidad.aforo_disponible} disponibles.`
+        });
+      }
+
+      // Restar disponibilidad en la localidad seleccionada de forma atómica
+      await client.query(
+        'UPDATE localidades SET aforo_disponible = aforo_disponible - $1, updated_at = NOW() WHERE id = $2',
+        [totalQty, targetLocalidad.id]
+      );
+    }
+
+    // 4. Validación de asientos numerados (si aplica)
     if (event.has_assigned_seats) {
       if (!seat_labels || !Array.isArray(seat_labels) || seat_labels.length !== totalQty) {
         await client.query('ROLLBACK');
@@ -196,9 +154,7 @@ exports.createOrder = async (req, res) => {
       for (let seat of seat_labels) {
         const layout = event.seating_layout;
         const isSeatValid = Array.isArray(layout)
-          ? (Array.isArray(layout[0])
-              ? layout.flat().includes(seat)
-              : layout.includes(seat))
+          ? (Array.isArray(layout[0]) ? layout.flat().includes(seat) : layout.includes(seat))
           : false;
         if (layout && !isSeatValid) {
           await client.query('ROLLBACK');
@@ -210,8 +166,7 @@ exports.createOrder = async (req, res) => {
         }
 
         const seatCheck = await client.query(
-          `SELECT t.id 
-           FROM tickets t
+          `SELECT t.id FROM tickets t
            JOIN orders o ON o.id = t.order_id
            WHERE o.schedule_id = $1 AND o.payment_status != 'Anulado' AND t.seat_label = $2`,
           [scheduleId, seat]
@@ -226,7 +181,8 @@ exports.createOrder = async (req, res) => {
           });
         }
       }
-    } else {
+    } else if (!targetLocalidad) {
+      // Si no usa localidades pero es aforo general
       const soldRes = await client.query(
         `SELECT COALESCE(SUM(ticket_count_adult + ticket_count_child), 0)::integer as sold
          FROM orders WHERE schedule_id = $1 AND payment_status != 'Anulado'`,
@@ -240,12 +196,12 @@ exports.createOrder = async (req, res) => {
         client.release();
         return res.status(400).json({
           status: 'ERROR',
-          message: `Aforo insuficiente. Solo quedan ${availableCapacity} entradas disponibles.`
+          message: `Aforo general insuficiente. Solo quedan ${availableCapacity} entradas disponibles.`
         });
       }
     }
 
-    // 4. Calcular precios netos
+    // 5. Calcular Precios Netos
     let promoActiva = false;
     if (event.promo_type !== 'Ninguna') {
       if (!event.promo_deadline) promoActiva = true;
@@ -253,7 +209,11 @@ exports.createOrder = async (req, res) => {
     }
 
     let precioNeto = 0;
-    if (event.is_single_rate) {
+    if (targetLocalidad) {
+      // Precio dictado por la localidad
+      const baseLocPrice = parseFloat(targetLocalidad.precio);
+      precioNeto = totalQty * baseLocPrice;
+    } else if (event.is_single_rate) {
       const priceUnit = promoActiva && event.promo_type === 'Preventa' ? event.price_promo : event.price_adult;
       if (promoActiva && event.promo_type === '2x1') {
         precioNeto = ((Math.floor(totalQty / 2) * event.price_adult) + ((totalQty % 2) * event.price_adult));
@@ -271,19 +231,17 @@ exports.createOrder = async (req, res) => {
       }
     }
 
-    // Ajustes por pasarela de pagos / operación
     const operation = tipoVenta || 'Venta';
     let finalAmount = operation === 'Cortesia' ? 0.00 : precioNeto;
 
-    // Aplicar recargo si es Payphone y está activado en el archivo de configuración (.env)
+    // Recargo Payphone si aplica
     if (metodoPago === 'Payphone' && operation === 'Venta') {
       const surchargeEnable = process.env.PAYPHONE_SURCHARGE_ENABLE !== 'false';
       if (surchargeEnable) {
         const rate = parseFloat(process.env.PAYPHONE_SURCHARGE_RATE) || 0.043;
         const fixed = parseFloat(process.env.PAYPHONE_SURCHARGE_FIXED) || 0.30;
         const rawTotal = (precioNeto + fixed) / (1 - rate);
-        const roundedTotal = Math.round(rawTotal * 100) / 100;
-        finalAmount = roundedTotal;
+        finalAmount = Math.round(rawTotal * 100) / 100;
       }
     }
 
@@ -292,8 +250,7 @@ exports.createOrder = async (req, res) => {
     const rand = Math.floor(1000 + Math.random() * 9000);
     const orderNum = `ORD-${timestamp}-${rand}`;
 
-    // --- INTEGRACIÓN EXCLUSIVA DE PAYPHONE ---
-    // Si el cliente paga en línea con Payphone, verificamos la transacción antes de confirmar
+    // Verificación Payphone para cobros online
     if (metodoPago === 'Payphone' && operation === 'Venta') {
       if (!numTransaccion) {
         await client.query('ROLLBACK');
@@ -304,8 +261,7 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      // Validar transacción en la API oficial de Payphone
-      const isApproved = await verifyPayphoneTransaction(numTransaccion, clientTxId || orderNum);
+      const isApproved = await verifyPayphoneGateway(numTransaccion, clientTxId || orderNum);
       if (!isApproved) {
         await client.query('ROLLBACK');
         client.release();
@@ -322,41 +278,43 @@ exports.createOrder = async (req, res) => {
     if (operation === 'Cortesia') {
       paymentStatus = 'Cortesía';
     } else if (isTransfer) {
-      if (userRole === 'admin') {
-        paymentStatus = 'Pagado'; // Aprobado automáticamente si es admin
-      } else {
-        paymentStatus = 'Pendiente'; // Pendiente para staff y compradores públicos
-      }
+      paymentStatus = (userRole === 'admin') ? 'Pagado' : 'Pendiente';
     } else if (operation === 'Venta') {
-      paymentStatus = 'Pagado'; // Payphone o Efectivo directo se marcan pagados
-    } else {
-      paymentStatus = 'Pendiente';
+      paymentStatus = 'Pagado';
     }
 
-    // Guardar archivo del comprobante si existe
     let comprobanteUrl = null;
     if (comprobante) {
       comprobanteUrl = saveReceiptFile(comprobante);
     }
 
-    // Desglose
-    let desglose = event.is_single_rate ? `${totalQty} Entradas` : `${cAd} Ad / ${cNi} Ni`;
+    // Desglose descriptivo
+    let desglose = targetLocalidad ? `${totalQty}x ${targetLocalidad.nombre}` : (event.is_single_rate ? `${totalQty} Entradas` : `${cAd} Ad / ${cNi} Ni`);
     if (event.has_assigned_seats && seat_labels) {
       desglose += ` [Asientos: ${seat_labels.join(', ')}]`;
     }
 
-    const cleanWhatsapp = whatsapp ? whatsapp.replace(/\D/g, '') : null;
+    const localidadBreakdown = targetLocalidad ? {
+      localidad_id: targetLocalidad.id,
+      nombre: targetLocalidad.nombre,
+      precio: targetLocalidad.precio,
+      cantidad: totalQty
+    } : null;
+
+    const cleanWhatsapp = whatsapp ? (whatsapp.startsWith('+') ? '+' + whatsapp.replace(/\D/g, '') : whatsapp.replace(/\D/g, '')) : null;
     const buyerId = req.user ? req.user.id : null;
 
-    // 5. Insertar la orden
+    // 6. Insertar la Orden
     const orderInsertRes = await client.query(
       `INSERT INTO orders 
-       (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, amount_net, ticket_count_adult, ticket_count_child, transaction_ref, bank_name, is_final_consumer, billing_id_number, billing_name, billing_address, billing_email, comprobante_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+       (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, amount_net, ticket_count_adult, ticket_count_child, localidad_breakdown, transaction_ref, bank_name, is_final_consumer, billing_id_number, billing_name, billing_address, billing_email, comprobante_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
        RETURNING *`,
       [
         orderNum, buyerId, nombre, email || null, cleanWhatsapp, idEvento, scheduleId,
-        operation, metodoPago || 'Efectivo', paymentStatus, finalAmount, operation === 'Cortesia' ? 0.00 : precioNeto, cAd, cNi,
+        operation, metodoPago || 'Efectivo', paymentStatus, finalAmount, operation === 'Cortesia' ? 0.00 : precioNeto,
+        targetLocalidad ? totalQty : cAd, targetLocalidad ? 0 : cNi,
+        localidadBreakdown ? JSON.stringify(localidadBreakdown) : null,
         numTransaccion || null, banco || null,
         is_final_consumer !== false, billing_id_number || null, billing_name || null, billing_address || null, billing_email || null,
         comprobanteUrl
@@ -364,34 +322,38 @@ exports.createOrder = async (req, res) => {
     );
     const newOrder = orderInsertRes.rows[0];
 
-    // 6. Crear tickets individuales
+    // 7. Crear tickets individuales
     const createdTickets = [];
-    const ticketTypes = [];
-    if (event.is_single_rate) {
-      for (let i = 0; i < totalQty; i++) ticketTypes.push('General');
-    } else {
-      for (let i = 0; i < cAd; i++) ticketTypes.push('Adulto');
-      for (let i = 0; i < cNi; i++) ticketTypes.push('Niño');
-    }
-
-    for (let idx = 0; idx < ticketTypes.length; idx++) {
-      const type = ticketTypes[idx];
+    for (let idx = 0; idx < totalQty; idx++) {
       const ticketCode = `TKT-${timestamp}-${idx + 1}`;
       const seat = event.has_assigned_seats ? seat_labels[idx] : null;
+      const type = targetLocalidad ? targetLocalidad.nombre : (event.is_single_rate ? 'General' : (idx < cAd ? 'Adulto' : 'Niño'));
 
       const ticketInsertRes = await client.query(
-        `INSERT INTO tickets (order_id, ticket_code, ticket_type, seat_label, status)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO tickets (order_id, localidad_id, ticket_code, ticket_type, seat_label, status)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [newOrder.id, ticketCode, type, seat, 'Active']
+        [newOrder.id, targetLocalidad?.id || null, ticketCode, type, seat, 'Active']
       );
       createdTickets.push(ticketInsertRes.rows[0]);
+    }
+
+    // 8. Si el evento pertenece a un organizador y la orden está pagada, sumar tarifa por ticket a su deuda
+    if (event.organizer_id && paymentStatus === 'Pagado') {
+      const debtAddition = totalQty * PLATFORM_FEE_PER_TICKET;
+      await client.query(
+        'UPDATE users SET debt_balance = debt_balance + $1, updated_at = NOW() WHERE id = $2',
+        [debtAddition, event.organizer_id]
+      );
     }
 
     await client.query('COMMIT');
     client.release();
 
-    // 7. Enviar correo electrónico + notificación push al admin
+    // 9. Despacho Asíncrono de Notificaciones (Email, Push, WhatsApp Bot)
+    const hostUrl = process.env.FRONTEND_URL || 'https://studio5tickets.com';
+    const ticketUrl = `${hostUrl}/boleto/${createdTickets[0]?.ticket_code || newOrder.order_num}`;
+
     if (paymentStatus === 'Pendiente' && email && email.includes('@')) {
       sendPendingTransferEmail({
         email,
@@ -405,29 +367,42 @@ exports.createOrder = async (req, res) => {
         amountTotal: finalAmount
       }).catch(err => console.error('Error al enviar email de transferencia pendiente:', err));
 
-      // Push al admin: comprobante pendiente de revisión
       sendPushToAdmins(
         '🧾 Comprobante por revisar',
-        `${nombre} envió un comprobante de transferencia por $${finalAmount.toFixed(2)} — ${event.title}`,
+        `${nombre} envió un comprobante por $${finalAmount.toFixed(2)} — ${event.title}`,
         { tag: 'transfer-pending', url: '/admin?tab=transferencias' }
       ).catch(() => {});
 
-    } else if (paymentStatus !== 'Pendiente' && email && email.includes('@')) {
-      sendTicketEmail({
-        email,
-        customerName: nombre,
-        orderNum: newOrder.order_num,
-        eventTitle: event.title,
-        eventVenue: event.venue,
-        scheduleTime: schedule.schedule_time,
-        ticketCount: totalQty,
-        ticketDesglose: desglose,
-        tickets: createdTickets
-      }).catch(err => console.error('Error al enviar email en background:', err));
+    } else if (paymentStatus === 'Pagado') {
+      if (email && email.includes('@')) {
+        sendTicketEmail({
+          email,
+          customerName: nombre,
+          orderNum: newOrder.order_num,
+          eventTitle: event.title,
+          eventVenue: event.venue,
+          scheduleTime: schedule.schedule_time,
+          ticketCount: totalQty,
+          ticketDesglose: desglose,
+          tickets: createdTickets
+        }).catch(err => console.error('Error al enviar email:', err));
+      }
 
-      // Push al admin: venta directa confirmada
+      // WhatsApp Webhook hacia n8n + Whapi
+      if (cleanWhatsapp) {
+        sendWhatsAppTicketWebhook({
+          numero_whatsapp_cliente: cleanWhatsapp,
+          nombre_cliente: nombre,
+          nombre_evento: event.title,
+          url_del_ticket_pdf_o_qr: ticketUrl,
+          orden_numero: newOrder.order_num,
+          total: finalAmount,
+          localidad: targetLocalidad?.nombre || 'General'
+        }).catch(err => console.error('Error en webhook de WhatsApp:', err));
+      }
+
       sendPushToAdmins(
-        '💳 Nueva venta confirmada',
+        '💳 Venta confirmada',
         `${nombre} compró ${totalQty} entrada(s) para ${event.title} — $${finalAmount.toFixed(2)}`,
         { tag: 'new-sale', url: '/admin?tab=ventas' }
       ).catch(() => {});
@@ -449,20 +424,29 @@ exports.createOrder = async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     client.release();
+    console.error('Error in createOrder:', err);
     res.status(500).json({
       status: 'ERROR',
-      message: 'Error al registrar la venta',
+      message: 'Error al registrar la venta: ' + err.message,
       error: err.message
     });
   }
 };
 
-// Listar todas las órdenes (con filtros opcionales de fecha y evento)
+// Listar todas las órdenes
 exports.getAllOrders = async (req, res) => {
+  const user = req.user;
+  const isOrganizer = user && user.role === 'organizer';
+
   try {
     const { event_id, schedule_id, date_from, date_to } = req.query;
     const conditions = [];
     const params = [];
+
+    if (isOrganizer) {
+      params.push(user.id);
+      conditions.push(`e.organizer_id = $${params.length}`);
+    }
 
     if (event_id) { params.push(event_id); conditions.push(`o.event_id = $${params.length}`); }
     if (schedule_id) { params.push(schedule_id); conditions.push(`o.schedule_id = $${params.length}`); }
@@ -507,10 +491,7 @@ exports.getOrderById = async (req, res) => {
     );
 
     if (orderRes.rows.length === 0) {
-      return res.status(404).json({
-        status: 'ERROR',
-        message: 'Orden no encontrada.'
-      });
+      return res.status(404).json({ status: 'ERROR', message: 'Orden no encontrada.' });
     }
 
     const order = orderRes.rows[0];
@@ -530,7 +511,7 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// Obtener detalle de una orden y sus tickets por order_num (Público)
+// Obtener detalle de una orden por order_num (Público)
 exports.getOrderByNum = async (req, res) => {
   const { orderNum } = req.params;
 
@@ -545,10 +526,7 @@ exports.getOrderByNum = async (req, res) => {
     );
 
     if (orderRes.rows.length === 0) {
-      return res.status(404).json({
-        status: 'ERROR',
-        message: 'Orden no encontrada.'
-      });
+      return res.status(404).json({ status: 'ERROR', message: 'Orden no encontrada.' });
     }
 
     const order = orderRes.rows[0];
@@ -574,10 +552,7 @@ exports.updateOrderStatus = async (req, res) => {
   const { payment_status } = req.body;
 
   if (!payment_status || !['Pagado', 'Pendiente', 'Anulado'].includes(payment_status)) {
-    return res.status(400).json({
-      status: 'ERROR',
-      message: 'Estado de pago inválido.'
-    });
+    return res.status(400).json({ status: 'ERROR', message: 'Estado de pago inválido.' });
   }
 
   const client = await pool.connect();
@@ -608,42 +583,62 @@ exports.updateOrderStatus = async (req, res) => {
     const ticketsRes = await client.query('SELECT * FROM tickets WHERE order_id = $1', [id]);
     const tickets = ticketsRes.rows;
 
+    // Si pasa a Pagado y el evento es de un organizador, sumar deuda de plataforma
+    if (payment_status === 'Pagado' && order.payment_status !== 'Pagado') {
+      const eventRes = await client.query('SELECT * FROM events WHERE id = $1', [order.event_id]);
+      const event = eventRes.rows[0];
+      if (event && event.organizer_id) {
+        const totalTickets = order.ticket_count_adult + order.ticket_count_child || tickets.length;
+        const fee = totalTickets * PLATFORM_FEE_PER_TICKET;
+        await client.query('UPDATE users SET debt_balance = debt_balance + $1 WHERE id = $2', [fee, event.organizer_id]);
+      }
+    }
+
     await client.query('COMMIT');
     client.release();
 
-    if (payment_status === 'Pagado' && order.payment_status !== 'Pagado' && order.customer_email) {
+    // Notificaciones al aprobar
+    if (payment_status === 'Pagado' && order.payment_status !== 'Pagado') {
       const eventRes = await query('SELECT * FROM events WHERE id = $1', [order.event_id]);
       const scheduleRes = await query('SELECT * FROM event_schedules WHERE id = $1', [order.schedule_id]);
 
       if (eventRes.rows.length > 0 && scheduleRes.rows.length > 0) {
         const event = eventRes.rows[0];
         const schedule = scheduleRes.rows[0];
-        const totalQty = order.ticket_count_adult + order.ticket_count_child;
+        const totalQty = order.ticket_count_adult + order.ticket_count_child || tickets.length;
         let desglose = event.is_single_rate ? `${totalQty} Entradas` : `${order.ticket_count_adult} Ad / ${order.ticket_count_child} Ni`;
         
-        const seatLabels = tickets.map(t => t.seat_label).filter(s => s !== null);
-        if (seatLabels.length > 0) {
-          desglose += ` [Asientos: ${seatLabels.join(', ')}]`;
+        const seatLabels = tickets.map(t => t.seat_label).filter(Boolean);
+        if (seatLabels.length > 0) desglose += ` [Asientos: ${seatLabels.join(', ')}]`;
+
+        if (order.customer_email) {
+          sendTicketEmail({
+            email: order.customer_email,
+            customerName: order.customer_name,
+            orderNum: order.order_num,
+            eventTitle: event.title,
+            eventVenue: event.venue,
+            scheduleTime: schedule.schedule_time,
+            ticketCount: totalQty,
+            ticketDesglose: desglose,
+            tickets: tickets
+          }).catch(err => console.error('Error al enviar email al actualizar orden:', err));
         }
 
-        sendTicketEmail({
-          email: order.customer_email,
-          customerName: order.customer_name,
-          orderNum: order.order_num,
-          eventTitle: event.title,
-          eventVenue: event.venue,
-          scheduleTime: schedule.schedule_time,
-          ticketCount: totalQty,
-          ticketDesglose: desglose,
-          tickets: tickets
-        }).catch(err => console.error('Error al enviar email al actualizar orden:', err));
-
-        // Push al admin: pago con tarjeta confirmado vía Payphone
-        sendPushToAdmins(
-          '💳 Pago con tarjeta confirmado',
-          `${order.customer_name} pagó $${order.amount_total} con tarjeta — ${event.title}`,
-          { tag: 'card-payment', url: '/admin?tab=ventas' }
-        ).catch(() => {});
+        // WhatsApp Webhook a n8n
+        if (order.customer_whatsapp) {
+          const hostUrl = process.env.FRONTEND_URL || 'https://studio5tickets.com';
+          const ticketUrl = `${hostUrl}/boleto/${tickets[0]?.ticket_code || order.order_num}`;
+          sendWhatsAppTicketWebhook({
+            numero_whatsapp_cliente: order.customer_whatsapp,
+            nombre_cliente: order.customer_name,
+            nombre_evento: event.title,
+            url_del_ticket_pdf_o_qr: ticketUrl,
+            orden_numero: order.order_num,
+            total: order.amount_total,
+            localidad: order.localidad_breakdown?.nombre || 'General'
+          }).catch(err => console.error('Error al enviar WhatsApp Webhook:', err));
+        }
       }
     }
 
@@ -665,7 +660,7 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-// Actualizar detalles de una orden (Admin/Staff)
+// Actualizar detalles de facturación/datos de comprador
 exports.updateOrder = async (req, res) => {
   const { id } = req.params;
   const {

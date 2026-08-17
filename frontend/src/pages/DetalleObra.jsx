@@ -4,7 +4,8 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Swal from 'sweetalert2';
 import html2canvas from 'html2canvas';
-import { ChevronLeft, Download, Send, Armchair, CreditCard, Calendar, ChevronDown, Copy, Upload, Trash2, Check, Info } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { ChevronLeft, Download, Send, Armchair, CreditCard, Calendar, ChevronDown, Copy, Upload, Trash2, Check, Info, Layers, Tag } from 'lucide-react';
 
 const getImageUrl = (url) => {
   if (!url) return '';
@@ -121,6 +122,7 @@ const DetalleObra = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, isAuthenticated, isStaff } = useAuth();
+  const { applyEventTheme } = useTheme();
 
   // Estados del Evento
   const [event, setEvent] = useState(null);
@@ -137,6 +139,7 @@ const DetalleObra = () => {
 
   // Estados del Formulario de Compra
   const [scheduleId, setScheduleId] = useState(() => getDraft('scheduleId', ''));
+  const [selectedLocalidadId, setSelectedLocalidadId] = useState(() => getDraft('selectedLocalidadId', ''));
   const [tipoVenta, setTipoVenta] = useState(() => getDraft('tipoVenta', 'Venta'));
   const [metodoPago, setMetodoPago] = useState(() => getDraft('metodoPago', '')); 
   const [banco, setBanco] = useState(() => getDraft('banco', 'Pichincha'));
@@ -175,13 +178,13 @@ const DetalleObra = () => {
   // Efecto para guardar en sessionStorage cada vez que cambian los campos
   useEffect(() => {
     const draft = {
-      scheduleId, tipoVenta, metodoPago, banco, bancoOtro, numTransaccion,
+      scheduleId, selectedLocalidadId, tipoVenta, metodoPago, banco, bancoOtro, numTransaccion,
       nombre, whatsapp, email, cantAdultos, cantNinos, selectedSeats,
       isFinalConsumer, billingIdNumber, billingName, billingAddress, billingEmail
     };
     sessionStorage.setItem(`draft_order_${id}`, JSON.stringify(draft));
   }, [
-    scheduleId, tipoVenta, metodoPago, banco, bancoOtro, numTransaccion,
+    scheduleId, selectedLocalidadId, tipoVenta, metodoPago, banco, bancoOtro, numTransaccion,
     nombre, whatsapp, email, cantAdultos, cantNinos, selectedSeats,
     isFinalConsumer, billingIdNumber, billingName, billingAddress, billingEmail, id
   ]);
@@ -217,11 +220,17 @@ const DetalleObra = () => {
       try {
         const res = await api.get(`/events/${id}`);
         if (res.data.status === 'OK') {
-          setEvent(res.data.event);
-          if (res.data.event.schedules.length > 0) {
-            setScheduleId(res.data.event.schedules[0].id);
+          const ev = res.data.event;
+          setEvent(ev);
+          if (ev.schedules && ev.schedules.length > 0) {
+            setScheduleId(ev.schedules[0].id);
           }
-          // Si es staff/admin, por defecto Efectivo. Si es público general, por defecto Payphone (Tarjeta)
+          if (ev.localidades && ev.localidades.length > 0) {
+            setSelectedLocalidadId(prev => prev || ev.localidades[0].id);
+          }
+          if (ev.theme_config) {
+            applyEventTheme(ev.theme_config);
+          }
           const defaultMet = isStaff ? 'Efectivo' : 'Payphone';
           setMetodoPago(defaultMet);
         }
@@ -379,6 +388,7 @@ const DetalleObra = () => {
   const numAdultos = event.has_assigned_seats ? Math.max(0, selectedSeats.length - cantNinos) : cantAdultos;
   const numNinos = event.has_assigned_seats ? cantNinos : cantNinos;
   const totalQty = event.has_assigned_seats ? selectedSeats.length : (cantAdultos + cantNinos);
+  const selectedLocalidad = event.localidades?.find(l => l.id === selectedLocalidadId);
 
   const calculatePayphoneSurcharge = (subtotal) => {
     if (subtotal <= 0) return 0;
@@ -389,6 +399,11 @@ const DetalleObra = () => {
 
   const calculateTotal = () => {
     if (tipoVenta === 'Cortesia') return 0;
+
+    // Si el evento cuenta con localidades múltiples
+    if (selectedLocalidad) {
+      return totalQty * parseFloat(selectedLocalidad.precio);
+    }
     
     let total = 0;
     if (event.is_single_rate) {
@@ -434,12 +449,28 @@ const DetalleObra = () => {
       met = 'Payphone';
     }
 
+    // Formateo de WhatsApp internacional (ej: +593999999999)
+    let formattedWhatsapp = (whatsapp || '').trim();
+    if (formattedWhatsapp) {
+      const digits = formattedWhatsapp.replace(/\D/g, '');
+      if (formattedWhatsapp.startsWith('+')) {
+        formattedWhatsapp = '+' + digits;
+      } else if (digits.startsWith('593')) {
+        formattedWhatsapp = '+' + digits;
+      } else if (digits.startsWith('0')) {
+        formattedWhatsapp = '+593' + digits.substring(1);
+      } else {
+        formattedWhatsapp = '+593' + digits;
+      }
+    }
+
     const payload = {
       idEvento: event.id,
       fecha: scheduleId,
       nombre,
       email,
-      whatsapp,
+      whatsapp: formattedWhatsapp,
+      localidad_id: selectedLocalidadId || null,
       cantAdultos: numAdultos,
       cantNinos: numNinos,
       tipoVenta: isStaff ? tipoVenta : 'Venta',
@@ -1151,6 +1182,48 @@ const DetalleObra = () => {
             );
           })}
         </div>
+
+        {/* Selector de Localidades Múltiples (VIP, General, etc.) */}
+        {event.localidades && event.localidades.length > 0 && (
+          <div className="fade-in" style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <Layers size={16} color="var(--accent)" /> Selecciona tu Localidad / Zona *
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
+              {event.localidades.map(loc => {
+                const isSelected = loc.id === selectedLocalidadId;
+                const isSoldOut = loc.aforo_disponible <= 0;
+                return (
+                  <div
+                    key={loc.id}
+                    onClick={() => !isSoldOut && setSelectedLocalidadId(loc.id)}
+                    className={`localidad-card ${isSelected ? 'selected' : ''}`}
+                    style={{
+                      opacity: isSoldOut ? 0.45 : 1,
+                      cursor: isSoldOut ? 'not-allowed' : 'pointer',
+                      borderColor: isSelected ? (loc.color || 'var(--accent)') : 'var(--glass-border)',
+                      boxShadow: isSelected ? `0 0 15px ${loc.color || 'var(--accent)'}55` : 'none',
+                      background: isSelected ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: loc.color || 'var(--accent)' }}></span>
+                        <strong style={{ fontSize: '0.88rem', color: '#fff' }}>{loc.nombre}</strong>
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: isSoldOut ? 'var(--error)' : 'var(--text-muted)', display: 'block', marginTop: '3px' }}>
+                        {isSoldOut ? 'Agotado' : `${loc.aforo_disponible} disponibles`}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: loc.color || 'var(--accent)' }}>
+                      ${parseFloat(loc.precio).toFixed(2)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Asientos Numerados */}
         {event.has_assigned_seats && (

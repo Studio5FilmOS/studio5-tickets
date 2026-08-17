@@ -6,33 +6,72 @@ const { query } = require('./config/db');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Auto-Migration para añadir columnas (ignora el error si ya existen)
-// Función para ejecutar migraciones (añadir columnas y tablas nuevas) de forma segura
+// Auto-Migration para añadir columnas y tablas V2 de forma segura
 const runMigrations = async () => {
   try {
-    await query('ALTER TABLE events ADD COLUMN require_billing BOOLEAN NOT NULL DEFAULT FALSE;');
-    console.log('Migration: Added require_billing to events');
-  } catch (err) {
-    console.log('Migration: require_billing already exists or could not be added:', err.message);
-  }
-  try {
+    await query('ALTER TABLE events ADD COLUMN IF NOT EXISTS require_billing BOOLEAN NOT NULL DEFAULT FALSE;');
     await query('ALTER TABLE events ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;');
-    console.log('Migration: Added is_archived to events');
+    await query('ALTER TABLE events ADD COLUMN IF NOT EXISTS qr_scanning_enabled BOOLEAN NOT NULL DEFAULT TRUE;');
+    await query('ALTER TABLE events ADD COLUMN IF NOT EXISTS theme_config JSONB DEFAULT \'{"primaryColor": "#DEB841", "secondaryColor": "#b08d2b", "logoUrl": "https://i.imgur.com/0z5756T.png", "tenantName": "Studio 5"}\'::jsonb;');
+    console.log('Migration: Events columns updated (require_billing, is_archived, qr_scanning_enabled, theme_config)');
   } catch (err) {
-    console.log('Migration: is_archived could not be added:', err.message);
+    console.log('Migration events error/already exists:', err.message);
   }
+
   try {
-    await query('ALTER TABLE orders ADD COLUMN is_final_consumer BOOLEAN NOT NULL DEFAULT TRUE;');
-    await query('ALTER TABLE orders ADD COLUMN billing_id_number VARCHAR(50);');
-    await query('ALTER TABLE orders ADD COLUMN billing_name VARCHAR(255);');
-    await query('ALTER TABLE orders ADD COLUMN billing_address VARCHAR(255);');
-    await query('ALTER TABLE orders ADD COLUMN billing_email VARCHAR(255);');
-    await query('ALTER TABLE orders ADD COLUMN amount_net NUMERIC(10, 2) NOT NULL DEFAULT 0.00;');
-    await query('UPDATE orders SET amount_net = amount_total WHERE amount_net = 0.00 AND amount_total > 0.00;');
-    console.log('Migration: Added billing fields and amount_net to orders');
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_tarjeta VARCHAR(255);');
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS debt_balance NUMERIC(10, 2) NOT NULL DEFAULT 0.00;');
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;');
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code VARCHAR(10);');
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires_at TIMESTAMPTZ;');
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS workgroup_organizer_id UUID REFERENCES users(id) ON DELETE SET NULL;');
+    await query("UPDATE users SET is_verified = TRUE WHERE role = 'admin' OR is_verified IS NULL;");
+    console.log('Migration: Users columns updated (token_tarjeta, debt_balance, is_verified, verification_code, workgroup_organizer_id)');
   } catch (err) {
-    console.log('Migration: Billing fields/amount_net already exist or could not be added:', err.message);
+    console.log('Migration users error/already exists:', err.message);
   }
+
+  try {
+    await query('ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_id UUID REFERENCES users(id) ON DELETE SET NULL;');
+    console.log('Migration: Added organizer_id to events');
+  } catch (err) {
+    console.log('Migration organizer_id error/already exists:', err.message);
+  }
+
+  try {
+    await query(`CREATE TABLE IF NOT EXISTS localidades (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      event_id UUID REFERENCES events(id) ON DELETE CASCADE,
+      nombre VARCHAR(255) NOT NULL,
+      precio NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+      aforo_total INTEGER NOT NULL DEFAULT 0,
+      aforo_disponible INTEGER NOT NULL DEFAULT 0,
+      color VARCHAR(50) DEFAULT '#DEB841',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );`);
+    await query('CREATE INDEX IF NOT EXISTS idx_localidades_event ON localidades(event_id);');
+    console.log('Migration: localidades table ready');
+  } catch (err) {
+    console.error('Migration localidades error:', err.message);
+  }
+
+  try {
+    await query('ALTER TABLE tickets ADD COLUMN IF NOT EXISTS localidad_id UUID REFERENCES localidades(id) ON DELETE SET NULL;');
+    await query('CREATE INDEX IF NOT EXISTS idx_tickets_localidad ON tickets(localidad_id);');
+    await query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS localidad_breakdown JSONB;');
+    await query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_final_consumer BOOLEAN NOT NULL DEFAULT TRUE;');
+    await query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_id_number VARCHAR(50);');
+    await query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_name VARCHAR(255);');
+    await query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_address VARCHAR(255);');
+    await query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_email VARCHAR(255);');
+    await query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS amount_net NUMERIC(10, 2) NOT NULL DEFAULT 0.00;');
+    await query('UPDATE orders SET amount_net = amount_total WHERE amount_net = 0.00 AND amount_total > 0.00;');
+    console.log('Migration: Tickets and Orders V2 fields updated');
+  } catch (err) {
+    console.log('Migration tickets/orders error/already exists:', err.message);
+  }
+
   try {
     await query(`CREATE TABLE IF NOT EXISTS promotions (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -273,9 +312,11 @@ initDatabase()
       console.log(`==================================================`);
       console.log(`Servidor de Tickets corriendo en el puerto ${PORT}`);
       console.log(`Modo: ${process.env.NODE_ENV || 'development'}`);
-    });
     startStorageMonitor();
+    const { startBillingCronService } = require('./services/billingCronService');
+    startBillingCronService();
   })
   .catch(err => {
     console.error('❌ Error durante la inicialización del servidor:', err);
   });
+

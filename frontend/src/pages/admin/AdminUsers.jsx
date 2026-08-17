@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 
-const ROLES = ['admin', 'staff'];
+const ROLES = ['admin', 'staff', 'organizer'];
 
-const INITIAL_FORM = { name: '', email: '', phone: '', password: '', role: 'staff' };
+const INITIAL_FORM = { name: '', email: '', phone: '', password: '', role: 'staff', token_tarjeta: '' };
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -42,7 +42,7 @@ export default function AdminUsers() {
 
   const openEdit = (u) => {
     setEditId(u.id);
-    setForm({ name: u.name, email: u.email, phone: u.phone || '', password: '', role: u.role });
+    setForm({ name: u.name, email: u.email, phone: u.phone || '', password: '', role: u.role, token_tarjeta: u.token_tarjeta || '' });
     setShowForm(true);
   };
 
@@ -51,7 +51,7 @@ export default function AdminUsers() {
     setSaving(true);
     try {
       if (editId) {
-        const payload = { name: form.name, phone: form.phone, role: form.role };
+        const payload = { name: form.name, phone: form.phone, role: form.role, token_tarjeta: form.token_tarjeta };
         if (form.password.trim()) payload.password = form.password;
         await api.put(`/admin/users/${editId}`, payload);
         notify('ok', 'Usuario actualizado correctamente.');
@@ -86,10 +86,11 @@ export default function AdminUsers() {
     const styles = {
       admin: { background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' },
       staff: { background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)' },
+      organizer: { background: 'rgba(168,85,247,0.15)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.3)' }
     };
     return (
-      <span style={{ ...styles[role], padding: '3px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        {role}
+      <span style={{ ...(styles[role] || styles.staff), padding: '3px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {role === 'organizer' ? '🏢 Organizador' : role}
       </span>
     );
   };
@@ -173,9 +174,24 @@ export default function AdminUsers() {
                   onChange={e => setForm({ ...form, role: e.target.value })}
                   style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: '#1a1a2e', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
                 >
-                  {ROLES.map(r => <option key={r} value={r}>{r === 'admin' ? '🛡️ Admin' : '🎭 Staff'}</option>)}
+                  <option value="admin">🛡️ Admin</option>
+                  <option value="staff">🎭 Staff</option>
+                  <option value="organizer">🏢 Organizador</option>
                 </select>
               </div>
+              {form.role === 'organizer' && (
+                <div>
+                  <label style={{ display: 'block', color: 'var(--accent)', fontSize: '0.8rem', marginBottom: 6, fontWeight: 600 }}>TOKEN TARJETA PAYPHONE (GARANTÍA)</label>
+                  <input
+                    type="text"
+                    value={form.token_tarjeta}
+                    onChange={e => setForm({ ...form, token_tarjeta: e.target.value })}
+                    placeholder="Ej: tok_payphone_live_..."
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--accent)', background: 'rgba(222,184,65,0.05)', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                  />
+                  <span style={{ fontSize: '0.72rem', color: '#888', marginTop: 4, display: 'block' }}>Requerido para cobrar comisiones en mora y permitir publicación de eventos.</span>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <button
                   type="button" onClick={() => setShowForm(false)}

@@ -1,7 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Play, ScanLine, Flame, ShieldAlert, LogIn, LogOut } from 'lucide-react';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { Play, ScanLine, Flame, ShieldAlert, LogIn, LogOut, Ticket, UserPlus } from 'lucide-react';
 
 // Importar Vistas (Pages)
 import Cartelera from './pages/Cartelera';
@@ -9,17 +10,18 @@ import DetalleObra from './pages/DetalleObra';
 import BoletoView from './pages/BoletoView';
 import OrdenView from './pages/OrdenView';
 import Login from './pages/Login';
+import Register from './pages/Register';
+import MyTickets from './pages/buyer/MyTickets';
 import ScannerDashboard from './pages/staff/ScannerDashboard';
 import MomentoWow from './pages/staff/MomentoWow';
 import AdminDashboard from './pages/admin/AdminDashboard';
-import PublicInteraction from './pages/PublicInteraction'; // NUEVA PÁGINA
+import PublicInteraction from './pages/PublicInteraction';
 import PayphoneRedirect from './pages/PayphoneRedirect';
 
 const BottomNavigation = () => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, isAdmin, isOrganizer } = useAuth();
   const location = useLocation();
 
-  // No mostrar barra de navegación en e-tickets ni en interactividad pública
   if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/orden/') || location.pathname.startsWith('/interaccion/') || location.pathname.startsWith('/payphone-redirect')) {
     return null;
   }
@@ -32,22 +34,23 @@ const BottomNavigation = () => {
       </Link>
 
       {isAuthenticated && (
-        <>
-          <Link to="/staff/scan" className={`mobile-nav-item ${location.pathname === '/staff/scan' ? 'active' : ''}`}>
-            <ScanLine size={20} />
-            <span>Escáner</span>
-          </Link>
-          <Link to="/staff/pistas" className={`mobile-nav-item ${location.pathname === '/staff/pistas' ? 'active' : ''}`}>
-            <Flame size={20} />
-            <span>Wow</span>
-          </Link>
-        </>
+        <Link to="/mis-tickets" className={`mobile-nav-item ${location.pathname === '/mis-tickets' ? 'active' : ''}`}>
+          <Ticket size={20} />
+          <span>Tickets</span>
+        </Link>
       )}
 
-      {isAuthenticated && user.role === 'admin' && (
+      {isAuthenticated && (user?.role === 'staff' || isAdmin || isOrganizer) && (
+        <Link to="/staff/scan" className={`mobile-nav-item ${location.pathname === '/staff/scan' ? 'active' : ''}`}>
+          <ScanLine size={20} />
+          <span>Escáner</span>
+        </Link>
+      )}
+
+      {isAuthenticated && (isAdmin || isOrganizer) && (
         <Link to="/admin" className={`mobile-nav-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
           <ShieldAlert size={20} />
-          <span>Admin</span>
+          <span>{isOrganizer ? 'Organizador' : 'Admin'}</span>
         </Link>
       )}
 
@@ -59,7 +62,7 @@ const BottomNavigation = () => {
       ) : (
         <Link to="/login" className={`mobile-nav-item ${location.pathname === '/login' ? 'active' : ''}`}>
           <LogIn size={20} />
-          <span>Acceder</span>
+          <span>Entrar</span>
         </Link>
       )}
     </nav>
@@ -80,8 +83,8 @@ const PrivateRoute = ({ children, allowedRoles }) => {
   if (!isAuthenticated) {
     return (
       <div className="glass-panel" style={{ margin: '50px auto', maxWidth: '400px', textAlign: 'center' }}>
-        <h3 style={{ color: '#ff3b30', marginBottom: '15px' }}>Acceso Restringido</h3>
-        <p style={{ color: '#ccc', marginBottom: '20px' }}>Debes iniciar sesión para ingresar a esta pantalla.</p>
+        <h3 style={{ color: 'var(--accent)', marginBottom: '15px' }}>Inicia Sesión</h3>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '20px' }}>Inicia sesión para acceder a tus boletos o funciones.</p>
         <Link to="/login" className="btn-primary">Iniciar Sesión</Link>
       </div>
     );
@@ -91,7 +94,7 @@ const PrivateRoute = ({ children, allowedRoles }) => {
     return (
       <div className="glass-panel" style={{ margin: '50px auto', maxWidth: '400px', textAlign: 'center' }}>
         <h3 style={{ color: '#ff3b30', marginBottom: '15px' }}>Sin Autorización</h3>
-        <p style={{ color: '#ccc', marginBottom: '20px' }}>No tienes el rol necesario para acceder.</p>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '20px' }}>No tienes los permisos requeridos para acceder a esta área.</p>
         <Link to="/" className="btn-primary">Volver a Cartelera</Link>
       </div>
     );
@@ -101,10 +104,10 @@ const PrivateRoute = ({ children, allowedRoles }) => {
 };
 
 const Sidebar = () => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, isAdmin, isOrganizer } = useAuth();
+  const { theme } = useTheme();
   const location = useLocation();
 
-  // No mostrar barra lateral en e-tickets ni en interactividad pública
   if (location.pathname.startsWith('/boleto/') || location.pathname.startsWith('/orden/') || location.pathname.startsWith('/interaccion/') || location.pathname.startsWith('/payphone-redirect')) {
     return null;
   }
@@ -113,8 +116,8 @@ const Sidebar = () => {
     <aside className="desktop-sidebar">
       <div className="sidebar-top">
         <Link to="/" className="sidebar-logo">
-          <img src="https://i.imgur.com/0z5756T.png" alt="Studio 5 Logo" />
-          <span>STUDIO 5</span>
+          <img src={theme.logoUrl || 'https://i.imgur.com/0z5756T.png'} alt="Logo" style={{ maxHeight: '42px', objectFit: 'contain' }} />
+          <span>{theme.tenantName || 'STUDIO 5'}</span>
         </Link>
 
         <nav className="sidebar-menu">
@@ -124,6 +127,13 @@ const Sidebar = () => {
           </Link>
 
           {isAuthenticated && (
+            <Link to="/mis-tickets" className={`sidebar-item ${location.pathname === '/mis-tickets' ? 'active' : ''}`}>
+              <Ticket size={18} />
+              <span>Mis Tickets</span>
+            </Link>
+          )}
+
+          {isAuthenticated && (user?.role === 'staff' || isAdmin || isOrganizer) && (
             <>
               <Link to="/staff/scan" className={`sidebar-item ${location.pathname === '/staff/scan' ? 'active' : ''}`}>
                 <ScanLine size={18} />
@@ -136,10 +146,10 @@ const Sidebar = () => {
             </>
           )}
 
-          {isAuthenticated && user.role === 'admin' && (
+          {isAuthenticated && (isAdmin || isOrganizer) && (
             <Link to="/admin" className={`sidebar-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
               <ShieldAlert size={18} />
-              <span>Administración</span>
+              <span>{isOrganizer ? 'Panel Organizador' : 'Administración'}</span>
             </Link>
           )}
 
@@ -149,10 +159,16 @@ const Sidebar = () => {
               <span>Cerrar Sesión</span>
             </button>
           ) : (
-            <Link to="/login" className={`sidebar-item ${location.pathname === '/login' ? 'active' : ''}`}>
-              <LogIn size={18} />
-              <span>Iniciar Sesión</span>
-            </Link>
+            <>
+              <Link to="/login" className={`sidebar-item ${location.pathname === '/login' ? 'active' : ''}`}>
+                <LogIn size={18} />
+                <span>Iniciar Sesión</span>
+              </Link>
+              <Link to="/registro" className={`sidebar-item ${location.pathname === '/registro' ? 'active' : ''}`}>
+                <UserPlus size={18} />
+                <span>Registrarme</span>
+              </Link>
+            </>
           )}
         </nav>
       </div>
@@ -160,11 +176,11 @@ const Sidebar = () => {
       {isAuthenticated && (
         <div className="sidebar-user">
           <div className="sidebar-avatar">
-            {user.name ? user.name.charAt(0) : 'U'}
+            {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
           </div>
           <div className="sidebar-user-info">
             <span className="sidebar-user-name">{user.name}</span>
-            <span className="sidebar-user-role">{user.role}</span>
+            <span className="sidebar-user-role">{user.role === 'organizer' ? 'Organizador' : (user.role === 'staff' ? 'Staff' : (user.role === 'admin' ? 'Administrador' : 'Espectador'))}</span>
           </div>
         </div>
       )}
@@ -172,74 +188,97 @@ const Sidebar = () => {
   );
 };
 
+const HeaderMobile = () => {
+  const { theme } = useTheme();
+  return (
+    <header className="mobile-header">
+      <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <img 
+          src={theme.logoUrl || 'https://i.imgur.com/0z5756T.png'} 
+          style={{ width: '42px', height: '42px', objectFit: 'contain' }} 
+          alt="Logo" 
+        />
+        <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#fff', letterSpacing: '1.5px' }}>{theme.tenantName || 'STUDIO 5'}</span>
+      </Link>
+    </header>
+  );
+};
+
+const AppContent = () => {
+  return (
+    <div className="app-layout">
+      <Sidebar />
+      <div className="app-main-content">
+        <HeaderMobile />
+        <div className="app-page-wrapper">
+          <Routes>
+            <Route path="/" element={<Cartelera />} />
+            <Route path="/evento/:id" element={<DetalleObra />} />
+            <Route path="/boleto/:code" element={<BoletoView />} />
+            <Route path="/orden/:code" element={<OrdenView />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/registro" element={<Register />} />
+            <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
+            <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
+
+            {/* Portal del Cliente (Cualquier usuario autenticado) */}
+            <Route 
+              path="/mis-tickets" 
+              element={
+                <PrivateRoute>
+                  <MyTickets />
+                </PrivateRoute>
+              } 
+            />
+
+            {/* Rutas Staff */}
+            <Route 
+              path="/staff/scan" 
+              element={
+                <PrivateRoute allowedRoles={['staff', 'admin', 'organizer']}>
+                  <ScannerDashboard />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/staff/pistas" 
+              element={
+                <PrivateRoute allowedRoles={['staff', 'admin', 'organizer']}>
+                  <MomentoWow />
+                </PrivateRoute>
+              } 
+            />
+
+            {/* Rutas Admin / Organizador */}
+            <Route 
+              path="/admin" 
+              element={
+                <PrivateRoute allowedRoles={['admin', 'organizer']}>
+                  <AdminDashboard />
+                </PrivateRoute>
+              } 
+            />
+          </Routes>
+        </div>
+
+        {/* Footer Sutil Marca Blanca */}
+        <footer className="whitelabel-footer">
+          <span>Powered by <strong>Studio 5 Tickets</strong> &bull; Sistema de Boletaje Inteligente</span>
+        </footer>
+      </div>
+      <BottomNavigation />
+    </div>
+  );
+};
+
 const App = () => {
   return (
     <AuthProvider>
-      <Router>
-        <div className="app-layout">
-          {/* Sidebar para pantallas grandes */}
-          <Sidebar />
-
-          <div className="app-main-content">
-            {/* Cabecera superior exclusiva para móviles */}
-            <header className="mobile-header">
-              <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <img 
-                  src="https://i.imgur.com/0z5756T.png" 
-                  style={{ width: '45px', filter: 'invert(1)' }} 
-                  alt="Studio 5 Logo" 
-                />
-                <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fff', letterSpacing: '2px' }}>STUDIO 5</span>
-              </Link>
-            </header>
-
-            <div className="app-page-wrapper">
-              <Routes>
-                <Route path="/" element={<Cartelera />} />
-                <Route path="/evento/:id" element={<DetalleObra />} />
-                <Route path="/boleto/:code" element={<BoletoView />} />
-                <Route path="/orden/:code" element={<OrdenView />} />
-                <Route path="/login" element={<Login />} />
-                
-                {/* NUEVA RUTA PÚBLICA PARA QR DE SALA */}
-                <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
-                <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
-
-                {/* Rutas Protegidas del Staff */}
-                <Route 
-                  path="/staff/scan" 
-                  element={
-                    <PrivateRoute allowedRoles={['staff', 'admin']}>
-                      <ScannerDashboard />
-                    </PrivateRoute>
-                  } 
-                />
-                <Route 
-                  path="/staff/pistas" 
-                  element={
-                    <PrivateRoute allowedRoles={['staff', 'admin']}>
-                      <MomentoWow />
-                    </PrivateRoute>
-                  } 
-                />
-
-                {/* Rutas Protegidas de Administración */}
-                <Route 
-                  path="/admin" 
-                  element={
-                    <PrivateRoute allowedRoles={['admin']}>
-                      <AdminDashboard />
-                    </PrivateRoute>
-                  } 
-                />
-              </Routes>
-            </div>
-          </div>
-
-          {/* Barra de navegación inferior móvil */}
-          <BottomNavigation />
-        </div>
-      </Router>
+      <ThemeProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </ThemeProvider>
     </AuthProvider>
   );
 };

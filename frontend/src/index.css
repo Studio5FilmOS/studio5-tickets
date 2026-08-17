@@ -554,3 +554,74 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
+/* --- V2 BRANDING / WHITE LABEL FOOTER --- */
+.whitelabel-footer {
+  text-align: center;
+  padding: 24px 16px 40px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  opacity: 0.75;
+  transition: opacity 0.2s ease;
+}
+.whitelabel-footer:hover {
+  opacity: 1;
+}
+.whitelabel-footer a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+/* --- V2 KILL SWITCH BANNER (Control de Puerta) --- */
+.killswitch-alert-banner {
+  background: linear-gradient(135deg, rgba(255, 59, 48, 0.2) 0%, rgba(200, 20, 20, 0.35) 100%);
+  border: 2px solid var(--error);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(255, 59, 48, 0.35);
+  animation: pulse-border 2s infinite ease-in-out;
+  margin-bottom: 24px;
+}
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 15px rgba(255, 59, 48, 0.3); }
+  50% { box-shadow: 0 0 35px rgba(255, 59, 48, 0.7); }
+  100% { box-shadow: 0 0 15px rgba(255, 59, 48, 0.3); }
+}
+
+/* --- V2 LOCALIDADES CARDS & SELECTOR --- */
+.localidad-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.localidad-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--accent-glow);
+  transform: translateY(-1px);
+}
+.localidad-card.selected {
+  border-color: var(--accent);
+  background: rgba(222, 184, 65, 0.12);
+  box-shadow: 0 0 18px var(--accent-glow);
+}
+.localidad-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+

@@ -2,17 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
-import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff } from 'lucide-react';
+import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff, Palette, Layers, CreditCard } from 'lucide-react';
 import AdminUsers from './AdminUsers';
 import { subscribeToPush, unsubscribeFromPush, isPushSubscribed } from '../../services/pushService';
+import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('ventas'); // 'ventas', 'crear', 'eventos', 'banners'
+  const { user } = useAuth();
+  const { theme, updateTheme } = useTheme();
+  const isOrganizer = user?.role === 'organizer';
+
+  const [activeTab, setActiveTab] = useState('ventas'); // 'ventas', 'crear', 'eventos', 'banners', 'theming'
   const [orders, setOrders] = useState([]);
   const [events, setEvents] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
+  
+  // Estado para gestión de localidades en eventos
+  const [localidadesList, setLocalidadesList] = useState([]);
+
+  // Estado para Base de Datos / CRM de Clientes
+  const [customers, setCustomers] = useState([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [crmSearchQuery, setCrmSearchQuery] = useState('');
+  
+  // Estado para Marca Blanca / Theming
+  const [themeForm, setThemeForm] = useState({
+    primaryColor: theme.primaryColor || '#DEB841',
+    secondaryColor: theme.secondaryColor || '#b08d2b',
+    logoUrl: theme.logoUrl || 'https://i.imgur.com/0z5756T.png',
+    tenantName: theme.tenantName || 'Studio 5'
+  });
+  const [savingTheme, setSavingTheme] = useState(false);
   
   // Estados para filtros de ventas
   const [filterEventId, setFilterEventId] = useState('ALL');
@@ -397,6 +420,21 @@ const AdminDashboard = () => {
       Swal.fire('Error', 'No se pudieron obtener las cuentas bancarias.', 'error');
     } finally {
       setLoadingBanks(false);
+    }
+  };
+
+  // Obtener base de datos de clientes y contactos (CRM)
+  const fetchCustomerDatabase = async () => {
+    setLoadingCustomers(true);
+    try {
+      const res = await api.get('/admin/users/customer-database');
+      if (res.data.status === 'OK') {
+        setCustomers(res.data.customers || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingCustomers(false);
     }
   };
 
@@ -798,6 +836,7 @@ const AdminDashboard = () => {
     setStatus(evt.status);
     setRequireBilling(evt.require_billing || false);
     setSchedulesList((evt.schedules || []).map(s => new Date(s.schedule_time).toISOString()));
+    setLocalidadesList(evt.localidades ? [...evt.localidades] : []);
     setActiveTab('crear');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -812,6 +851,46 @@ const AdminDashboard = () => {
     setSeatingLayoutList(ensure2DLayout(['A1','A2','A3','A4','B1','B2','B3','B4','C1','C2','C3','C4']));
     setPromoType('Ninguna'); setPricePromo(0); setPromoDeadline('');
     setSchedulesList([]); setRequireBilling(false);
+    setLocalidadesList([]);
+  };
+
+  const handleAddLocalidad = () => {
+    setLocalidadesList(prev => [
+      ...prev,
+      { nombre: `Zona ${prev.length + 1}`, precio: 15.00, aforo_total: 50, aforo_disponible: 50, color: prev.length === 0 ? '#DEB841' : (prev.length === 1 ? '#0066FF' : '#34C759') }
+    ]);
+  };
+
+  const handleUpdateLocalidad = (idx, field, val) => {
+    setLocalidadesList(prev => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], [field]: val };
+      return copy;
+    });
+  };
+
+  const handleRemoveLocalidad = (idx) => {
+    setLocalidadesList(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // Guardar Marca Blanca
+  const handleSaveTheme = async (e) => {
+    e.preventDefault();
+    setSavingTheme(true);
+    try {
+      updateTheme(themeForm);
+      Swal.fire({
+        icon: 'success',
+        title: '¡Tema Aplicado!',
+        text: 'La identidad visual de marca blanca se ha actualizado en tiempo real.',
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (err) {
+      Swal.fire('Error', 'No se pudo aplicar el tema.', 'error');
+    } finally {
+      setSavingTheme(false);
+    }
   };
 
   // Crear o actualizar evento
@@ -860,7 +939,8 @@ const AdminDashboard = () => {
       promo_deadline: promoType !== 'Ninguna' && promoDeadline ? new Date(promoDeadline).toISOString() : null,
       status,
       require_billing: requireBilling,
-      schedules: schedulesList
+      schedules: schedulesList,
+      localidades: localidadesList
     };
 
     try {
@@ -877,6 +957,7 @@ const AdminDashboard = () => {
         }
       }
       resetEventForm();
+      fetchData();
       setActiveTab('ventas');
     } catch (err) {
       console.error(err);
@@ -1133,6 +1214,38 @@ const AdminDashboard = () => {
         </button>
       </div>
 
+      {/* Banner de Estado de Organizador (Deuda de Plataforma & Token Payphone) */}
+      {isOrganizer && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(222,184,65,0.12), rgba(0,0,0,0.5))',
+          border: '1px solid var(--accent-glow)',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <div>
+            <h4 style={{ color: 'var(--accent)', fontWeight: 800, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldCheck size={18} /> Panel de Organizador: {user?.name}
+            </h4>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>
+              Garantía Payphone: {user?.token_tarjeta ? <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>✅ Tarjeta Tokenizada y Activa</span> : <span style={{ color: 'var(--error)', fontWeight: 'bold' }}>⚠️ Sin Tarjeta de Garantía (Requerida para Publicar)</span>}
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Deuda Acumulada Plataforma</span>
+            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: (user?.debt_balance > 0 ? 'var(--warning)' : 'var(--success)') }}>
+              ${parseFloat(user?.debt_balance || 0).toFixed(2)}
+            </div>
+            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Liquidación automática al superar $50.00</span>
+          </div>
+        </div>
+      )}
+
       {/* Tabs Premium */}
       <div style={{
         display: 'flex', flexWrap: 'wrap', background: 'rgba(255,255,255,0.04)', borderRadius: '14px',
@@ -1141,11 +1254,13 @@ const AdminDashboard = () => {
         {[
           { id: 'ventas', icon: LayoutGrid, label: 'Ventas' },
           { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Nuevo Evento' },
-          { id: 'eventos', icon: Edit2, label: 'Mis Eventos' },
+          { id: 'eventos', icon: Edit2, label: isOrganizer ? 'Mis Eventos' : 'Catálogo' },
+          { id: 'crm', icon: Users, label: isOrganizer ? 'Mis Clientes' : 'Base de Datos' },
+          { id: 'theming', icon: Palette, label: 'Marca Blanca' },
           { id: 'banners', icon: Image, label: 'Banners' },
           { id: 'transferencias', icon: Receipt, label: 'Transferencias' },
           { id: 'bancos', icon: DollarSign, label: 'Cuentas' },
-          { id: 'usuarios', icon: UserCog, label: 'Usuarios' }
+          ...(!isOrganizer ? [{ id: 'usuarios', icon: UserCog, label: 'Usuarios' }] : [])
         ].map(tab => (
           <button
             key={tab.id}
@@ -1155,10 +1270,10 @@ const AdminDashboard = () => {
               padding: '11px 14px', borderRadius: '11px', border: 'none', cursor: 'pointer',
               fontWeight: '600', fontSize: '0.85rem', transition: 'all 0.25s',
               background: activeTab === tab.id
-                ? 'linear-gradient(135deg, #DEB841, #b08d2b)'
+                ? 'linear-gradient(135deg, var(--accent), var(--accent-secondary))'
                 : 'transparent',
               color: activeTab === tab.id ? '#000' : 'var(--text-muted)',
-              boxShadow: activeTab === tab.id ? '0 4px 12px rgba(222,184,65,0.25)' : 'none'
+              boxShadow: activeTab === tab.id ? '0 4px 12px var(--accent-glow)' : 'none'
             }}
           >
             <tab.icon size={16} /> {tab.label}
@@ -1390,6 +1505,21 @@ const AdminDashboard = () => {
                         }}>
                           {o.payment_status}
                         </span>
+
+                        {/* Badge de Asistencia / Ingreso en Sala */}
+                        {parseInt(o.checked_in_count || 0) >= totalT && totalT > 0 ? (
+                          <span style={{ fontSize: '0.65rem', fontWeight: 800, background: 'rgba(52,199,89,0.15)', color: '#34c759', border: '1px solid rgba(52,199,89,0.3)', padding: '2px 8px', borderRadius: '6px' }}>
+                            ✅ {o.checked_in_count}/{totalT} INGRESADOS
+                          </span>
+                        ) : parseInt(o.checked_in_count || 0) > 0 ? (
+                          <span style={{ fontSize: '0.65rem', fontWeight: 800, background: 'rgba(255,204,0,0.15)', color: '#ffcc00', border: '1px solid rgba(255,204,0,0.3)', padding: '2px 8px', borderRadius: '6px' }}>
+                            ⏳ {o.checked_in_count}/{totalT} ADENTRO
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.65rem', fontWeight: 600, background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '6px' }}>
+                            🚪 0/{totalT} Adentro
+                          </span>
+                        )}
                       </div>
 
                       {/* Fila 2: nombre */}
@@ -1866,6 +1996,85 @@ const AdminDashboard = () => {
               )}
             </div>
 
+            {/* --- SECCIÓN V2: LOCALIDADES / ZONAS MÚLTIPLES --- */}
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', padding: '18px', borderRadius: '16px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Layers size={18} color="var(--accent)" />
+                  <h4 style={{ color: 'var(--accent)', fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Localidades / Zonas de Sala (Opcional)
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddLocalidad}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px',
+                    borderRadius: '8px', border: '1px solid var(--accent)', background: 'rgba(222,184,65,0.15)',
+                    color: 'var(--accent)', fontWeight: 'bold', fontSize: '0.75rem', cursor: 'pointer'
+                  }}
+                >
+                  <Plus size={14} /> Añadir Zona
+                </button>
+              </div>
+
+              {localidadesList.length === 0 ? (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  No se han definido localidades específicas. El evento usará las tarifas generales configuradas arriba.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {localidadesList.map((loc, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <input
+                        type="color"
+                        value={loc.color || '#DEB841'}
+                        onChange={(e) => handleUpdateLocalidad(idx, 'color', e.target.value)}
+                        style={{ width: '32px', height: '32px', padding: 0, border: 'none', borderRadius: '6px', cursor: 'pointer', background: 'none' }}
+                        title="Color representativo en el mapa"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Nombre (ej: VIP)"
+                        value={loc.nombre}
+                        onChange={(e) => handleUpdateLocalidad(idx, 'nombre', e.target.value)}
+                        style={{ flex: '2', marginBottom: 0, padding: '8px', fontSize: '0.82rem' }}
+                      />
+                      <div style={{ flex: '1.2', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>$</span>
+                        <input
+                          type="number"
+                          step="0.50"
+                          placeholder="Precio"
+                          value={loc.precio}
+                          onChange={(e) => handleUpdateLocalidad(idx, 'precio', parseFloat(e.target.value) || 0)}
+                          style={{ marginBottom: 0, padding: '8px', fontSize: '0.82rem', textAlign: 'center' }}
+                        />
+                      </div>
+                      <div style={{ flex: '1.2', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cap:</span>
+                        <input
+                          type="number"
+                          placeholder="Aforo"
+                          value={loc.aforo_total}
+                          onChange={(e) => handleUpdateLocalidad(idx, 'aforo_total', parseInt(e.target.value) || 0)}
+                          style={{ marginBottom: 0, padding: '8px', fontSize: '0.82rem', textAlign: 'center' }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveLocalidad(idx)}
+                        style={{ background: 'rgba(255,59,48,0.15)', border: 'none', borderRadius: '8px', padding: '8px', color: 'var(--error)', cursor: 'pointer' }}
+                        title="Eliminar zona"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Facturación */}
             <div className="glass-card" style={{ marginTop: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px' }}>
               <Receipt size={20} color="var(--accent)" />
@@ -1895,6 +2104,296 @@ const AdminDashboard = () => {
           </form>
         </div>
       )}
+
+      {/* PESTAÑA: MARCA BLANCA / THEMING */}
+      {activeTab === 'theming' && (
+        <div className="glass-panel fade-in">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(222,184,65,0.15)', border: '1px solid rgba(222,184,65,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Palette size={18} color="var(--accent)" />
+            </div>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: '1rem', fontWeight: '800' }}>Personalización de Marca Blanca</h3>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Adapta logos, títulos y colores globales en tiempo real en menos de 5 minutos</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveTheme} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
+            <div>
+              <label>Nombre de la Plataforma / Tenant</label>
+              <input
+                type="text"
+                value={themeForm.tenantName}
+                onChange={e => setThemeForm({ ...themeForm, tenantName: e.target.value })}
+                placeholder="Ej: Studio 5, Teatro Bolívar, etc."
+                required
+              />
+
+              <label>URL del Logotipo (PNG transparente)</label>
+              <input
+                type="text"
+                value={themeForm.logoUrl}
+                onChange={e => setThemeForm({ ...themeForm, logoUrl: e.target.value })}
+                placeholder="https://..."
+                required
+              />
+
+              <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
+                <div style={{ flex: '1' }}>
+                  <label>Color Primario</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="color"
+                      value={themeForm.primaryColor}
+                      onChange={e => setThemeForm({ ...themeForm, primaryColor: e.target.value })}
+                      style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
+                    />
+                    <input
+                      type="text"
+                      value={themeForm.primaryColor}
+                      onChange={e => setThemeForm({ ...themeForm, primaryColor: e.target.value })}
+                      style={{ marginBottom: 0, textTransform: 'uppercase' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ flex: '1' }}>
+                  <label>Color Secundario</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="color"
+                      value={themeForm.secondaryColor}
+                      onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
+                      style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
+                    />
+                    <input
+                      type="text"
+                      value={themeForm.secondaryColor}
+                      onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
+                      style={{ marginBottom: 0, textTransform: 'uppercase' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de presets rápidos */}
+              <div style={{ marginTop: '16px' }}>
+                <label style={{ fontSize: '0.72rem' }}>Presets de Marca:</label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {[
+                    { name: 'Studio 5 Gold', primary: '#DEB841', secondary: '#b08d2b' },
+                    { name: 'Midnight Blue', primary: '#0066FF', secondary: '#0044AA' },
+                    { name: 'Emerald VIP', primary: '#10B981', secondary: '#059669' },
+                    { name: 'Ruby Theater', primary: '#E11D48', secondary: '#BE123C' },
+                    { name: 'Cyber Violet', primary: '#8B5CF6', secondary: '#6D28D9' }
+                  ].map((p, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setThemeForm({ ...themeForm, primaryColor: p.primary, secondaryColor: p.secondary })}
+                      style={{
+                        padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'rgba(255,255,255,0.03)', color: '#fff', fontSize: '0.75rem', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '6px'
+                      }}
+                    >
+                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: p.primary }}></span>
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="btn-primary"
+                style={{ marginTop: '24px' }}
+                disabled={savingTheme}
+              >
+                <Save size={16} /> {savingTheme ? 'Guardando...' : 'Guardar y Aplicar Marca Blanca'}
+              </button>
+            </div>
+
+            {/* Vista Previa en Vivo */}
+            <div style={{ background: 'rgba(0,0,0,0.4)', padding: '20px', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
+                Previsualización en Vivo
+              </span>
+              
+              <div style={{ marginTop: '15px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
+                <img src={themeForm.logoUrl} alt="Preview Logo" style={{ maxHeight: '36px', objectFit: 'contain' }} onError={(e) => e.target.src = 'https://i.imgur.com/0z5756T.png'} />
+                <span style={{ fontWeight: 900, fontSize: '1.1rem', color: '#fff' }}>{themeForm.tenantName}</span>
+              </div>
+
+              <div style={{ marginTop: '16px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${themeForm.primaryColor}55`, borderRadius: '12px', padding: '14px' }}>
+                <div style={{ color: themeForm.primaryColor, fontWeight: 800, fontSize: '0.95rem', marginBottom: '4px' }}>
+                  Gran Noche de Gala V2
+                </div>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>📍 Teatro Principal · 20:00</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                  <span style={{ color: '#fff', fontSize: '0.82rem', fontWeight: 'bold' }}>VIP: $25.00</span>
+                  <div style={{
+                    padding: '8px 14px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.75rem',
+                    background: `linear-gradient(135deg, ${themeForm.primaryColor}, ${themeForm.secondaryColor})`,
+                    color: '#000'
+                  }}>
+                    COMPRAR
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* PESTAÑA: BASE DE DATOS / CRM DE CLIENTES */}
+      {activeTab === 'crm' && (
+        <div className="fade-in">
+          {/* Métricas Rápidas de la Base de Datos */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+            <div className="glass-card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(222,184,65,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Users size={20} color="var(--accent)" />
+              </div>
+              <div>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Clientes / Leads</span>
+                <h3 style={{ color: '#fff', fontSize: '1.3rem', fontWeight: 900, margin: '2px 0 0 0' }}>{customers.length}</h3>
+              </div>
+            </div>
+
+            <div className="glass-card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(52,199,89,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <DollarSign size={20} color="#34c759" />
+              </div>
+              <div>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ventas Totales</span>
+                <h3 style={{ color: '#34c759', fontSize: '1.3rem', fontWeight: 900, margin: '2px 0 0 0' }}>
+                  ${customers.reduce((acc, c) => acc + (parseFloat(c.total_spent) || 0), 0).toFixed(2)}
+                </h3>
+              </div>
+            </div>
+
+            <div className="glass-card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(0,102,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Ticket size={20} color="#0066FF" />
+              </div>
+              <div>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Boletos Adquiridos</span>
+                <h3 style={{ color: '#0066FF', fontSize: '1.3rem', fontWeight: 900, margin: '2px 0 0 0' }}>
+                  {customers.reduce((acc, c) => acc + (parseInt(c.total_tickets) || 0), 0)}
+                </h3>
+              </div>
+            </div>
+          </div>
+
+          {/* Barra de Filtros y Exportación */}
+          <div className="glass-panel" style={{ padding: '16px 20px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ position: 'relative', flex: '1', minWidth: '220px', maxWidth: '400px' }}>
+              <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '14px', top: '14px' }} />
+              <input
+                type="text"
+                value={crmSearchQuery}
+                onChange={(e) => setCrmSearchQuery(e.target.value)}
+                placeholder="Buscar por cliente, correo o teléfono..."
+                style={{ paddingLeft: '40px', marginBottom: 0 }}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const filtered = customers.filter(c => {
+                  const q = crmSearchQuery.toLowerCase().trim();
+                  return !q || c.name?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.phone?.includes(q) || c.events_attended?.toLowerCase().includes(q);
+                });
+                if (filtered.length === 0) {
+                  Swal.fire('Sin datos', 'No hay registros para exportar.', 'warning');
+                  return;
+                }
+                const headers = ['Nombre', 'Email', 'WhatsApp', 'Total Órdenes', 'Total Tickets', 'Gasto Total ($)', 'Última Compra', 'Eventos'];
+                const rows = filtered.map(c => [
+                  `"${(c.name || '').replace(/"/g, '""')}"`,
+                  c.email || '',
+                  c.phone || '',
+                  c.total_orders,
+                  c.total_tickets,
+                  parseFloat(c.total_spent || 0).toFixed(2),
+                  c.last_purchase ? new Date(c.last_purchase).toLocaleDateString('es-EC') : '',
+                  `"${(c.events_attended || '').replace(/"/g, '""')}"`
+                ]);
+                const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement('a');
+                link.setAttribute('href', encodedUri);
+                link.setAttribute('download', `Clientes_Studio5_${new Date().toISOString().slice(0,10)}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+              className="btn-outline"
+              style={{ padding: '9px 16px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <FileSpreadsheet size={16} /> Exportar Base CSV
+            </button>
+          </div>
+
+          {/* Tabla de Contactos / Clientes */}
+          <div className="glass-panel" style={{ padding: '20px', overflowX: 'auto' }}>
+            {loadingCustomers ? (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <div className="spinner"></div>
+                <p style={{ color: 'var(--text-muted)', marginTop: '10px', fontSize: '0.8rem' }}>Cargando base de datos...</p>
+              </div>
+            ) : customers.length === 0 ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>No hay clientes registrados en la base de datos aún.</p>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--accent)' }}>
+                    <th style={{ padding: '12px 10px' }}>Cliente</th>
+                    <th style={{ padding: '12px 10px' }}>Contacto</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'center' }}>Órdenes</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'center' }}>Tickets</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'right' }}>Total Gastado</th>
+                    <th style={{ padding: '12px 10px' }}>Eventos Asistidos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers
+                    .filter(c => {
+                      const q = crmSearchQuery.toLowerCase().trim();
+                      return !q || c.name?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.phone?.includes(q) || c.events_attended?.toLowerCase().includes(q);
+                    })
+                    .map((c, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }}>
+                        <td style={{ padding: '12px 10px', fontWeight: 'bold', color: '#fff' }}>
+                          {c.name || 'Cliente Anónimo'}
+                        </td>
+                        <td style={{ padding: '12px 10px' }}>
+                          <div style={{ color: '#ccc' }}>{c.email}</div>
+                          {c.phone && <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>📱 {c.phone}</div>}
+                        </td>
+                        <td style={{ padding: '12px 10px', textAlign: 'center', color: 'var(--text-primary)' }}>
+                          {c.total_orders}
+                        </td>
+                        <td style={{ padding: '12px 10px', textAlign: 'center', color: 'var(--accent)', fontWeight: 'bold' }}>
+                          {c.total_tickets}
+                        </td>
+                        <td style={{ padding: '12px 10px', textAlign: 'right', color: '#34c759', fontWeight: 'bold' }}>
+                          ${parseFloat(c.total_spent || 0).toFixed(2)}
+                        </td>
+                        <td style={{ padding: '12px 10px', color: 'var(--text-muted)', fontSize: '0.78rem', maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={c.events_attended}>
+                          {c.events_attended || 'N/A'}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* PESTAÑA: MIS EVENTOS (para editar) */}
       {activeTab === 'eventos' && (
         <div className="fade-in">

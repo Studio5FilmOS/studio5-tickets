@@ -5,6 +5,8 @@ const authMiddleware = require('../middleware/authMiddleware');
 
 // Rutas Públicas
 router.post('/register', authController.register);
+router.post('/verify-otp', authController.verifyOtp);
+router.post('/resend-otp', authController.resendOtp);
 router.post('/login', authController.login);
 
 // Rutas Protegidas

@@ -6,7 +6,6 @@ const path = require('path');
 const deleteUploadFile = (fileUrl) => {
   if (!fileUrl) return;
   try {
-    // fileUrl puede ser: /uploads/banners/xxx.jpg o una URL completa
     const relative = fileUrl.replace(/^.*\/public/, '');
     const fullPath = path.join(__dirname, '..', 'public', relative);
     if (fs.existsSync(fullPath)) {
@@ -18,15 +17,37 @@ const deleteUploadFile = (fileUrl) => {
   }
 };
 
+// Helper para obtener localidades de un evento
+const getLocalidadesForEvent = async (eventId) => {
+  try {
+    const res = await query(
+      'SELECT id, nombre, precio, aforo_total, aforo_disponible, color FROM localidades WHERE event_id = $1 ORDER BY precio DESC, nombre ASC',
+      [eventId]
+    );
+    return res.rows;
+  } catch (e) {
+    console.warn('Error al obtener localidades:', e.message);
+    return [];
+  }
+};
+
 // Listar todos los eventos
 exports.getAllEvents = async (req, res) => {
-  const isAdminOrStaff = req.user && ['admin', 'staff'].includes(req.user.role);
+  const user = req.user;
+  const isAdmin = user && user.role === 'admin';
+  const isStaff = user && user.role === 'staff';
+  const isOrganizer = user && user.role === 'organizer';
 
   try {
     let sqlEvents = 'SELECT * FROM events ORDER BY created_at DESC';
     let params = [];
-    
-    if (!isAdminOrStaff) {
+
+    if (isOrganizer) {
+      // Organizadores solo ven sus propios eventos
+      sqlEvents = 'SELECT * FROM events WHERE organizer_id = $1 ORDER BY created_at DESC';
+      params = [user.id];
+    } else if (!isAdmin && !isStaff) {
+      // Clientes públicos solo ven eventos activos no archivados
       sqlEvents = "SELECT * FROM events WHERE status = 'active' AND is_archived = FALSE ORDER BY created_at DESC";
     }
 
@@ -65,11 +86,13 @@ exports.getAllEvents = async (req, res) => {
           schedule_time: sch.schedule_time,
           sold_tickets: sch.sold_tickets,
           available_capacity: available < 0 ? 0 : available,
-          booked_seats // Lista de butacas ocupadas para esta función
+          booked_seats
         });
       }
       
       event.schedules = schedules;
+      // Añadir localidades
+      event.localidades = await getLocalidadesForEvent(event.id);
     }
 
     res.json({
@@ -135,6 +158,7 @@ exports.getEventById = async (req, res) => {
     }
 
     event.schedules = schedules;
+    event.localidades = await getLocalidadesForEvent(event.id);
 
     res.json({
       status: 'OK',
@@ -149,13 +173,13 @@ exports.getEventById = async (req, res) => {
   }
 };
 
-// Crear evento (Solo Admin)
+// Crear evento (Admin / Organizer)
 exports.createEvent = async (req, res) => {
   const {
     title, description, venue, banner_url, ticket_template_url,
     price_adult, price_child, capacity_total, is_single_rate,
     has_assigned_seats, seating_layout, promo_type, price_promo,
-    promo_deadline, status, schedules
+    promo_deadline, status, schedules, localidades, theme_config, organizer_id
   } = req.body;
 
   if (!title || !venue || !banner_url || capacity_total === undefined) {
@@ -165,24 +189,46 @@ exports.createEvent = async (req, res) => {
     });
   }
 
+  const assignedOrganizerId = req.user && req.user.role === 'organizer' ? req.user.id : (organizer_id || null);
+
+  // Validación de Token de Garantía Payphone para Organizadores
+  if (req.user && req.user.role === 'organizer' && (status === 'active' || status === 'published')) {
+    const userRes = await query('SELECT token_tarjeta FROM users WHERE id = $1', [req.user.id]);
+    const tokenTarjeta = userRes.rows[0]?.token_tarjeta;
+    if (!tokenTarjeta) {
+      return res.status(400).json({
+        status: 'ERROR',
+        message: 'Es estrictamente obligatorio registrar y validar una tarjeta de garantía (token Payphone) en su perfil de Organizador antes de publicar un evento.'
+      });
+    }
+  }
+
   try {
-    // Formatear seating_layout como JSON
     let layoutJson = null;
     if (has_assigned_seats) {
       layoutJson = Array.isArray(seating_layout) ? JSON.stringify(seating_layout) : seating_layout;
     }
 
+    const themeConfigJson = theme_config ? JSON.stringify(theme_config) : JSON.stringify({
+      primaryColor: '#DEB841',
+      secondaryColor: '#b08d2b',
+      logoUrl: 'https://i.imgur.com/0z5756T.png',
+      tenantName: 'Studio 5'
+    });
+
     // Insertar Evento
     const eventRes = await query(
       `INSERT INTO events 
-       (title, description, venue, banner_url, ticket_template_url, price_adult, price_child, capacity_total, is_single_rate, has_assigned_seats, seating_layout, promo_type, price_promo, promo_deadline, status, require_billing)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       (organizer_id, title, description, venue, banner_url, ticket_template_url, price_adult, price_child, capacity_total, is_single_rate, has_assigned_seats, seating_layout, promo_type, price_promo, promo_deadline, status, require_billing, theme_config, qr_scanning_enabled)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, TRUE)
        RETURNING *`,
       [
+        assignedOrganizerId,
         title, description, venue, banner_url, ticket_template_url,
         price_adult || 0.00, price_child || 0.00, capacity_total, is_single_rate || false,
         has_assigned_seats || false, layoutJson, promo_type || 'Ninguna', price_promo || 0.00,
-        promo_deadline || null, status || 'active', req.body.require_billing || false
+        promo_deadline || null, status || 'active', req.body.require_billing || false,
+        themeConfigJson
       ]
     );
 
@@ -201,6 +247,28 @@ exports.createEvent = async (req, res) => {
       }
     }
 
+    // Insertar Localidades si se proveen
+    newEvent.localidades = [];
+    if (localidades && Array.isArray(localidades) && localidades.length > 0) {
+      for (let loc of localidades) {
+        if (!loc.nombre) continue;
+        const locRes = await query(
+          `INSERT INTO localidades (event_id, nombre, precio, aforo_total, aforo_disponible, color)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING *`,
+          [
+            newEvent.id,
+            loc.nombre,
+            parseFloat(loc.precio) || 0.00,
+            parseInt(loc.aforo_total) || 0,
+            parseInt(loc.aforo_disponible !== undefined ? loc.aforo_disponible : loc.aforo_total) || 0,
+            loc.color || '#DEB841'
+          ]
+        );
+        newEvent.localidades.push(locRes.rows[0]);
+      }
+    }
+
     res.status(201).json({
       status: 'OK',
       message: 'Evento creado exitosamente',
@@ -215,18 +283,18 @@ exports.createEvent = async (req, res) => {
   }
 };
 
-// Actualizar evento (Solo Admin)
+// Actualizar evento (Admin / Organizer)
 exports.updateEvent = async (req, res) => {
   const { id } = req.params;
   const {
     title, description, venue, banner_url, ticket_template_url,
     price_adult, price_child, capacity_total, is_single_rate,
     has_assigned_seats, seating_layout, promo_type, price_promo,
-    promo_deadline, status, schedules
+    promo_deadline, status, schedules, localidades, theme_config, qr_scanning_enabled
   } = req.body;
 
   try {
-    const checkRes = await query('SELECT id FROM events WHERE id = $1', [id]);
+    const checkRes = await query('SELECT * FROM events WHERE id = $1', [id]);
     if (checkRes.rows.length === 0) {
       return res.status(404).json({
         status: 'ERROR',
@@ -234,10 +302,35 @@ exports.updateEvent = async (req, res) => {
       });
     }
 
+    const existingEvent = checkRes.rows[0];
+
+    // Si es organizador, asegurar que sea dueño del evento
+    if (req.user && req.user.role === 'organizer') {
+      if (existingEvent.organizer_id && existingEvent.organizer_id !== req.user.id) {
+        return res.status(403).json({
+          status: 'ERROR',
+          message: 'No tienes autorización para modificar este evento.'
+        });
+      }
+
+      // Validar token de garantía si pasa a publicado/activo
+      if ((status === 'active' || status === 'published') && existingEvent.status !== 'active') {
+        const userRes = await query('SELECT token_tarjeta FROM users WHERE id = $1', [req.user.id]);
+        if (!userRes.rows[0]?.token_tarjeta) {
+          return res.status(400).json({
+            status: 'ERROR',
+            message: 'Es estrictamente obligatorio registrar y validar una tarjeta de garantía (token Payphone) antes de publicar este evento.'
+          });
+        }
+      }
+    }
+
     let layoutJson = null;
     if (has_assigned_seats) {
       layoutJson = Array.isArray(seating_layout) ? JSON.stringify(seating_layout) : seating_layout;
     }
+
+    const themeConfigJson = theme_config ? (typeof theme_config === 'string' ? theme_config : JSON.stringify(theme_config)) : JSON.stringify(existingEvent.theme_config || {});
 
     // Actualizar Evento
     const eventRes = await query(
@@ -245,19 +338,24 @@ exports.updateEvent = async (req, res) => {
        title = $1, description = $2, venue = $3, banner_url = $4, ticket_template_url = $5,
        price_adult = $6, price_child = $7, capacity_total = $8, is_single_rate = $9,
        has_assigned_seats = $10, seating_layout = $11, promo_type = $12, price_promo = $13,
-       promo_deadline = $14, status = $15, require_billing = $16, updated_at = NOW()
-       WHERE id = $17
+       promo_deadline = $14, status = $15, require_billing = $16, theme_config = $17,
+       qr_scanning_enabled = $18, updated_at = NOW()
+       WHERE id = $19
        RETURNING *`,
       [
         title, description, venue, banner_url, ticket_template_url,
         price_adult, price_child, capacity_total, is_single_rate,
         has_assigned_seats, layoutJson, promo_type, price_promo,
-        promo_deadline || null, status, req.body.require_billing || false, id
+        promo_deadline || null, status, req.body.require_billing || false,
+        themeConfigJson,
+        qr_scanning_enabled !== undefined ? qr_scanning_enabled : existingEvent.qr_scanning_enabled,
+        id
       ]
     );
 
     const updatedEvent = eventRes.rows[0];
 
+    // Sincronizar Funciones / Fechas
     if (schedules && Array.isArray(schedules)) {
       const activeSchs = await query(
         `SELECT DISTINCT schedule_id FROM orders WHERE event_id = $1 AND payment_status != 'Anulado'`,
@@ -289,6 +387,27 @@ exports.updateEvent = async (req, res) => {
       }
     }
 
+    // Sincronizar Localidades
+    if (localidades && Array.isArray(localidades)) {
+      for (const loc of localidades) {
+        if (loc.id) {
+          // Actualizar existente
+          await query(
+            `UPDATE localidades SET nombre = $1, precio = $2, aforo_total = $3, aforo_disponible = $4, color = $5, updated_at = NOW() WHERE id = $6 AND event_id = $7`,
+            [loc.nombre, parseFloat(loc.precio) || 0, parseInt(loc.aforo_total) || 0, parseInt(loc.aforo_disponible) || 0, loc.color || '#DEB841', loc.id, id]
+          );
+        } else if (loc.nombre) {
+          // Insertar nueva
+          await query(
+            `INSERT INTO localidades (event_id, nombre, precio, aforo_total, aforo_disponible, color) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [id, loc.nombre, parseFloat(loc.precio) || 0, parseInt(loc.aforo_total) || 0, parseInt(loc.aforo_disponible !== undefined ? loc.aforo_disponible : loc.aforo_total) || 0, loc.color || '#DEB841']
+          );
+        }
+      }
+    }
+
+    updatedEvent.localidades = await getLocalidadesForEvent(id);
+
     res.json({
       status: 'OK',
       message: 'Evento actualizado exitosamente',
@@ -303,7 +422,39 @@ exports.updateEvent = async (req, res) => {
   }
 };
 
-// Alternar estado de evento (Solo Admin)
+// Actualizar Marca Blanca / Theming específico de evento
+exports.updateEventTheme = async (req, res) => {
+  const { id } = req.params;
+  const { primaryColor, secondaryColor, logoUrl, tenantName } = req.body;
+
+  try {
+    const themeConfig = {
+      primaryColor: primaryColor || '#DEB841',
+      secondaryColor: secondaryColor || '#b08d2b',
+      logoUrl: logoUrl || 'https://i.imgur.com/0z5756T.png',
+      tenantName: tenantName || 'Studio 5'
+    };
+
+    const result = await query(
+      'UPDATE events SET theme_config = $1, updated_at = NOW() WHERE id = $2 RETURNING id, title, theme_config',
+      [JSON.stringify(themeConfig), id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Evento no encontrado' });
+    }
+
+    res.json({
+      status: 'OK',
+      message: 'Tema de Marca Blanca actualizado correctamente',
+      theme_config: themeConfig
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: 'Error al guardar tema', error: err.message });
+  }
+};
+
+// Alternar estado de evento (Solo Admin / Organizer)
 exports.toggleEventStatus = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -367,7 +518,7 @@ exports.uploadImage = async (req, res) => {
       return res.status(400).json({ status: 'ERROR', message: 'Formato de codificación de imagen inválido.' });
     }
 
-    const mimeType = image.substring(5, semiColonIdx); // e.g. "image/jpeg"
+    const mimeType = image.substring(5, semiColonIdx);
     const ext = mimeType.split('/')[1] || 'png';
     const imageExtension = ext === 'jpeg' ? 'jpg' : ext;
     const base64Data = image.substring(commaIdx + 1);
@@ -407,7 +558,6 @@ exports.parseSeatingLayout = async (req, res) => {
   }
 
   try {
-    // LLamada a OpenRouter (usando fetch nativo de Node.js)
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -424,33 +574,11 @@ exports.parseSeatingLayout = async (req, res) => {
             content: [
               {
                 type: 'text',
-                text: `Eres un sistema de digitalización de planos de sala de teatro/cine. Tu tarea es convertir la imagen en una CUADRÍCULA ABSOLUTA con posicionamiento exacto. Sigue estos pasos en orden:
-
-PASO 1 — IDENTIFICAR EL ESCENARIO:
-Localiza el escenario, pantalla o palco. La fila de asientos MÁS CERCANA al escenario será la fila 0 (primera en la matriz). Si el escenario está abajo en la imagen, invierte el orden vertical de las filas. Mantén los identificadores exactos del plano (A1, B3, etc.).
-
-PASO 2 — MAPEAR LA CUADRÍCULA ABSOLUTA:
-Esta es la regla más importante. Debes construir una cuadrícula donde TODAS las filas tienen EXACTAMENTE el mismo número de columnas.
-- Determina el TOTAL de columnas físicas que tiene la sala de izquierda a derecha (incluyendo pasillos y espacios vacíos).
-- Para cada fila, coloca el código del asiento (ej: "A1") en el índice de columna que corresponde a su posición física real.
-- Si una fila no tiene asiento en cierta columna (porque hay un pasillo, la fila es más corta, la fila está desplazada, o las butacas están en media luna), pon "" en esa posición.
-- El mismo pasillo vertical debe ser "" en el MISMO índice de columna en TODAS las filas.
-- Si la fila E tiene 3 asientos a la izquierda (columnas 0,1,2) y 2 asientos a la derecha (columnas 8,9) con espacio vacío en el medio (columnas 3-7), el array de esa fila debe ser: ["E1","E2","E3","","","","","","E4","E5"].
-- NUNCA inventes asientos que no están en el plano. NUNCA omitas espacios vacíos que sí están en el plano.
-
-PASO 3 — FORMATO DE SALIDA:
-- Devuelve ÚNICAMENTE el JSON del array 2D. Sin texto adicional, sin markdown, sin bloques de código.
-- Cada sub-array (fila) debe tener EXACTAMENTE el mismo número de elementos.
-- Ejemplo con pasillo central y fila corta desplazada:
-  [["A1","A2","A3","","A4","A5","A6"],
-   ["B1","B2","B3","","B4","B5","B6"],
-   ["","","C1","","C2","","""]]`
+                text: `Eres un sistema de digitalización de planos de sala de teatro/cine. Convierte la imagen en una cuadrícula 2D exacta de butacas (JSON array de strings). Devuelve SOLO el JSON.`
               },
               {
                 type: 'image_url',
-                image_url: {
-                  url: image // Formato data:image/jpeg;base64,...
-                }
+                image_url: { url: image }
               }
             ]
           }
@@ -466,47 +594,24 @@ PASO 3 — FORMATO DE SALIDA:
     const data = await response.json();
     const assistantMessage = data.choices?.[0]?.message?.content || '';
     
-    // Intentar parsear el JSON
     let parsedSeats = [];
     try {
-      // Limpiar markdown del mensaje si la IA desobedeció
       const cleanJson = assistantMessage.replace(/```json|```/g, '').trim();
       parsedSeats = JSON.parse(cleanJson);
     } catch (parseErr) {
-      console.warn('Fallo al parsear JSON directamente de la respuesta de la IA. Intentando extraer matriz.', assistantMessage);
       const startIdx = assistantMessage.indexOf('[');
       const endIdx = assistantMessage.lastIndexOf(']');
       if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-        try {
-          parsedSeats = JSON.parse(assistantMessage.substring(startIdx, endIdx + 1));
-        } catch (subParseErr) {
-          throw new Error('No se pudo interpretar el formato de respuesta del plano.');
-        }
+        parsedSeats = JSON.parse(assistantMessage.substring(startIdx, endIdx + 1));
       } else {
         throw new Error('No se pudo interpretar el formato de respuesta del plano.');
       }
     }
 
-    if (!Array.isArray(parsedSeats)) {
-      throw new Error('La respuesta de la IA no es un listado válido de asientos.');
-    }
-
-    let normalizedLayout = [];
-    if (Array.isArray(parsedSeats[0])) {
-      normalizedLayout = parsedSeats.map(row => 
-        row.map(s => typeof s === 'string' ? s.trim().toUpperCase() : "")
-      );
-    } else {
-      normalizedLayout = parsedSeats
-        .map(s => typeof s === 'string' ? s.trim().toUpperCase() : "")
-        .filter(s => s.length > 0);
-    }
-
     res.json({
       status: 'OK',
-      seats: normalizedLayout
+      seats: parsedSeats
     });
-
   } catch (err) {
     console.error('Error al analizar plano con IA:', err);
     res.status(500).json({
@@ -517,19 +622,16 @@ PASO 3 — FORMATO DE SALIDA:
   }
 };
 
-// Eliminar un evento (ahora usa Soft-Delete)
+// Eliminar evento (Soft Delete)
 exports.deleteEvent = async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Obtener URLs de archivos del evento para limpiar y ahorrar espacio
     const eventData = await query('SELECT banner_url, ticket_template_url FROM events WHERE id = $1', [id]);
     const eventFiles = eventData.rows[0] || {};
 
-    // 1. Marcar como archivado
     await query("UPDATE events SET is_archived = TRUE, status = 'inactive', banner_url = '', ticket_template_url = '' WHERE id = $1", [id]);
 
-    // 2. Limpiar archivos físicos del evento para no ocupar disco
     deleteUploadFile(eventFiles.banner_url);
     deleteUploadFile(eventFiles.ticket_template_url);
 
@@ -548,88 +650,6 @@ exports.deleteEvent = async (req, res) => {
   }
 };
 
-// Eliminar FORZADO un evento (ahora hace lo mismo que deleteEvent regular para mantener el CRM)
 exports.forceDeleteEvent = async (req, res) => {
   return exports.deleteEvent(req, res);
-};
-
-// Restaurar venta de Lady Carrillo
-exports.restoreLady = async (req, res) => {
-  try {
-    const eventCheck = await query("SELECT id FROM events WHERE title = 'Enredados'");
-    let eventId;
-    if (eventCheck.rows.length > 0) {
-      eventId = eventCheck.rows[0].id;
-    } else {
-      const eventRes = await query(
-        `INSERT INTO events (title, description, venue, banner_url, ticket_template_url, price_adult, price_child, capacity_total, is_single_rate, has_assigned_seats, promo_type, price_promo, status, require_billing)
-         VALUES ('Enredados', 'Una producción de Studio 5 Film & Art. Dirigida por Flopo y Jcason.', 'Sala La Bota', '', '', 10.00, 10.00, 150, true, false, 'Ninguna', 0.00, 'active', false)
-         RETURNING id`
-      );
-      eventId = eventRes.rows[0].id;
-    }
-
-    const scheduleCheck = await query("SELECT id FROM event_schedules WHERE event_id = $1 AND schedule_time = '2026-07-19 01:00:00+00'", [eventId]);
-    let scheduleId;
-    if (scheduleCheck.rows.length > 0) {
-      scheduleId = scheduleCheck.rows[0].id;
-    } else {
-      const scheduleRes = await query(
-        `INSERT INTO event_schedules (event_id, schedule_time) VALUES ($1, '2026-07-19 01:00:00+00') RETURNING id`,
-        [eventId]
-      );
-      scheduleId = scheduleRes.rows[0].id;
-    }
-
-    const userCheck = await query("SELECT id FROM users WHERE email = 'ladycarrillo_201@hotmail.com'");
-    let userId;
-    if (userCheck.rows.length > 0) {
-      userId = userCheck.rows[0].id;
-    } else {
-      const userRes = await query(
-        `INSERT INTO users (name, email, phone, role) VALUES ('LADY CARRILLO', 'ladycarrillo_201@hotmail.com', '0990846630', 'buyer') RETURNING id`
-      );
-      userId = userRes.rows[0].id;
-    }
-
-    const orderCheck = await query("SELECT id FROM orders WHERE order_num = 'ORD-88421289'");
-    let orderId;
-    if (orderCheck.rows.length > 0) {
-      orderId = orderCheck.rows[0].id;
-      // Forzar actualización a 'Pagado' por si quedó en 'Paid'
-      await query(
-        `UPDATE orders SET payment_status = 'Pagado', amount_total = 10.76, amount_net = 10.14, payment_method = 'Tarjeta de Débito' WHERE id = $1`,
-        [orderId]
-      );
-    } else {
-      const orderRes = await query(
-        `INSERT INTO orders (order_num, buyer_id, customer_name, customer_email, customer_whatsapp, event_id, schedule_id, operation_type, payment_method, payment_status, amount_total, amount_net, ticket_count_adult, ticket_count_child, transaction_ref, is_final_consumer, created_at, updated_at)
-         VALUES ('ORD-88421289', $1, 'LADY CARRILLO', 'ladycarrillo_201@hotmail.com', '0990846630', $2, $3, 'online', 'Tarjeta de Débito', 'Pagado', 10.76, 10.14, 1, 0, '88421289', true, '2026-07-06 20:34:00+00', '2026-07-06 20:34:00+00')
-         RETURNING id`,
-        [userId, eventId, scheduleId]
-      );
-      orderId = orderRes.rows[0].id;
-    }
-
-    const ticketCheck = await query("SELECT id FROM tickets WHERE ticket_code = 'TKT-1783370086305-1'");
-    if (ticketCheck.rows.length === 0) {
-      await query(
-        `INSERT INTO tickets (order_id, ticket_code, ticket_type, status, created_at)
-         VALUES ($1, 'TKT-1783370086305-1', 'Entrada General', 'Active', '2026-07-06 20:34:00+00')`,
-        [orderId]
-      );
-    }
-
-    res.json({
-      status: 'OK',
-      message: 'La venta de LADY CARRILLO y el evento Enredados han sido creados de manera segura en la nueva base de datos.'
-    });
-  } catch (err) {
-    console.error('Error in restoreLady:', err);
-    res.status(500).json({
-      status: 'ERROR',
-      message: 'Fallo al restaurar la orden',
-      error: err.message
-    });
-  }
 };
