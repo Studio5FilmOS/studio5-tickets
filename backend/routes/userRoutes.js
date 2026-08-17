@@ -11,6 +11,7 @@ router.get('/my-tickets', authMiddleware, userController.getMyTickets);
 router.get('/customer-database', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.getCustomerDatabase);
 
 // 3. Rutas exclusivas para Dueños Generales (Admin)
+router.get('/organizers-commission', authMiddleware, roleMiddleware(['admin']), userController.getOrganizersCommissionMetrics);
 router.get('/', authMiddleware, roleMiddleware(['admin']), userController.getAllUsers);
 router.post('/', authMiddleware, roleMiddleware(['admin']), userController.createUser);
 router.put('/:id', authMiddleware, roleMiddleware(['admin']), userController.updateUser);

@@ -17,6 +17,7 @@ import MomentoWow from './pages/staff/MomentoWow';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PublicInteraction from './pages/PublicInteraction';
 import PayphoneRedirect from './pages/PayphoneRedirect';
+import TermsAndPolicies from './pages/TermsAndPolicies';
 
 const BottomNavigation = () => {
   const { user, isAuthenticated, logout, isAdmin, isOrganizer } = useAuth();
@@ -220,6 +221,8 @@ const AppContent = () => {
             <Route path="/registro" element={<Register />} />
             <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
             <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
+            <Route path="/terminos" element={<TermsAndPolicies />} />
+            <Route path="/politicas" element={<TermsAndPolicies />} />
 
             {/* Portal del Cliente (Cualquier usuario autenticado) */}
             <Route 
@@ -262,8 +265,12 @@ const AppContent = () => {
         </div>
 
         {/* Footer Sutil Marca Blanca */}
-        <footer className="whitelabel-footer">
-          <span>Powered by <strong>Studio 5 Tickets</strong> &bull; Sistema de Boletaje Inteligente</span>
+        <footer className="whitelabel-footer" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <span>Powered by <strong>Studio 5 Tickets Pro v2.0</strong> &bull; Sistema de Boletaje Inteligente</span>
+          <span>&bull;</span>
+          <Link to="/terminos" style={{ color: 'var(--text-muted)', textDecoration: 'underline', fontSize: '0.75rem' }}>
+            Términos & Políticas de Marca Blanca
+          </Link>
         </footer>
       </div>
       <BottomNavigation />

@@ -527,11 +527,33 @@ const AdminDashboard = () => {
     });
   };
 
+  // Estado para Comisiones y Organizadores de Marca Blanca (Solo Dueño / Admin)
+  const [organizersCommission, setOrganizersCommission] = useState([]);
+  const [loadingCommissions, setLoadingCommissions] = useState(false);
+
+  const fetchOrganizersCommission = async () => {
+    setLoadingCommissions(true);
+    try {
+      const res = await api.get('/admin/users/organizers-commission');
+      if (res.data.status === 'OK') {
+        setOrganizersCommission(res.data.organizers || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingCommissions(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'banners') {
       fetchBanners();
     } else if (activeTab === 'bancos') {
       fetchBankAccounts();
+    } else if (activeTab === 'crm') {
+      fetchCustomerDatabase();
+    } else if (activeTab === 'comisiones') {
+      fetchOrganizersCommission();
     } else {
       fetchData();
     }
@@ -1161,8 +1183,12 @@ const AdminDashboard = () => {
           <ShieldCheck size={22} color="#DEB841" />
         </div>
         <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>Panel de Administración</h1>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Studio 5 · Sistema de Gestión</p>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>
+            {isOrganizer ? `🏢 Portal de Productor: ${user?.name}` : '👑 Panel de Dueño General & Plataforma'}
+          </h1>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            {isOrganizer ? 'Gestión de Eventos, Taquilla y Marca Blanca' : 'Studio 5 Tickets Pro · Control Global, Comisiones y Marca Blanca'}
+          </p>
         </div>
         {/* Botón de notificaciones push */}
         <button
@@ -1230,38 +1256,45 @@ const AdminDashboard = () => {
         }}>
           <div>
             <h4 style={{ color: 'var(--accent)', fontWeight: 800, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ShieldCheck size={18} /> Panel de Organizador: {user?.name}
+              <ShieldCheck size={18} /> Productora / Marca Blanca: {user?.name}
             </h4>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>
               Garantía Payphone: {user?.token_tarjeta ? <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>✅ Tarjeta Tokenizada y Activa</span> : <span style={{ color: 'var(--error)', fontWeight: 'bold' }}>⚠️ Sin Tarjeta de Garantía (Requerida para Publicar)</span>}
             </p>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Deuda Acumulada Plataforma</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Comisión Pendiente de Liquidación</span>
             <div style={{ fontSize: '1.3rem', fontWeight: 900, color: (user?.debt_balance > 0 ? 'var(--warning)' : 'var(--success)') }}>
               ${parseFloat(user?.debt_balance || 0).toFixed(2)}
             </div>
-            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Liquidación automática al superar $50.00</span>
+            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>$0.50 por ticket emitido · Corte a $50.00</span>
           </div>
         </div>
       )}
 
-      {/* Tabs Premium */}
+      {/* Tabs Premium Diferenciados */}
       <div style={{
         display: 'flex', flexWrap: 'wrap', background: 'rgba(255,255,255,0.04)', borderRadius: '14px',
         padding: '4px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.07)', gap: '2px'
       }}>
-        {[
-          { id: 'ventas', icon: LayoutGrid, label: 'Ventas' },
+        {(isOrganizer ? [
+          { id: 'ventas', icon: LayoutGrid, label: 'Mis Ventas' },
+          { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Crear Evento' },
+          { id: 'eventos', icon: Edit2, label: 'Mis Eventos' },
+          { id: 'crm', icon: Users, label: 'Mis Clientes' },
+          { id: 'theming', icon: Palette, label: 'Mi Marca Blanca' }
+        ] : [
+          { id: 'ventas', icon: LayoutGrid, label: 'Ventas Globales' },
+          { id: 'comisiones', icon: DollarSign, label: '🏢 Comisiones & Organizadores' },
+          { id: 'eventos', icon: Edit2, label: 'Catálogo Global' },
           { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Nuevo Evento' },
-          { id: 'eventos', icon: Edit2, label: isOrganizer ? 'Mis Eventos' : 'Catálogo' },
-          { id: 'crm', icon: Users, label: isOrganizer ? 'Mis Clientes' : 'Base de Datos' },
+          { id: 'crm', icon: Users, label: 'Base de Datos' },
           { id: 'theming', icon: Palette, label: 'Marca Blanca' },
           { id: 'banners', icon: Image, label: 'Banners' },
           { id: 'transferencias', icon: Receipt, label: 'Transferencias' },
-          { id: 'bancos', icon: DollarSign, label: 'Cuentas' },
-          ...(!isOrganizer ? [{ id: 'usuarios', icon: UserCog, label: 'Usuarios' }] : [])
-        ].map(tab => (
+          { id: 'bancos', icon: Landmark, label: 'Cuentas' },
+          { id: 'usuarios', icon: UserCog, label: 'Usuarios' }
+        ]).map(tab => (
           <button
             key={tab.id}
             onClick={() => { if (tab.id !== 'crear') setEditingEvent(null); setActiveTab(tab.id); }}
@@ -2387,6 +2420,143 @@ const AdminDashboard = () => {
                         </td>
                       </tr>
                     ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* PESTAÑA: COMISIONES & ORGANIZADORES MARCA BLANCA (Solo Dueño / Admin) */}
+      {activeTab === 'comisiones' && (
+        <div className="fade-in">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h3 style={{ color: '#fff', fontWeight: 800, fontSize: '1.1rem', margin: '0 0 4px 0' }}>
+                🏢 Control de Organizadores & Comisiones de Marca Blanca
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0 }}>
+                Supervisa los ingresos por comisión ($0.50 por ticket) y el estado de cobro a organizadores externos.
+              </p>
+            </div>
+            <button
+              onClick={fetchOrganizersCommission}
+              className="btn-outline"
+              style={{ width: 'auto', padding: '8px 14px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <RefreshCw size={14} className={loadingCommissions ? 'spin' : ''} /> Actualizar Métricas
+            </button>
+          </div>
+
+          {/* Tarjetas de Resumen Global de Comisiones */}
+          {(() => {
+            const totalCommission = organizersCommission.reduce((sum, o) => sum + parseFloat(o.total_commission_generated || 0), 0);
+            const totalDebt = organizersCommission.reduce((sum, o) => sum + parseFloat(o.debt_balance || 0), 0);
+            const totalTickets = organizersCommission.reduce((sum, o) => sum + parseInt(o.total_paid_tickets || 0), 0);
+            const totalGross = organizersCommission.reduce((sum, o) => sum + parseFloat(o.total_box_office_gross || 0), 0);
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                <div className="glass-panel" style={{ padding: '16px', borderLeft: '4px solid var(--accent)' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>
+                    💰 Comisiones Ganadas
+                  </span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--accent)', marginTop: '4px' }}>
+                    ${totalCommission.toFixed(2)}
+                  </div>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>$0.50 por ticket vendido</span>
+                </div>
+
+                <div className="glass-panel" style={{ padding: '16px', borderLeft: '4px solid #ff9f0a' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>
+                    💳 Deuda Pendiente de Cobro
+                  </span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#ff9f0a', marginTop: '4px' }}>
+                    ${totalDebt.toFixed(2)}
+                  </div>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Liquidación por lote ($50)</span>
+                </div>
+
+                <div className="glass-panel" style={{ padding: '16px', borderLeft: '4px solid #0066FF' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>
+                    🎟️ Boletos por Productores
+                  </span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0066FF', marginTop: '4px' }}>
+                    {totalTickets}
+                  </div>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>En eventos de marca blanca</span>
+                </div>
+
+                <div className="glass-panel" style={{ padding: '16px', borderLeft: '4px solid #34c759' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>
+                    🏢 Productoras Activas
+                  </span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#34c759', marginTop: '4px' }}>
+                    {organizersCommission.length}
+                  </div>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Taquilla Total: ${totalGross.toFixed(2)}</span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Tabla de Productores y Deudas */}
+          <div className="glass-card" style={{ padding: '20px', overflowX: 'auto' }}>
+            {loadingCommissions ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>Cargando datos de comisiones...</p>
+            ) : organizersCommission.length === 0 ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>No hay organizadores registrados todavía.</p>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '12px 10px' }}>Productora / Organizador</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'center' }}>Eventos</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'center' }}>Tickets Pagados</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'right' }}>Taquilla Bruta</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'right' }}>Comisión ($0.50)</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'center' }}>Garantía Payphone</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'right' }}>Saldo Deudor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {organizersCommission.map((org) => (
+                    <tr key={org.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '14px 10px' }}>
+                        <strong style={{ color: '#fff', display: 'block', fontSize: '0.88rem' }}>{org.name}</strong>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>{org.email}</span>
+                        {org.phone && <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>📱 {org.phone}</span>}
+                      </td>
+                      <td style={{ padding: '14px 10px', textAlign: 'center', color: '#fff', fontWeight: 600 }}>
+                        {org.total_events}
+                      </td>
+                      <td style={{ padding: '14px 10px', textAlign: 'center', color: 'var(--accent)', fontWeight: 800 }}>
+                        {org.total_paid_tickets}
+                      </td>
+                      <td style={{ padding: '14px 10px', textAlign: 'right', color: '#34c759', fontWeight: 700 }}>
+                        ${parseFloat(org.total_box_office_gross || 0).toFixed(2)}
+                      </td>
+                      <td style={{ padding: '14px 10px', textAlign: 'right', color: 'var(--accent)', fontWeight: 800 }}>
+                        ${parseFloat(org.total_commission_generated || 0).toFixed(2)}
+                      </td>
+                      <td style={{ padding: '14px 10px', textAlign: 'center' }}>
+                        {org.token_tarjeta ? (
+                          <span style={{ background: 'rgba(52,199,89,0.12)', color: '#34c759', border: '1px solid rgba(52,199,89,0.3)', padding: '3px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 700 }}>
+                            ✅ Token Activo
+                          </span>
+                        ) : (
+                          <span style={{ background: 'rgba(255,59,48,0.12)', color: '#ff3b30', border: '1px solid rgba(255,59,48,0.3)', padding: '3px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 700 }}>
+                            ⚠️ Sin Tarjeta
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '14px 10px', textAlign: 'right' }}>
+                        <span style={{ fontWeight: 900, color: parseFloat(org.debt_balance || 0) > 0 ? '#ff9f0a' : '#34c759' }}>
+                          ${parseFloat(org.debt_balance || 0).toFixed(2)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             )}

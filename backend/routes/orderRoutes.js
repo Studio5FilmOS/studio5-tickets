@@ -14,15 +14,15 @@ router.get('/:id', optionalAuthMiddleware, orderController.getOrderById);
 // Obtener detalle de orden por order_num (Público)
 router.get('/numero/:orderNum', optionalAuthMiddleware, orderController.getOrderByNum);
 
-// Listar todas las órdenes (Staff/Admin)
-router.get('/', authMiddleware, roleMiddleware(['admin', 'staff']), orderController.getAllOrders);
+// Listar todas las órdenes (Staff/Admin/Organizador)
+router.get('/', authMiddleware, roleMiddleware(['admin', 'staff', 'organizer']), orderController.getAllOrders);
 
-// Actualizar estado de orden (Admin - Aprobar/Anular)
-router.patch('/:id/status', authMiddleware, roleMiddleware(['admin']), orderController.updateOrderStatus);
-// Editar detalles de orden (Admin/Staff)
-router.patch('/:id', authMiddleware, roleMiddleware(['admin', 'staff']), orderController.updateOrder);
+// Actualizar estado de orden (Admin y Organizador para sus propios eventos)
+router.patch('/:id/status', authMiddleware, roleMiddleware(['admin', 'organizer']), orderController.updateOrderStatus);
+// Editar detalles de orden (Admin/Staff/Organizador)
+router.patch('/:id', authMiddleware, roleMiddleware(['admin', 'staff', 'organizer']), orderController.updateOrder);
 
-// Subir comprobante a orden existente (Admin/Staff)
-router.post('/:id/receipt', authMiddleware, roleMiddleware(['admin', 'staff']), orderController.uploadReceipt);
+// Subir comprobante a orden existente (Admin/Staff/Organizador)
+router.post('/:id/receipt', authMiddleware, roleMiddleware(['admin', 'staff', 'organizer']), orderController.uploadReceipt);
 
 module.exports = router;

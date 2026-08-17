@@ -211,3 +211,37 @@ exports.getCustomerDatabase = async (req, res) => {
     });
   }
 };
+
+// 7. Métricas de Comisiones y Control de Organizadores de Marca Blanca (Solo para Dueños Generales / Admin)
+exports.getOrganizersCommissionMetrics = async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT 
+        u.id, 
+        u.name, 
+        u.email, 
+        u.phone, 
+        u.token_tarjeta, 
+        u.debt_balance, 
+        u.created_at,
+        COUNT(DISTINCT e.id) as total_events,
+        COALESCE(SUM(CASE WHEN o.payment_status = 'Pagado' THEN (o.ticket_count_adult + o.ticket_count_child) ELSE 0 END), 0) as total_paid_tickets,
+        COALESCE(SUM(CASE WHEN o.payment_status = 'Pagado' THEN (o.ticket_count_adult + o.ticket_count_child) * 0.50 ELSE 0 END), 0) as total_commission_generated,
+        COALESCE(SUM(CASE WHEN o.payment_status = 'Pagado' THEN o.amount_total ELSE 0 END), 0) as total_box_office_gross
+      FROM users u
+      LEFT JOIN events e ON e.organizer_id = u.id
+      LEFT JOIN orders o ON o.event_id = e.id AND o.payment_status != 'Anulado'
+      WHERE u.role = 'organizer'
+      GROUP BY u.id, u.name, u.email, u.phone, u.token_tarjeta, u.debt_balance, u.created_at
+      ORDER BY total_commission_generated DESC, u.name ASC
+    `);
+
+    res.json({
+      status: 'OK',
+      organizers: result.rows
+    });
+  } catch (err) {
+    console.error('Error al obtener comisiones de organizadores:', err);
+    res.status(500).json({ status: 'ERROR', message: err.message });
+  }
+};
