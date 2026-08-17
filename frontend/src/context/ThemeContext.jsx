@@ -1,3 +1,5 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
 // Función para calcular automáticamente si un color requiere texto claro u oscuro (WCAG Luminance)
 export const getContrastTextColor = (hexColor) => {
   if (!hexColor || typeof hexColor !== 'string') return '#FFFFFF';
