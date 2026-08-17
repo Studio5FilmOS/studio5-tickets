@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { MapPin, Clock, ChevronRight, Ticket, Flame, Star } from 'lucide-react';
+import { MapPin, Clock, ChevronRight, Ticket, Flame, Star, Sparkles } from 'lucide-react';
+import VersionModal from '../components/VersionModal';
 
 const getImageUrl = (url) => {
   if (!url) return '';
@@ -21,6 +22,7 @@ const Cartelera = () => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [activePromotion, setActivePromotion] = useState(null);
   const [failedImages, setFailedImages] = useState({});
+  const [showVersionModal, setShowVersionModal] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -386,8 +388,14 @@ const Cartelera = () => {
         )}
       </div>
 
-      {/* Filtros */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '4px' }}>
+      {/* Modal Popup de Anuncio Nueva Versión 2.0 Titanium */}
+      <VersionModal 
+        forceOpen={showVersionModal} 
+        onCloseCustom={() => setShowVersionModal(false)} 
+      />
+
+      {/* Filtros y Botón de Novedades */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '4px', alignItems: 'center' }}>
         {[
           { id: 'all', label: 'Todo' },
           { id: 'available', label: '🎟️ Disponible' },
@@ -409,6 +417,30 @@ const Cartelera = () => {
             {f.label}
           </button>
         ))}
+
+        <button
+          onClick={() => setShowVersionModal(true)}
+          style={{
+            marginLeft: 'auto',
+            padding: '7px 14px',
+            borderRadius: '20px',
+            border: '1px solid rgba(222,184,65,0.35)',
+            fontSize: '0.75rem',
+            fontWeight: '700',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            background: 'linear-gradient(135deg, rgba(222,184,65,0.14), rgba(176,141,43,0.06))',
+            color: 'var(--accent)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.25s',
+            boxShadow: '0 0 10px rgba(222,184,65,0.1)'
+          }}
+          title="Ver novedades de la versión 2.0 Titanium"
+        >
+          <Sparkles size={13} color="var(--accent)" /> Novedades v2.0
+        </button>
       </div>
 
       {/* Listado de eventos */}
