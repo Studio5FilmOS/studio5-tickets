@@ -312,9 +312,10 @@ initDatabase()
       console.log(`==================================================`);
       console.log(`Servidor de Tickets corriendo en el puerto ${PORT}`);
       console.log(`Modo: ${process.env.NODE_ENV || 'development'}`);
-    startStorageMonitor();
-    const { startBillingCronService } = require('./services/billingCronService');
-    startBillingCronService();
+      startStorageMonitor();
+      const { startBillingCronService } = require('./services/billingCronService');
+      startBillingCronService();
+    });
   })
   .catch(err => {
     console.error('❌ Error durante la inicialización del servidor:', err);
