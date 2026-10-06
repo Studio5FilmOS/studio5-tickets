@@ -55,10 +55,16 @@ const BottomNavigation = () => {
       )}
 
       {isAuthenticated && (isAdmin || isOrganizer) && (
-        <Link to="/admin" className={`mobile-nav-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
-          <ShieldAlert size={20} />
-          <span>{isOrganizer ? 'Organizador' : 'Admin'}</span>
-        </Link>
+        <>
+          <Link to="/admin" className={`mobile-nav-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
+            <ShieldAlert size={20} />
+            <span>{isOrganizer ? 'Organizador' : 'Admin'}</span>
+          </Link>
+          <Link to={`/${encodeURIComponent((user?.tenantName || 'studio5').toLowerCase().replace(/\s+/g, '-'))}/logistica/admin`} className={`mobile-nav-item ${location.pathname.includes('/logistica') ? 'active' : ''}`}>
+            <LogOut size={20} style={{ transform: 'rotate(180deg)' }} />
+            <span>Logística</span>
+          </Link>
+        </>
       )}
 
       {isAuthenticated ? (
@@ -160,10 +166,16 @@ const Sidebar = () => {
           )}
 
           {isAuthenticated && (isAdmin || isOrganizer) && (
-            <Link to="/admin" className={`sidebar-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
-              <ShieldAlert size={18} />
-              <span>{isOrganizer ? 'Panel Organizador' : 'Administración'}</span>
-            </Link>
+            <>
+              <Link to="/admin" className={`sidebar-item ${location.pathname === '/admin' ? 'active' : ''}`}>
+                <ShieldAlert size={18} />
+                <span>{isOrganizer ? 'Panel Organizador' : 'Administración'}</span>
+              </Link>
+              <Link to={`/${encodeURIComponent((theme.tenantName || 'studio5').toLowerCase().replace(/\s+/g, '-'))}/logistica/admin`} className={`sidebar-item ${location.pathname.includes('/logistica/admin') ? 'active' : ''}`}>
+                <Layers size={18} />
+                <span>Módulo Logística</span>
+              </Link>
+            </>
           )}
 
           {isAuthenticated ? (
