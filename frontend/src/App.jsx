@@ -361,7 +361,7 @@ const AppContent = () => {
 
         {/* Footer Sutil Marca Blanca */}
         <footer className="whitelabel-footer" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <span>Powered by <strong>Studio 5 Tickets Pro v2.0</strong> &bull; Sistema de Boletaje Inteligente</span>
+          <span>Powered by <strong>Studio 5 Tickets Pro v2.1.0</strong> &bull; Sistema de Boletaje Inteligente</span>
           <span>&bull;</span>
           <Link to="/terminos" style={{ color: 'var(--text-muted)', textDecoration: 'underline', fontSize: '0.75rem' }}>
             Términos & Políticas de Marca Blanca
