@@ -198,7 +198,7 @@ const Register = () => {
 
           {role === 'buyer' && (
             <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '20px', textAlign: 'center' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>¿Deseas tener tu propia plataforma de boletaje o marca blanca?</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>¿Deseas tener tu propia plataforma de boletaje o logistica con tu marca?</span>
               <a 
                 href={`https://wa.me/593963162788?text=Hola,%20estoy%20interesado%20en%20tener%20mi%20propio%20sistema%20de%20boletaje%20Studio%205%20Tickets.`} 
                 target="_blank" 
