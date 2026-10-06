@@ -4,6 +4,7 @@ import api from '../../services/api';
 import Swal from 'sweetalert2';
 import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff, Palette, Layers, CreditCard, Landmark, Ticket } from 'lucide-react';
 import AdminUsers from './AdminUsers';
+import AdminSettings from './AdminSettings';
 import { subscribeToPush, unsubscribeFromPush, isPushSubscribed } from '../../services/pushService';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, getContrastTextColor } from '../../context/ThemeContext';
@@ -1446,7 +1447,8 @@ const AdminDashboard = () => {
           { id: 'banners', icon: Image, label: 'Banners' },
           { id: 'transferencias', icon: Receipt, label: 'Transferencias' },
           { id: 'bancos', icon: Landmark, label: 'Cuentas' },
-          { id: 'usuarios', icon: UserCog, label: 'Usuarios' }
+          { id: 'usuarios', icon: UserCog, label: 'Usuarios' },
+          { id: 'ajustes', icon: Phone, label: 'Contacto WhatsApp' }
         ]).map(tab => (
           <button
             key={tab.id}
@@ -3038,6 +3040,13 @@ const AdminDashboard = () => {
       {activeTab === 'usuarios' && (
         <div className="glass-panel fade-in">
           <AdminUsers />
+        </div>
+      )}
+
+      {/* PESTAÑA: AJUSTES DE CONTACTO Y WHATSAPP */}
+      {activeTab === 'ajustes' && (
+        <div className="fade-in">
+          <AdminSettings />
         </div>
       )}
 

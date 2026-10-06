@@ -85,10 +85,77 @@ const applyMigrations = async () => {
     );
   `);
 
-  // Columna comprobante_url en orders (si no existe ya)
+  // Columna comprobante_url y ticket_count_child en orders (si no existe ya)
   await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS comprobante_url TEXT;");
+  await safe("ALTER TABLE orders ADD COLUMN IF NOT EXISTS ticket_count_child INTEGER NOT NULL DEFAULT 0;");
 
-  console.log('✅ Migraciones de columnas aplicadas correctamente.');
+  // Permisos de módulos para usuarios (Cartelera y Logística)
+  await safe("ALTER TABLE users ADD COLUMN IF NOT EXISTS module_cartelera BOOLEAN DEFAULT TRUE;");
+  await safe("ALTER TABLE users ADD COLUMN IF NOT EXISTS module_logistics BOOLEAN DEFAULT FALSE;");
+
+  // Tabla de configuración general de la plataforma (ej: WhatsApp del Admin para ventas/soporte)
+  await safe(`
+    CREATE TABLE IF NOT EXISTS platform_settings (
+      key VARCHAR(100) PRIMARY KEY,
+      value TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  await safe(`
+    INSERT INTO platform_settings (key, value) VALUES 
+      ('contact_whatsapp', '593963162788'),
+      ('cartelera_contact_message', 'Hola, deseo contratar el módulo de Cartelera de Eventos en mi cuenta.'),
+      ('logistics_contact_message', 'Hola, deseo contratar el módulo de Logística en mi cuenta.')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+
+  // Tablas del Espacio de Trabajo: Logística
+  await safe(`
+    CREATE TABLE IF NOT EXISTS logistics_campaigns (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      organizer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      total_items INTEGER NOT NULL DEFAULT 0,
+      items_breakdown JSONB DEFAULT '[]'::jsonb,
+      form_schema JSONB DEFAULT '[]'::jsonb,
+      theme_config JSONB DEFAULT '{"primaryColor": "#DEB841", "logoUrl": "", "tenantName": ""}'::jsonb,
+      status VARCHAR(50) NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  await safe("ALTER TABLE logistics_campaigns ADD COLUMN IF NOT EXISTS items_breakdown JSONB DEFAULT '[]'::jsonb;");
+
+  await safe(`
+    CREATE TABLE IF NOT EXISTS logistics_items (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      campaign_id UUID REFERENCES logistics_campaigns(id) ON DELETE CASCADE,
+      item_code VARCHAR(100) NOT NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE',
+      assigned_data JSONB,
+      dispatched_at TIMESTAMPTZ,
+      dispatched_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      received_at TIMESTAMPTZ,
+      received_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      allocated_staff_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT unique_item_code_per_campaign UNIQUE (campaign_id, item_code)
+    );
+  `);
+
+  await safe(`
+    CREATE TABLE IF NOT EXISTS logistics_staff_assignments (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      campaign_id UUID REFERENCES logistics_campaigns(id) ON DELETE CASCADE,
+      staff_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT unique_staff_campaign UNIQUE (campaign_id, staff_id)
+    );
+  `);
+
+  console.log('✅ Migraciones de columnas y tablas aplicadas correctamente.');
 };
 
 /**
