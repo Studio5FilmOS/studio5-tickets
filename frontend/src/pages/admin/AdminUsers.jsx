@@ -12,6 +12,7 @@ export default function AdminUsers() {
   const [editId, setEditId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [userToDelete, setUserToDelete] = useState(null); // { id, name }
   const [msg, setMsg] = useState(null); // { type: 'ok'|'err', text }
   const [showForm, setShowForm] = useState(false);
 
@@ -68,15 +69,21 @@ export default function AdminUsers() {
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`¿Eliminar el usuario "${name}"? Esta acción no se puede deshacer.`)) return;
-    setDeletingId(id);
+  const confirmDelete = (u) => {
+    setUserToDelete({ id: u.id, name: u.name });
+  };
+
+  const handleDelete = async () => {
+    if (!userToDelete) return;
+    setDeletingId(userToDelete.id);
     try {
-      await api.delete(`/admin/users/${id}`);
-      notify('ok', `Usuario "${name}" eliminado.`);
+      await api.delete(`/admin/users/${userToDelete.id}`);
+      notify('ok', `Usuario "${userToDelete.name}" eliminado.`);
+      setUserToDelete(null);
       fetchUsers();
     } catch (err) {
       notify('err', err?.response?.data?.message || 'Error al eliminar.');
+      setUserToDelete(null);
     } finally {
       setDeletingId(null);
     }
@@ -111,10 +118,46 @@ export default function AdminUsers() {
         </button>
       </div>
 
-      {/* Notification */}
+      {/* Notification (Fixed to show above modals) */}
       {msg && (
-        <div style={{ marginBottom: 16, padding: '12px 18px', borderRadius: 10, fontWeight: 600, fontSize: '0.9rem', background: msg.type === 'ok' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: msg.type === 'ok' ? '#4ade80' : '#f87171', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+        <div style={{ 
+          position: 'fixed', top: 30, left: '50%', transform: 'translateX(-50%)', zIndex: 9999,
+          padding: '12px 24px', borderRadius: 12, fontWeight: 600, fontSize: '0.95rem',
+          background: msg.type === 'ok' ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)', 
+          color: '#fff', boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+          animation: 'fadeInDown 0.3s'
+        }}>
           {msg.type === 'ok' ? '✅' : '❌'} {msg.text}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {userToDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 20, animation: 'fadeIn 0.2s' }}>
+          <div style={{ background: 'linear-gradient(145deg, #1e1e2d, #151522)', border: '1px solid rgba(255,59,48,0.3)', borderRadius: 20, padding: 32, width: '100%', maxWidth: 420, textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+            <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,59,48,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <span style={{ fontSize: '2rem' }}>⚠️</span>
+            </div>
+            <h3 style={{ margin: '0 0 12px', color: '#fff', fontSize: '1.3rem', fontWeight: 800 }}>¿Eliminar Usuario?</h3>
+            <p style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: 24, lineHeight: 1.5 }}>
+              Estás a punto de eliminar a <strong>{userToDelete.name}</strong>. Esta acción es irreversible y le quitará el acceso a la plataforma.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => setUserToDelete(null)}
+                style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deletingId === userToDelete.id}
+                style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: 'rgba(255,59,48,0.9)', color: '#fff', fontWeight: 700, cursor: 'pointer', opacity: deletingId === userToDelete.id ? 0.7 : 1, transition: 'all 0.2s' }}
+              >
+                {deletingId === userToDelete.id ? 'Eliminando...' : 'Sí, Eliminar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -242,7 +285,7 @@ export default function AdminUsers() {
                   Editar
                 </button>
                 <button
-                  onClick={() => handleDelete(u.id, u.name)}
+                  onClick={() => confirmDelete(u)}
                   disabled={deletingId === u.id}
                   style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#f87171', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', opacity: deletingId === u.id ? 0.5 : 1 }}
                 >
