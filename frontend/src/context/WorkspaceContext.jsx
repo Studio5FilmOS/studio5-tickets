@@ -16,9 +16,20 @@ export const WorkspaceProvider = ({ children }) => {
     localStorage.setItem('studio5_workspace', workspace);
   };
 
+  // Auto-ajustar espacio según permisos del organizador
+  useEffect(() => {
+    if (user?.role === 'organizer') {
+      if (!user.module_cartelera && user.module_logistics && activeWorkspace === 'cartelera') {
+        setActiveWorkspace('logistica');
+      } else if (user.module_cartelera && !user.module_logistics && activeWorkspace === 'logistica') {
+        setActiveWorkspace('cartelera');
+      }
+    }
+  }, [user]);
+
   // Determinar permisos sobre cada espacio de trabajo
-  const hasCarteleraAccess = !isAuthenticated || isAdmin || user?.role !== 'organizer' || user?.module_cartelera !== false;
-  const hasLogisticsAccess = isAdmin || (user?.role === 'organizer' && user?.module_logistics === true) || (user?.role === 'staff');
+  const hasCarteleraAccess = !isAuthenticated || isAdmin || user?.role !== 'organizer' || Boolean(user?.module_cartelera);
+  const hasLogisticsAccess = isAdmin || (user?.role === 'organizer' && Boolean(user?.module_logistics)) || (user?.role === 'staff');
 
   return (
     <WorkspaceContext.Provider

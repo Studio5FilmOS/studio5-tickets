@@ -43,16 +43,20 @@ exports.getAllEvents = async (req, res) => {
     let sqlEvents;
     let params = [];
 
-    if (isManageMode && isOrganizer) {
-      // En modo administración de su panel, el organizador SOLO ve sus propios eventos
-      sqlEvents = 'SELECT * FROM events WHERE organizer_id = $1 ORDER BY created_at DESC';
+    if (isOrganizer) {
+      // Un organizador NUNCA debe ver los eventos de Studio 5, SOLO sus propios eventos de marca blanca
+      if (isManageMode) {
+        sqlEvents = 'SELECT * FROM events WHERE organizer_id = $1 ORDER BY created_at DESC';
+      } else {
+        sqlEvents = "SELECT * FROM events WHERE organizer_id = $1 AND status = 'active' AND is_archived = FALSE ORDER BY created_at DESC";
+      }
       params = [user.id];
     } else if (isManageMode && (isAdmin || isStaff)) {
       // En modo administración del dueño o staff, ve todos los eventos para gestión
       sqlEvents = 'SELECT * FROM events ORDER BY created_at DESC';
     } else {
-      // En la Cartelera Pública general, todos los usuarios y espectadores ven los eventos activos no archivados
-      sqlEvents = "SELECT * FROM events WHERE status = 'active' AND is_archived = FALSE ORDER BY created_at DESC";
+      // En la Cartelera Pública general de Studio 5, mostrar eventos del dueño / oficiales de la plataforma
+      sqlEvents = "SELECT * FROM events WHERE (organizer_id IS NULL OR organizer_id IN (SELECT id FROM users WHERE role = 'admin')) AND status = 'active' AND is_archived = FALSE ORDER BY created_at DESC";
     }
 
     const eventsRes = await query(sqlEvents, params);

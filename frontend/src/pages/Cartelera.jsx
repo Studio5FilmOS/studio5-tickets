@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { MapPin, Clock, ChevronRight, Ticket, Flame, Star, Sparkles, UserPlus } from 'lucide-react';
+import { MapPin, Clock, ChevronRight, Ticket, Flame, Star, Sparkles, UserPlus, Lock, Phone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import VersionModal from '../components/VersionModal';
+import { getPublicSettings } from '../services/settingsService';
 
 const getImageUrl = (url) => {
   if (!url) return '';
@@ -25,7 +26,14 @@ const Cartelera = () => {
   const [activePromotion, setActivePromotion] = useState(null);
   const [failedImages, setFailedImages] = useState({});
   const [showVersionModal, setShowVersionModal] = useState(false);
+  const [settings, setSettings] = useState({ contact_whatsapp: '593963162788' });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    getPublicSettings().then(s => {
+      if (s) setSettings(s);
+    });
+  }, []);
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -344,6 +352,26 @@ const Cartelera = () => {
     );
   }
 
+  // Si el usuario es un organizador y NO tiene contratado el módulo de cartelera
+  if (user?.role === 'organizer' && !user.module_cartelera) {
+    const cleanPhone = (settings.contact_whatsapp || '593963162788').replace(/\D/g, '');
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(settings.cartelera_contact_message || 'Hola, deseo contratar el módulo de Cartelera de Eventos en mi cuenta.')}`;
+    return (
+      <div className="glass-panel fade-in" style={{ margin: '60px auto', maxWidth: '480px', textAlign: 'center', padding: '40px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+          <Lock size={48} color="var(--accent)" opacity={0.8} />
+        </div>
+        <h3 style={{ color: 'var(--text-primary)', marginBottom: '12px', fontSize: '1.3rem' }}>Módulo de Cartelera No Contratado</h3>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6, fontSize: '0.9rem' }}>
+          Tu cuenta de organizador (<strong>{user.name}</strong>) actualmente no tiene contratado el módulo de <strong>Cartelera de Eventos (Boletaje)</strong>. Contáctanos por WhatsApp para activarlo de inmediato.
+        </p>
+        <a href={waUrl} target="_blank" rel="noreferrer" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none', width: '100%', padding: '14px', fontWeight: 700 }}>
+          <Phone size={18} /> Contratar Módulo por WhatsApp
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div className="fade-in">
       {/* Hero Header */}
@@ -351,10 +379,10 @@ const Cartelera = () => {
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '6px' }}>
           <div>
             <p style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '4px' }}>
-              {activePromotion ? activePromotion.title : 'Cartelera Oficial'}
+              {user?.role === 'organizer' ? 'Cartelera Oficial' : (activePromotion ? activePromotion.title : 'Cartelera Oficial')}
             </p>
             <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: '#fff', lineHeight: 1.1, letterSpacing: '-0.5px' }}>
-              {activePromotion?.subtitle || 'Studio 5 Film & Art'}
+              {user?.role === 'organizer' ? user.name : (activePromotion?.subtitle || 'Studio 5 Film & Art')}
             </h1>
           </div>
           {events.length > 0 && (
@@ -373,8 +401,8 @@ const Cartelera = () => {
           background: 'linear-gradient(90deg, #DEB841 0%, rgba(222,184,65,0.3) 40%, transparent 100%)'
         }} />
 
-        {/* Banner de Promoción activa (si tiene imagen) */}
-        {activePromotion?.image_url && (
+        {/* Banner de Promoción activa (solo para público general, no para organizadores de marca blanca) */}
+        {user?.role !== 'organizer' && activePromotion?.image_url && (
           <a
             href={activePromotion.link_url || '#'}
             target={activePromotion.link_url ? '_blank' : undefined}
@@ -390,11 +418,13 @@ const Cartelera = () => {
         )}
       </div>
 
-      {/* Modal Popup de Anuncio Nueva Versión 2.0 Titanium */}
-      <VersionModal 
-        forceOpen={showVersionModal} 
-        onCloseCustom={() => setShowVersionModal(false)} 
-      />
+      {/* Modal Popup de Anuncio Nueva Versión 2.0 Titanium (solo para público general) */}
+      {user?.role !== 'organizer' && (
+        <VersionModal 
+          forceOpen={showVersionModal} 
+          onCloseCustom={() => setShowVersionModal(false)} 
+        />
+      )}
 
       {/* Placa Permanente de Bienvenida & Registro Ticket Pro (Visible para visitantes) */}
       {!isAuthenticated && (
@@ -478,38 +508,45 @@ const Cartelera = () => {
           </button>
         ))}
 
-        <button
-          onClick={() => setShowVersionModal(true)}
-          style={{
-            marginLeft: 'auto',
-            padding: '7px 14px',
-            borderRadius: '20px',
-            border: '1px solid rgba(222,184,65,0.35)',
-            fontSize: '0.75rem',
-            fontWeight: '700',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            background: 'linear-gradient(135deg, rgba(222,184,65,0.14), rgba(176,141,43,0.06))',
-            color: 'var(--accent)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.25s',
-            boxShadow: '0 0 10px rgba(222,184,65,0.1)'
-          }}
-          title="Ver novedades de Studio 5 Tickets Pro v2.1.0"
-        >
-          <Sparkles size={13} color="var(--accent)" /> Novedades Pro 2.1
-        </button>
+        {user?.role !== 'organizer' && (
+          <button
+            onClick={() => setShowVersionModal(true)}
+            style={{
+              marginLeft: 'auto',
+              padding: '7px 14px',
+              borderRadius: '20px',
+              border: '1px solid rgba(222,184,65,0.35)',
+              fontSize: '0.75rem',
+              fontWeight: '700',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              background: 'linear-gradient(135deg, rgba(222,184,65,0.14), rgba(176,141,43,0.06))',
+              color: 'var(--accent)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.25s',
+              boxShadow: '0 0 10px rgba(222,184,65,0.1)'
+            }}
+            title="Ver novedades de Studio 5 Tickets Pro v2.1.0"
+          >
+            <Sparkles size={13} color="var(--accent)" /> Novedades Pro 2.1
+          </button>
+        )}
       </div>
 
       {/* Listado de eventos */}
       {filteredEvents.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <Ticket size={36} color="var(--text-muted)" style={{ marginBottom: '12px', opacity: 0.4 }} />
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            No hay eventos en esta categoría.
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '50px 20px' }}>
+          <Ticket size={40} color="var(--accent)" style={{ marginBottom: '14px', opacity: 0.5 }} />
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: user?.role === 'organizer' ? '18px' : 0 }}>
+            {user?.role === 'organizer' ? 'Aún no has publicado eventos en tu cartelera.' : 'No hay eventos en esta categoría.'}
           </p>
+          {user?.role === 'organizer' && (
+            <button onClick={() => navigate('/admin')} className="btn-primary" style={{ padding: '10px 22px', fontSize: '0.85rem' }}>
+              Publicar Mi Primer Evento
+            </button>
+          )}
         </div>
       ) : (
         <div className="cartelera-grid">
@@ -527,13 +564,11 @@ const Cartelera = () => {
       )}
 
       {/* Footer decorativo */}
-      {filteredEvents.length > 0 && (
-        <div style={{ textAlign: 'center', padding: '32px 0 8px', opacity: 0.4 }}>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', letterSpacing: '2px' }}>
-            STUDIO 5 · EXPERIENCIAS ÚNICAS
-          </div>
+      <div style={{ textAlign: 'center', padding: '32px 0 8px', opacity: 0.4 }}>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', letterSpacing: '2px' }}>
+          {user?.role === 'organizer' ? `${user.name.toUpperCase()} · CARTELERA OFICIAL` : 'STUDIO 5 · EXPERIENCIAS ÚNICAS'}
         </div>
-      )}
+      </div>
     </div>
   );
 };
