@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import { Play, ScanLine, Flame, ShieldAlert, LogIn, LogOut, Ticket, UserPlus } from 'lucide-react';
+import { Play, ScanLine, Flame, ShieldAlert, LogIn, LogOut, Ticket, UserPlus, Phone, Lock, Layers } from 'lucide-react';
 
 // Importar Vistas (Pages)
 import Cartelera from './pages/Cartelera';
@@ -54,20 +54,16 @@ const BottomNavigation = () => {
         </Link>
       )}
 
-      {isAuthenticated && (
+      {isAuthenticated && (isAdmin || isOrganizer) && (
         <>
-          {(isAdmin || (isOrganizer && user?.module_cartelera)) && (
-            <Link to="/admin" className={`mobile-nav-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
-              <ShieldAlert size={20} />
-              <span>{isOrganizer ? 'Organizador' : 'Admin'}</span>
-            </Link>
-          )}
-          {(isAdmin || (isOrganizer && user?.module_logistics)) && (
-            <Link to={`/${encodeURIComponent((user?.tenantName || 'studio5').toLowerCase().replace(/\s+/g, '-'))}/logistica/admin`} className={`mobile-nav-item ${location.pathname.includes('/logistica') ? 'active' : ''}`}>
-              <LogOut size={20} style={{ transform: 'rotate(180deg)' }} />
-              <span>Logística</span>
-            </Link>
-          )}
+          <Link to="/admin" className={`mobile-nav-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
+            <ShieldAlert size={20} />
+            <span>{isOrganizer ? 'Organizador' : 'Admin'}</span>
+          </Link>
+          <Link to={`/${encodeURIComponent((user?.tenantName || 'studio5').toLowerCase().replace(/\s+/g, '-'))}/logistica/admin`} className={`mobile-nav-item ${location.pathname.includes('/logistica') ? 'active' : ''}`}>
+            <LogOut size={20} style={{ transform: 'rotate(180deg)' }} />
+            <span>Logística</span>
+          </Link>
         </>
       )}
 
@@ -126,6 +122,48 @@ const PrivateRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
+const ModuleGuard = ({ children, requiredModule }) => {
+  const { user } = useAuth();
+  if (user?.role === 'admin') return children;
+  
+  if (user?.role === 'organizer') {
+    if (requiredModule === 'cartelera' && !user.module_cartelera) {
+      return (
+        <div className="glass-panel" style={{ margin: '50px auto', maxWidth: '400px', textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <Lock size={48} color="var(--accent)" opacity={0.8} />
+          </div>
+          <h3 style={{ color: 'var(--text-primary)', marginBottom: '15px', fontSize: '1.3rem' }}>Módulo Inactivo</h3>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '20px', lineHeight: 1.5 }}>
+            El módulo de <strong>Cartelera de Eventos</strong> no está habilitado en tu cuenta. Para comenzar a publicar shows y vender tickets, necesitas contratar este módulo.
+          </p>
+          <a href="https://wa.me/593963162788?text=Hola,%20deseo%20activar%20el%20módulo%20de%20Cartelera%20de%20Eventos%20(Boletaje)%20en%20mi%20cuenta." target="_blank" rel="noreferrer" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none', width: '100%' }}>
+            <Phone size={18} /> Contactar a Soporte
+          </a>
+        </div>
+      );
+    }
+    if (requiredModule === 'logistics' && !user.module_logistics) {
+      return (
+        <div className="glass-panel" style={{ margin: '50px auto', maxWidth: '400px', textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <Lock size={48} color="var(--accent)" opacity={0.8} />
+          </div>
+          <h3 style={{ color: 'var(--text-primary)', marginBottom: '15px', fontSize: '1.3rem' }}>Módulo Inactivo</h3>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '20px', lineHeight: 1.5 }}>
+            El módulo de <strong>Logística de Campañas</strong> no está habilitado en tu cuenta. Para gestionar rutas, logística y personal, necesitas contratar este módulo.
+          </p>
+          <a href="https://wa.me/593963162788?text=Hola,%20deseo%20activar%20el%20módulo%20de%20Logística%20en%20mi%20cuenta." target="_blank" rel="noreferrer" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none', width: '100%' }}>
+            <Phone size={18} /> Contactar a Soporte
+          </a>
+        </div>
+      );
+    }
+  }
+  
+  return children;
+};
+
 const Sidebar = () => {
   const { user, isAuthenticated, logout, isAdmin, isOrganizer } = useAuth();
   const { theme } = useTheme();
@@ -169,20 +207,16 @@ const Sidebar = () => {
             </>
           )}
 
-          {isAuthenticated && (
+          {isAuthenticated && (isAdmin || isOrganizer) && (
             <>
-              {(isAdmin || (isOrganizer && user?.module_cartelera)) && (
-                <Link to="/admin" className={`sidebar-item ${location.pathname === '/admin' ? 'active' : ''}`}>
-                  <ShieldAlert size={18} />
-                  <span>{isOrganizer ? 'Panel Organizador' : 'Administración'}</span>
-                </Link>
-              )}
-              {(isAdmin || (isOrganizer && user?.module_logistics)) && (
-                <Link to={`/${encodeURIComponent((theme.tenantName || 'studio5').toLowerCase().replace(/\s+/g, '-'))}/logistica/admin`} className={`sidebar-item ${location.pathname.includes('/logistica/admin') ? 'active' : ''}`}>
-                  <Layers size={18} />
-                  <span>Módulo Logística</span>
-                </Link>
-              )}
+              <Link to="/admin" className={`sidebar-item ${location.pathname === '/admin' ? 'active' : ''}`}>
+                <ShieldAlert size={18} />
+                <span>{isOrganizer ? 'Panel Organizador' : 'Administración'}</span>
+              </Link>
+              <Link to={`/${encodeURIComponent((theme.tenantName || 'studio5').toLowerCase().replace(/\s+/g, '-'))}/logistica/admin`} className={`sidebar-item ${location.pathname.includes('/logistica/admin') ? 'active' : ''}`}>
+                <Layers size={18} />
+                <span>Módulo Logística</span>
+              </Link>
             </>
           )}
 
@@ -298,7 +332,9 @@ const AppContent = () => {
               path="/admin" 
               element={
                 <PrivateRoute allowedRoles={['admin', 'organizer']}>
-                  <AdminDashboard />
+                  <ModuleGuard requiredModule="cartelera">
+                    <AdminDashboard />
+                  </ModuleGuard>
                 </PrivateRoute>
               } 
             />
@@ -306,7 +342,9 @@ const AppContent = () => {
               path="/:tenant/logistica/admin" 
               element={
                 <PrivateRoute allowedRoles={['admin', 'organizer']}>
-                  <LogisticsAdmin />
+                  <ModuleGuard requiredModule="logistics">
+                    <LogisticsAdmin />
+                  </ModuleGuard>
                 </PrivateRoute>
               } 
             />

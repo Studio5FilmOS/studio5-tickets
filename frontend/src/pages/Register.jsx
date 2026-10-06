@@ -167,11 +167,10 @@ const Register = () => {
           <label style={{ fontSize: '0.78rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Selecciona tu tipo de cuenta *
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '16px' }}>
             {[
               { id: 'buyer', label: 'Espectador', desc: 'Comprar y guardar tickets QR', icon: Ticket },
-              { id: 'organizer', label: 'Organizador', desc: 'Publicar shows y marca blanca', icon: Building2 },
-              { id: 'staff', label: 'Staff / Control', desc: 'Escaneo y control de accesos', icon: ShieldCheck }
+              { id: 'organizer', label: 'Organizador', desc: 'Publicar shows y marca blanca', icon: Building2 }
             ].map(r => {
               const isSelected = role === r.id;
               return (
@@ -196,6 +195,20 @@ const Register = () => {
               );
             })}
           </div>
+
+          {role === 'buyer' && (
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '20px', textAlign: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>¿Deseas tener tu propia plataforma de boletaje o marca blanca?</span>
+              <a 
+                href={`https://wa.me/593963162788?text=Hola,%20estoy%20interesado%20en%20tener%20mi%20propio%20sistema%20de%20boletaje%20Studio%205%20Tickets.`} 
+                target="_blank" 
+                rel="noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#25D366', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '6px', textDecoration: 'none' }}
+              >
+                <Phone size={14} /> Contáctanos por WhatsApp
+              </a>
+            </div>
+          )}
 
           <label>Nombre Completo *</label>
           <div style={{ position: 'relative' }}>
