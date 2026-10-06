@@ -11,7 +11,7 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const STORAGE_KEY = 'studio5_v2_pro_announcement_seen';
+  const STORAGE_KEY = 'studio5_v2_1_pro_announcement_seen';
 
   useEffect(() => {
     if (forceOpen) {
@@ -114,7 +114,7 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
             textTransform: 'uppercase',
             marginBottom: '12px'
           }}>
-            <Sparkles size={13} color="var(--accent)" /> STUDIO 5 TICKETS PRO · v2.0.0
+            <Sparkles size={13} color="var(--accent)" /> STUDIO 5 TICKETS PRO · v2.1.0
           </div>
 
           <h2 style={{
@@ -136,66 +136,33 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
 
         {/* Cuadrícula de Nuevas Implementaciones */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '22px' }}>
-          <div style={{
-            display: 'flex',
-            gap: '12px',
-            padding: '12px',
-            borderRadius: '14px',
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.06)'
-          }}>
+          <div style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
             <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(222, 184, 65, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Layers size={18} color="var(--accent)" />
             </div>
             <div>
-              <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block', marginBottom: '2px' }}>
-                Zonas & Localidades Múltiples
-              </strong>
-              <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: 0, lineHeight: '1.3' }}>
-                Elige entre VIP, General, Preferencia con butacas seleccionables y tarifas en tiempo real.
-              </p>
+              <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block', marginBottom: '2px' }}>Módulo de Logística (Multi-Tenant)</strong>
+              <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: 0, lineHeight: '1.3' }}>Crea campañas ilimitadas con Marca Blanca (tu propio color y logo), gestiona lotes y genera plantillas A4 automáticas para impresión con líneas de corte.</p>
             </div>
           </div>
 
-          <div style={{
-            display: 'flex',
-            gap: '12px',
-            padding: '12px',
-            borderRadius: '14px',
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.06)'
-          }}>
+          <div style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
             <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(52, 199, 89, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <ShieldCheck size={18} color="#34c759" />
+              <QrCode size={18} color="#34c759" />
             </div>
             <div>
-              <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block', marginBottom: '2px' }}>
-                Seguridad OTP y Verificación de Cuenta
-              </strong>
-              <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: 0, lineHeight: '1.3' }}>
-                Protección con código de 6 dígitos enviado directamente a tu correo electrónico.
-              </p>
+              <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block', marginBottom: '2px' }}>Escáner Celular de Campo</strong>
+              <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: 0, lineHeight: '1.3' }}>Transforma el celular del Staff en un potente lector QR en vivo con extracción inteligente de códigos. Ideal para asignaciones rápidas.</p>
             </div>
           </div>
 
-          <div style={{
-            display: 'flex',
-            gap: '12px',
-            padding: '12px',
-            borderRadius: '14px',
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.06)'
-          }}>
+          <div style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
             <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(0, 102, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <QrCode size={18} color="#0066FF" />
+              <Zap size={18} color="#0066FF" />
             </div>
             <div>
-              <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block', marginBottom: '2px' }}>
-                Billetera Digital "Mis Tickets"
-              </strong>
-              <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: 0, lineHeight: '1.3' }}>
-                Tus boletos QR siempre a mano desde el celular, listos para ingresar a la sala y con descarga en JPG.
-              </p>
+              <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block', marginBottom: '2px' }}>Dashboards "Motores de Metas" Animados</strong>
+              <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: 0, lineHeight: '1.3' }}>Impacta a tu audiencia con pantallas públicas en tiempo real. Configura temas visuales como 'Cielo Estrellado' o 'Jardín de Rosas' que reaccionan a cada donación validada.</p>
             </div>
           </div>
         </div>
@@ -252,7 +219,7 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
                 👋 ¡Hola, {user?.name}!
               </span>
               <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
-                Tu cuenta está activa y lista para usar la versión 2.0.
+                Tu cuenta está activa y lista para usar la versión 2.1.
               </span>
             </div>
             <button

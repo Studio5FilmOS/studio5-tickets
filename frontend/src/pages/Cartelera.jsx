@@ -422,7 +422,7 @@ const Cartelera = () => {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                  STUDIO 5 TICKETS PRO · v2.0.0
+                  STUDIO 5 TICKETS PRO · v2.1.0
                 </span>
                 <span style={{ fontSize: '0.62rem', background: 'rgba(52,199,89,0.15)', color: '#34c759', padding: '1px 6px', borderRadius: '10px', fontWeight: 700 }}>
                   NUEVO
@@ -446,7 +446,7 @@ const Cartelera = () => {
               onClick={() => setShowVersionModal(true)}
               className="btn-outline"
               style={{ padding: '8px 12px', fontSize: '0.76rem', width: 'auto' }}
-              title="Ver todas las novedades de la versión 2.0"
+              title="Ver todas las novedades de la versión 2.1"
             >
               Novedades
             </button>
@@ -497,9 +497,9 @@ const Cartelera = () => {
             transition: 'all 0.25s',
             boxShadow: '0 0 10px rgba(222,184,65,0.1)'
           }}
-          title="Ver novedades de Studio 5 Tickets Pro v2.0.0"
+          title="Ver novedades de Studio 5 Tickets Pro v2.1.0"
         >
-          <Sparkles size={13} color="var(--accent)" /> Novedades Pro 2.0
+          <Sparkles size={13} color="var(--accent)" /> Novedades Pro 2.1
         </button>
       </div>
 
