@@ -3,7 +3,7 @@ import api from '../../services/api';
 
 const ROLES = ['admin', 'staff', 'organizer'];
 
-const INITIAL_FORM = { name: '', email: '', phone: '', password: '', role: 'staff', token_tarjeta: '' };
+const INITIAL_FORM = { name: '', email: '', phone: '', password: '', role: 'staff', token_tarjeta: '', module_cartelera: true, module_logistics: false };
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -43,7 +43,7 @@ export default function AdminUsers() {
 
   const openEdit = (u) => {
     setEditId(u.id);
-    setForm({ name: u.name, email: u.email, phone: u.phone || '', password: '', role: u.role, token_tarjeta: u.token_tarjeta || '' });
+    setForm({ name: u.name, email: u.email, phone: u.phone || '', password: '', role: u.role, token_tarjeta: u.token_tarjeta || '', module_cartelera: u.module_cartelera ?? true, module_logistics: u.module_logistics ?? false });
     setShowForm(true);
   };
 
@@ -52,7 +52,7 @@ export default function AdminUsers() {
     setSaving(true);
     try {
       if (editId) {
-        const payload = { name: form.name, phone: form.phone, role: form.role, token_tarjeta: form.token_tarjeta };
+        const payload = { name: form.name, phone: form.phone, role: form.role, token_tarjeta: form.token_tarjeta, module_cartelera: form.module_cartelera, module_logistics: form.module_logistics };
         if (form.password.trim()) payload.password = form.password;
         await api.put(`/admin/users/${editId}`, payload);
         notify('ok', 'Usuario actualizado correctamente.');
@@ -223,17 +223,40 @@ export default function AdminUsers() {
                 </select>
               </div>
               {form.role === 'organizer' && (
-                <div>
-                  <label style={{ display: 'block', color: 'var(--accent)', fontSize: '0.8rem', marginBottom: 6, fontWeight: 600 }}>TOKEN TARJETA PAYPHONE (GARANTÍA)</label>
-                  <input
-                    type="text"
-                    value={form.token_tarjeta}
-                    onChange={e => setForm({ ...form, token_tarjeta: e.target.value })}
-                    placeholder="Ej: tok_payphone_live_..."
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--accent)', background: 'rgba(222,184,65,0.05)', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
-                  />
-                  <span style={{ fontSize: '0.72rem', color: '#888', marginTop: 4, display: 'block' }}>Requerido para cobrar comisiones en mora y permitir publicación de eventos.</span>
-                </div>
+                <>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', padding: 16, borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <label style={{ display: 'block', color: 'var(--accent)', fontSize: '0.85rem', marginBottom: 12, fontWeight: 700 }}>MÓDULOS DE ACCESO</label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+                      <input 
+                        type="checkbox" 
+                        checked={form.module_cartelera} 
+                        onChange={e => setForm({ ...form, module_cartelera: e.target.checked })}
+                        style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
+                      />
+                      <span style={{ color: '#fff', fontSize: '0.9rem' }}>Cartelera de Eventos (Boletaje)</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={form.module_logistics} 
+                        onChange={e => setForm({ ...form, module_logistics: e.target.checked })}
+                        style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
+                      />
+                      <span style={{ color: '#fff', fontSize: '0.9rem' }}>Módulo de Logística (Campañas Belén)</span>
+                    </label>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', color: 'var(--accent)', fontSize: '0.8rem', marginBottom: 6, fontWeight: 600 }}>TOKEN TARJETA PAYPHONE (GARANTÍA)</label>
+                    <input
+                      type="text"
+                      value={form.token_tarjeta}
+                      onChange={e => setForm({ ...form, token_tarjeta: e.target.value })}
+                      placeholder="Ej: tok_payphone_live_..."
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--accent)', background: 'rgba(222,184,65,0.05)', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                    />
+                    <span style={{ fontSize: '0.72rem', color: '#888', marginTop: 4, display: 'block' }}>Requerido para cobrar comisiones en mora y permitir publicación de eventos.</span>
+                  </div>
+                </>
               )}
               <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <button

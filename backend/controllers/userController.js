@@ -4,8 +4,7 @@ const { query } = require('../config/db');
 // Listar todos los usuarios del sistema de gestión (admin, staff, organizer)
 exports.getAllUsers = async (req, res) => {
   try {
-    const result = await query(
-      "SELECT id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, created_at FROM users WHERE role IN ('admin', 'staff', 'organizer') ORDER BY role, name ASC"
+      "SELECT id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics, created_at FROM users WHERE role IN ('admin', 'staff', 'organizer') ORDER BY role, name ASC"
     );
     res.json({ status: 'OK', users: result.rows });
   } catch (err) {
@@ -15,7 +14,7 @@ exports.getAllUsers = async (req, res) => {
 
 // Crear nuevo usuario (Admin panel)
 exports.createUser = async (req, res) => {
-  const { name, email, phone, password, role, token_tarjeta } = req.body;
+  const { name, email, phone, password, role, token_tarjeta, module_cartelera = true, module_logistics = false } = req.body;
   if (!name || !email || !password || !role) {
     return res.status(400).json({ status: 'ERROR', message: 'Nombre, correo, contraseña y rol son obligatorios.' });
   }
@@ -29,8 +28,8 @@ exports.createUser = async (req, res) => {
     }
     const hash = await bcrypt.hash(password, 10);
     const result = await query(
-      'INSERT INTO users (name, email, phone, password_hash, role, is_verified, token_tarjeta) VALUES ($1,$2,$3,$4,$5,TRUE,$6) RETURNING id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, created_at',
-      [name, email.toLowerCase().trim(), phone || null, hash, role, token_tarjeta || null]
+      'INSERT INTO users (name, email, phone, password_hash, role, is_verified, token_tarjeta, module_cartelera, module_logistics) VALUES ($1,$2,$3,$4,$5,TRUE,$6,$7,$8) RETURNING id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics, created_at',
+      [name, email.toLowerCase().trim(), phone || null, hash, role, token_tarjeta || null, module_cartelera, module_logistics]
     );
     res.status(201).json({ status: 'OK', message: 'Usuario creado exitosamente.', user: result.rows[0] });
   } catch (err) {
@@ -41,7 +40,7 @@ exports.createUser = async (req, res) => {
 // Actualizar usuario (nombre, teléfono, rol, contraseña, token_tarjeta)
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
-  const { name, phone, role, password, token_tarjeta } = req.body;
+  const { name, phone, role, password, token_tarjeta, module_cartelera, module_logistics } = req.body;
 
   // Evitar que un admin se quite su propio rol
   if (req.user.id === id && role && role !== 'admin') {
@@ -58,6 +57,10 @@ exports.updateUser = async (req, res) => {
                   fields.push(`role=$${i++}`);         values.push(role); }
     if (token_tarjeta !== undefined) {
                   fields.push(`token_tarjeta=$${i++}`); values.push(token_tarjeta); }
+    if (module_cartelera !== undefined) {
+                  fields.push(`module_cartelera=$${i++}`); values.push(module_cartelera); }
+    if (module_logistics !== undefined) {
+                  fields.push(`module_logistics=$${i++}`); values.push(module_logistics); }
     if (password && password.length >= 6) {
       const hash = await bcrypt.hash(password, 10);
                   fields.push(`password_hash=$${i++}`); values.push(hash);
@@ -67,7 +70,7 @@ exports.updateUser = async (req, res) => {
     }
     values.push(id);
     const result = await query(
-      `UPDATE users SET ${fields.join(', ')} WHERE id=$${i} RETURNING id, name, email, phone, role, is_verified, token_tarjeta, debt_balance`,
+      `UPDATE users SET ${fields.join(', ')} WHERE id=$${i} RETURNING id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics`,
       values
     );
     if (result.rows.length === 0) {

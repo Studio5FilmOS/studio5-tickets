@@ -132,7 +132,9 @@ exports.verifyOtp = async (req, res) => {
           phone: user.phone,
           role: user.role,
           token_tarjeta: user.token_tarjeta,
-          debt_balance: user.debt_balance
+          debt_balance: user.debt_balance,
+          module_cartelera: user.module_cartelera,
+          module_logistics: user.module_logistics
         }
       });
     }
@@ -178,7 +180,9 @@ exports.verifyOtp = async (req, res) => {
         phone: user.phone,
         role: user.role,
         token_tarjeta: user.token_tarjeta,
-        debt_balance: user.debt_balance
+        debt_balance: user.debt_balance,
+        module_cartelera: user.module_cartelera,
+        module_logistics: user.module_logistics
       }
     });
   } catch (err) {
@@ -337,7 +341,9 @@ exports.login = async (req, res) => {
         phone: user.phone,
         role: user.role,
         token_tarjeta: user.token_tarjeta,
-        debt_balance: user.debt_balance
+        debt_balance: user.debt_balance,
+        module_cartelera: user.module_cartelera,
+        module_logistics: user.module_logistics
       }
     });
   } catch (err) {
@@ -353,7 +359,7 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const userRes = await query(
-      'SELECT id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, created_at FROM users WHERE id = $1',
+      'SELECT id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics, created_at FROM users WHERE id = $1',
       [req.user.id]
     );
     if (userRes.rows.length === 0) {

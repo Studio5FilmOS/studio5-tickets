@@ -25,8 +25,10 @@ const runMigrations = async () => {
     await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code VARCHAR(10);');
     await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires_at TIMESTAMPTZ;');
     await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS workgroup_organizer_id UUID REFERENCES users(id) ON DELETE SET NULL;');
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS module_cartelera BOOLEAN DEFAULT TRUE;');
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS module_logistics BOOLEAN DEFAULT FALSE;');
     await query("UPDATE users SET is_verified = TRUE WHERE role = 'admin' OR is_verified IS NULL;");
-    console.log('Migration: Users columns updated (token_tarjeta, debt_balance, is_verified, verification_code, workgroup_organizer_id)');
+    console.log('Migration: Users columns updated (modules, token_tarjeta, debt_balance, is_verified...)');
   } catch (err) {
     console.log('Migration users error/already exists:', err.message);
   }
