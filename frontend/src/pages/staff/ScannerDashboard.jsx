@@ -221,33 +221,46 @@ const QRScannerTab = () => {
             </div>
           )}
 
-          {/* Viewport del escáner */}
-          <div style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: '340px',
-            margin: '0 auto 24px',
-            borderRadius: '24px',
-            overflow: 'hidden',
-            background: '#000',
-            aspectRatio: '1/1',
-            border: '2px solid rgba(222,184,65,0.4)',
-            boxShadow: '0 0 50px rgba(222,184,65,0.18)'
-          }}>
-            <div id={scannerContainerId} style={{ width: '100%', height: '100%' }} />
+            {/* Viewport del escáner */}
+            <div style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '340px',
+              margin: '0 auto 24px',
+              borderRadius: '24px',
+              overflow: 'hidden',
+              background: '#000',
+              aspectRatio: '1/1',
+              border: '2px solid rgba(222,184,65,0.4)',
+              boxShadow: '0 0 50px rgba(222,184,65,0.18)'
+            }}>
+              <div id={scannerContainerId} style={{ width: '100%', height: '100%' }} />
 
-            {/* Overlay de guía si cámara inactiva */}
-            {!isScanning && (
-              <div style={{
-                position: 'absolute', inset: 0,
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(0,0,0,0.85)', gap: '16px'
-              }}>
-                <Camera size={48} color="#DEB841" strokeWidth={1.5} />
-                <p style={{ color: '#ccc', fontSize: '0.85rem' }}>Cámara detenida</p>
-              </div>
-            )}
+              {/* Overlay de guía si cámara inactiva */}
+              {!isScanning && (
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.85)', gap: '16px'
+                }}>
+                  <Camera size={48} color="#DEB841" strokeWidth={1.5} />
+                  <p style={{ color: '#ccc', fontSize: '0.85rem', textAlign: 'center', padding: '0 20px' }}>
+                    Cámara detenida o requiere permisos
+                  </p>
+                  <button 
+                    onClick={() => startScanner()} 
+                    style={{ 
+                      background: 'linear-gradient(135deg, #DEB841, #b08d2b)', 
+                      color: '#000', border: 'none', borderRadius: '12px', 
+                      padding: '10px 20px', fontWeight: 'bold', fontSize: '0.85rem',
+                      display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
+                    }}
+                  >
+                    <ScanLine size={16} /> Activar Cámara
+                  </button>
+                </div>
+              )}
 
             {/* Guía de escaneo animada */}
             {isScanning && (
