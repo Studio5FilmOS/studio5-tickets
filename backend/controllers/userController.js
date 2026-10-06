@@ -4,6 +4,7 @@ const { query } = require('../config/db');
 // Listar todos los usuarios del sistema de gestión (admin, staff, organizer)
 exports.getAllUsers = async (req, res) => {
   try {
+    const result = await query(
       "SELECT id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics, created_at FROM users WHERE role IN ('admin', 'staff', 'organizer') ORDER BY role, name ASC"
     );
     res.json({ status: 'OK', users: result.rows });
