@@ -341,7 +341,7 @@ const LogisticsAdmin = () => {
                       </button>
 
                       <a 
-                        href={`/${tenant || 'studio5'}/belen`}
+                        href={`/${tenant || 'studio5'}/belen?cid=${camp.id}`}
                         target="_blank"
                         rel="noreferrer"
                         className="btn-secondary" 
