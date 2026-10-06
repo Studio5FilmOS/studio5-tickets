@@ -4,7 +4,7 @@
   "description": "Backend API for Studio 5 unified ticketing PWA system",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node migrate_db_now.js && node server.js",
     "dev": "nodemon server.js"
   },
   "dependencies": {
