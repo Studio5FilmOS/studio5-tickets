@@ -155,3 +155,40 @@ CREATE TABLE IF NOT EXISTS event_clues (
 );
 
 CREATE INDEX IF NOT EXISTS idx_clues_event_revealed ON event_clues(event_id, is_revealed);
+
+-- ACTUALIZACIÓN DE USUARIOS: Añadir soporte para módulos/permisos
+ALTER TABLE users ADD COLUMN IF NOT EXISTS modules JSONB DEFAULT '["TICKETS"]'::jsonb;
+
+-- 9. TABLA DE CAMPAÑAS DE LOGÍSTICA (Marca Blanca y Configuración)
+CREATE TABLE IF NOT EXISTS logistics_campaigns (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organizer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    total_items INTEGER NOT NULL DEFAULT 0,
+    form_schema JSONB DEFAULT '[]'::jsonb,
+    theme_config JSONB DEFAULT '{"primaryColor": "#000000", "logoUrl": "", "tenantName": ""}'::jsonb,
+    status VARCHAR(50) NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 10. TABLA DE ARTÍCULOS/CÓDIGOS (Seguimiento individual)
+CREATE TABLE IF NOT EXISTS logistics_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    campaign_id UUID REFERENCES logistics_campaigns(id) ON DELETE CASCADE,
+    item_code VARCHAR(100) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE',
+    assigned_data JSONB,
+    dispatched_at TIMESTAMPTZ,
+    dispatched_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    received_at TIMESTAMPTZ,
+    received_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    allocated_staff_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Asignación de lote al staff
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_item_code_per_campaign UNIQUE (campaign_id, item_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_logistics_items_campaign ON logistics_items(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_logistics_items_code ON logistics_items(item_code);

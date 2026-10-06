@@ -19,6 +19,12 @@ import PublicInteraction from './pages/PublicInteraction';
 import PayphoneRedirect from './pages/PayphoneRedirect';
 import TermsAndPolicies from './pages/TermsAndPolicies';
 
+// Importar Módulos de Logística
+import LogisticsAdmin from './pages/admin/LogisticsAdmin';
+import LogisticsStaff from './pages/staff/LogisticsStaff';
+import BelenDashboard from './pages/BelenDashboard';
+import PrintStickers from './pages/admin/PrintStickers';
+
 const BottomNavigation = () => {
   const { user, isAuthenticated, logout, isAdmin, isOrganizer } = useAuth();
   const location = useLocation();
@@ -229,6 +235,7 @@ const AppContent = () => {
             <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
             <Route path="/terminos" element={<TermsAndPolicies />} />
             <Route path="/politicas" element={<TermsAndPolicies />} />
+            <Route path="/:tenant/belen" element={<BelenDashboard />} />
 
             {/* Portal del Cliente (Cualquier usuario autenticado) */}
             <Route 
@@ -257,6 +264,14 @@ const AppContent = () => {
                 </PrivateRoute>
               } 
             />
+            <Route 
+              path="/:tenant/logistica/staff" 
+              element={
+                <PrivateRoute allowedRoles={['staff', 'admin', 'organizer']}>
+                  <LogisticsStaff />
+                </PrivateRoute>
+              } 
+            />
 
             {/* Rutas Admin / Organizador */}
             <Route 
@@ -264,6 +279,22 @@ const AppContent = () => {
               element={
                 <PrivateRoute allowedRoles={['admin', 'organizer']}>
                   <AdminDashboard />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/:tenant/logistica/admin" 
+              element={
+                <PrivateRoute allowedRoles={['admin', 'organizer']}>
+                  <LogisticsAdmin />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/:tenant/logistica/admin/print/:campaignId" 
+              element={
+                <PrivateRoute allowedRoles={['admin', 'organizer']}>
+                  <PrintStickers />
                 </PrivateRoute>
               } 
             />

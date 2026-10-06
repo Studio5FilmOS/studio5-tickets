@@ -224,6 +224,7 @@ const userRoutes = require('./routes/userRoutes');
 const bankAccountRoutes = require('./routes/bankAccountRoutes');
 const pushRoutes = require('./routes/pushRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const logisticsRoutes = require('./routes/logisticsRoutes');
 
 // Vincular Rutas a endpoints de la API
 app.use('/api/auth', authRoutes);
@@ -236,6 +237,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/bank-accounts', bankAccountRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/logistics', logisticsRoutes);
 
 // Servir archivos estáticos del Frontend compilado
 const path = require('path');
