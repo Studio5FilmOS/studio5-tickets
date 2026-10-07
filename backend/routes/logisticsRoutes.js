@@ -20,6 +20,7 @@ router.post('/campaigns/:campaign_id/assign-staff', authMiddleware, roleMiddlewa
 router.get('/staff/campaigns', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.getStaffCampaigns);
 
 // Rutas de Operación (Escáner y Registro)
+router.get('/item/lookup', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.lookupItem);
 router.post('/dispatch', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.dispatchItems);
 router.post('/receive', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.receiveItem);
 

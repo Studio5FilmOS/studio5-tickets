@@ -7,7 +7,7 @@ import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import { getPublicSettings } from './services/settingsService';
 import { 
   Play, ScanLine, Flame, ShieldAlert, LogIn, LogOut, Ticket, 
-  UserPlus, Phone, Lock, Layers, Package, CheckCircle2, ExternalLink 
+  UserPlus, Phone, Lock, Layers, Package, CheckCircle2, ExternalLink, Palette 
 } from 'lucide-react';
 
 // Importar Vistas (Pages)
@@ -25,11 +25,12 @@ import PublicInteraction from './pages/PublicInteraction';
 import PayphoneRedirect from './pages/PayphoneRedirect';
 import TermsAndPolicies from './pages/TermsAndPolicies';
 
-// Importar Módulos de Logística
+// Importar Módulos de Logística y Marca
 import LogisticsAdmin from './pages/admin/LogisticsAdmin';
 import LogisticsStaff from './pages/staff/LogisticsStaff';
 import BelenDashboard from './pages/BelenDashboard';
 import PrintStickers from './pages/admin/PrintStickers';
+import BrandSettings from './pages/admin/BrandSettings';
 
 const BottomNavigation = () => {
   const { user, isAuthenticated, logout, isAdmin, isOrganizer } = useAuth();
@@ -71,6 +72,13 @@ const BottomNavigation = () => {
           <span>Metas</span>
         </Link>
 
+        {(isAdmin || isOrganizer) && (
+          <Link to="/marca" className={`mobile-nav-item ${location.pathname.includes('/marca') ? 'active' : ''}`}>
+            <Palette size={20} />
+            <span>Marca</span>
+          </Link>
+        )}
+
         {isAuthenticated ? (
           <button onClick={logout} className="mobile-nav-item" style={{ background: 'none', border: 'none' }}>
             <LogOut size={20} />
@@ -109,10 +117,16 @@ const BottomNavigation = () => {
       )}
 
       {isAuthenticated && (isAdmin || isOrganizer) && (
-        <Link to="/admin" className={`mobile-nav-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
-          <ShieldAlert size={20} />
-          <span>{isOrganizer ? 'Organizador' : 'Admin'}</span>
-        </Link>
+        <>
+          <Link to="/admin" className={`mobile-nav-item ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
+            <ShieldAlert size={20} />
+            <span>{isOrganizer ? 'Organizador' : 'Admin'}</span>
+          </Link>
+          <Link to="/marca" className={`mobile-nav-item ${location.pathname.includes('/marca') ? 'active' : ''}`}>
+            <Palette size={20} />
+            <span>Marca</span>
+          </Link>
+        </>
       )}
 
       {isAuthenticated ? (
@@ -316,6 +330,14 @@ const Sidebar = () => {
             </>
           )}
 
+          {/* Configuración Global de Marca Blanca y Staff para Administrador u Organizador */}
+          {(isAdmin || isOrganizer) && (
+            <Link to="/marca" className={`sidebar-item ${location.pathname.includes('/marca') ? 'active' : ''}`} style={{ marginTop: '6px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
+              <Palette size={18} />
+              <span>Mi Marca & Staff</span>
+            </Link>
+          )}
+
           {isAuthenticated ? (
             <button onClick={logout} className="sidebar-item" style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', marginTop: '10px' }}>
               <LogOut size={18} />
@@ -456,6 +478,32 @@ const AppContent = () => {
               element={
                 <PrivateRoute allowedRoles={['admin', 'organizer']}>
                   <PrintStickers />
+                </PrivateRoute>
+              } 
+            />
+
+            {/* Rutas Configuración de Marca Blanca y Staff */}
+            <Route 
+              path="/marca" 
+              element={
+                <PrivateRoute allowedRoles={['admin', 'organizer']}>
+                  <BrandSettings />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/:tenant/marca" 
+              element={
+                <PrivateRoute allowedRoles={['admin', 'organizer']}>
+                  <BrandSettings />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/admin/marca" 
+              element={
+                <PrivateRoute allowedRoles={['admin', 'organizer']}>
+                  <BrandSettings />
                 </PrivateRoute>
               } 
             />

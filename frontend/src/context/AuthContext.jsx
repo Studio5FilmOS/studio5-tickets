@@ -21,6 +21,10 @@ export const AuthProvider = ({ children }) => {
           if (res.data.status === 'OK') {
             setUser(res.data.user);
             localStorage.setItem('studio5_user', JSON.stringify(res.data.user));
+            if (res.data.user?.theme_config) {
+              const tc = typeof res.data.user.theme_config === 'string' ? res.data.user.theme_config : JSON.stringify(res.data.user.theme_config);
+              localStorage.setItem('studio5_theme_config', tc);
+            }
           }
         } catch (err) {
           console.error('Error al restaurar sesión:', err);
@@ -42,6 +46,10 @@ export const AuthProvider = ({ children }) => {
         const { token, user: loggedUser } = res.data;
         localStorage.setItem('studio5_token', token);
         localStorage.setItem('studio5_user', JSON.stringify(loggedUser));
+        if (loggedUser?.theme_config) {
+          const tc = typeof loggedUser.theme_config === 'string' ? loggedUser.theme_config : JSON.stringify(loggedUser.theme_config);
+          localStorage.setItem('studio5_theme_config', tc);
+        }
         setUser(loggedUser);
         return { success: true };
       }

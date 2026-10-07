@@ -155,6 +155,14 @@ const applyMigrations = async () => {
     );
   `);
 
+  await safe("ALTER TABLE logistics_staff_assignments ADD COLUMN IF NOT EXISTS batch_start_code VARCHAR(50);");
+  await safe("ALTER TABLE logistics_staff_assignments ADD COLUMN IF NOT EXISTS batch_end_code VARCHAR(50);");
+  await safe("ALTER TABLE logistics_staff_assignments ADD COLUMN IF NOT EXISTS quantity_assigned INTEGER DEFAULT 0;");
+  await safe("ALTER TABLE logistics_items ADD COLUMN IF NOT EXISTS delivered_quantity INTEGER DEFAULT 0;");
+  await safe("ALTER TABLE users ADD COLUMN IF NOT EXISTS workgroup_organizer_id UUID REFERENCES users(id) ON DELETE SET NULL;");
+  await safe("ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_config JSONB DEFAULT '{\"primaryColor\": \"#DEB841\", \"tenantName\": \"\"}'::jsonb;");
+  await safe("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_slug VARCHAR(100);");
+
   console.log('✅ Migraciones de columnas y tablas aplicadas correctamente.');
 };
 

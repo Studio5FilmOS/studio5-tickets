@@ -276,3 +276,132 @@ exports.updateMyGuaranteeCard = async (req, res) => {
     res.status(500).json({ status: 'ERROR', message: err.message });
   }
 };
+
+// 9. Obtener el personal de Staff propio del Organizador (o todos si es Admin)
+exports.getMyStaff = async (req, res) => {
+  try {
+    const organizerId = req.user.id;
+    let result;
+    if (req.user.role === 'admin') {
+      result = await query(
+        "SELECT id, name, email, phone, role, created_at FROM users WHERE role = 'staff' ORDER BY name ASC"
+      );
+    } else {
+      result = await query(
+        "SELECT id, name, email, phone, role, created_at FROM users WHERE role = 'staff' AND workgroup_organizer_id = $1 ORDER BY name ASC",
+        [organizerId]
+      );
+    }
+    res.json({ status: 'OK', staff: result.rows });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: err.message });
+  }
+};
+
+// 10. Crear nuevo personal de Staff subordinado al Organizador
+exports.createMyStaff = async (req, res) => {
+  try {
+    const organizerId = req.user.id;
+    const { name, email, phone, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ status: 'ERROR', message: 'Nombre, correo y contraseña son obligatorios.' });
+    }
+    const cleanEmail = email.toLowerCase().trim();
+    const exists = await query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+    if (exists.rows.length > 0) {
+      return res.status(400).json({ status: 'ERROR', message: 'El correo electrónico ya está registrado en el sistema.' });
+    }
+    const hash = await bcrypt.hash(password, 10);
+    const result = await query(
+      `INSERT INTO users (name, email, phone, password_hash, role, is_verified, workgroup_organizer_id, module_logistics, module_cartelera)
+       VALUES ($1, $2, $3, $4, 'staff', TRUE, $5, TRUE, TRUE)
+       RETURNING id, name, email, phone, role, created_at`,
+      [name.trim(), cleanEmail, phone || null, hash, organizerId]
+    );
+    res.status(201).json({ status: 'OK', message: 'Personal de Staff creado exitosamente.', staff: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: err.message });
+  }
+};
+
+// 11. Eliminar personal de Staff del equipo
+exports.deleteMyStaff = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const organizerId = req.user.id;
+    let r;
+    if (req.user.role === 'admin') {
+      r = await query("DELETE FROM users WHERE id = $1 AND role = 'staff'", [id]);
+    } else {
+      r = await query("DELETE FROM users WHERE id = $1 AND role = 'staff' AND workgroup_organizer_id = $2", [id, organizerId]);
+    }
+    if (r.rowCount === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Usuario no encontrado o no pertenece a tu equipo de trabajo.' });
+    }
+    res.json({ status: 'OK', message: 'Staff eliminado con éxito.' });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: err.message });
+  }
+};
+
+// 12. Obtener configuración de marca blanca (Logo, slug, colores)
+exports.getMyBrand = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const result = await query(
+      "SELECT id, name, email, tenant_slug, theme_config FROM users WHERE id = $1",
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Usuario no encontrado.' });
+    }
+    res.json({ status: 'OK', brand: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: err.message });
+  }
+};
+
+// 13. Actualizar configuración de marca blanca
+exports.updateMyBrand = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { tenant_slug, theme_config, name } = req.body;
+    let cleanSlug = tenant_slug ? tenant_slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') : null;
+    if (cleanSlug) {
+      const conflict = await query("SELECT id FROM users WHERE tenant_slug = $1 AND id != $2", [cleanSlug, userId]);
+      if (conflict.rows.length > 0) {
+        return res.status(400).json({ status: 'ERROR', message: 'Este identificador de enlace ya está en uso por otra marca.' });
+      }
+    }
+    const result = await query(
+      `UPDATE users 
+       SET tenant_slug = COALESCE($1, tenant_slug), 
+           theme_config = COALESCE($2, theme_config),
+           name = COALESCE($3, name)
+       WHERE id = $4
+       RETURNING id, name, tenant_slug, theme_config`,
+      [cleanSlug, theme_config ? JSON.stringify(theme_config) : null, name ? name.trim() : null, userId]
+    );
+    res.json({ status: 'OK', message: 'Configuración de marca actualizada exitosamente.', brand: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: err.message });
+  }
+};
+
+// 14. Obtener información pública de una marca (Tenant)
+exports.getPublicTenant = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const cleanSlug = slug.trim().toLowerCase();
+    const result = await query(
+      "SELECT id, name, tenant_slug, theme_config FROM users WHERE tenant_slug = $1",
+      [cleanSlug]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Marca no encontrada.' });
+    }
+    res.json({ status: 'OK', tenant: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: err.message });
+  }
+};
