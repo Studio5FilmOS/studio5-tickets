@@ -44,7 +44,8 @@ const BottomNavigation = () => {
     location.pathname.startsWith('/boleto/') || 
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
-    location.pathname.startsWith('/payphone-redirect')
+    location.pathname.startsWith('/payphone-redirect') ||
+    location.pathname.endsWith('/belen')
   ) {
     return null;
   }
@@ -255,7 +256,8 @@ const Sidebar = () => {
     location.pathname.startsWith('/boleto/') || 
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
-    location.pathname.startsWith('/payphone-redirect')
+    location.pathname.startsWith('/payphone-redirect') ||
+    location.pathname.endsWith('/belen')
   ) {
     return null;
   }
@@ -375,6 +377,18 @@ const Sidebar = () => {
 
 const HeaderMobile = () => {
   const { theme } = useTheme();
+  const location = useLocation();
+
+  if (
+    location.pathname.startsWith('/boleto/') || 
+    location.pathname.startsWith('/orden/') || 
+    location.pathname.startsWith('/interaccion/') || 
+    location.pathname.startsWith('/payphone-redirect') ||
+    location.pathname.endsWith('/belen')
+  ) {
+    return null;
+  }
+
   return (
     <header className="mobile-header">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>

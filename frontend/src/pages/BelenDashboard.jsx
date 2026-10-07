@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { Sparkles, Moon, Flower2, BarChart3, RefreshCw, Maximize, Minimize, Layers } from 'lucide-react';
+import { Sparkles, Moon, Flower2, BarChart3, RefreshCw, Maximize, Minimize, Layers, ChevronLeft } from 'lucide-react';
 
 // ─── COMPONENTE ESTRELLA DE 5 PUNTAS (SVG) ──────────────────────────────────
 const ClassicStar = ({ isLit, index, total }) => {
@@ -81,6 +81,7 @@ const BloomingRose = ({ isLit, index }) => {
 
 const BelenDashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const [campaigns, setCampaigns] = useState([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
@@ -196,6 +197,26 @@ const BelenDashboard = () => {
       >
         {/* Selector de Campaña & Título */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button
+            onClick={() => navigate(-1)}
+            style={{
+              background: 'rgba(255,255,255,0.08)',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '8px',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+            onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+            title="Volver"
+          >
+            <ChevronLeft size={20} />
+          </button>
           <div>
             <span style={{ fontSize: '0.65rem', color: '#DEB841', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Sparkles size={12} /> Pantalla Oficial en Vivo
