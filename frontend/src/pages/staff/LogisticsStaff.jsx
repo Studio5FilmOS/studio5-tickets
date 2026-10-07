@@ -160,52 +160,96 @@ const LogisticsStaff = () => {
     }
   };
 
-  // 4. Iniciar Escáner de Cámara Automático
-  useEffect(() => {
-    // Si la modal está abierta, pausar el escaneo
-    if (floatingItem || showManualModal || !selectedCampaignId) {
-      return;
+  const startScanner = useCallback(async (cameraIdToUse) => {
+    if (html5ScannerRef.current) {
+      try {
+        await html5ScannerRef.current.stop();
+        html5ScannerRef.current.clear();
+      } catch (e) {
+        console.warn('Error al detener cámara previa:', e);
+      }
+      html5ScannerRef.current = null;
     }
 
-    let scanner = null;
-    const scannerTimer = setTimeout(() => {
+    try {
+      const devices = await Html5Qrcode.getCameras();
+      if (!devices || devices.length === 0) {
+        setIsScannerRunning(false);
+        return;
+      }
+      setCameras(devices);
+
+      let targetCameraId = cameraIdToUse || selectedCameraId;
+      if (!targetCameraId) {
+        const backCamera = devices.find(d =>
+          d.label.toLowerCase().includes('back') ||
+          d.label.toLowerCase().includes('trasera') ||
+          d.label.toLowerCase().includes('rear') ||
+          d.label.toLowerCase().includes('environment')
+        );
+        targetCameraId = backCamera ? backCamera.id : devices[devices.length - 1].id;
+        setSelectedCameraId(targetCameraId);
+      }
+
+      const html5QrCode = new Html5Qrcode('logistics-live-scanner');
+      html5ScannerRef.current = html5QrCode;
+
+      await html5QrCode.start(
+        { deviceId: { exact: targetCameraId } },
+        { fps: 15, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
+        (decodedText) => {
+          if (decodedText) handleProcessCode(decodedText);
+        },
+        () => {}
+      );
+      setIsScannerRunning(true);
+      setIsScannerReady(true);
+    } catch (err) {
       try {
-        const container = document.getElementById('logistics-live-scanner');
-        if (container) {
-          scanner = new Html5QrcodeScanner('logistics-live-scanner', {
-            fps: 15,
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-              return { width: Math.floor(minEdge * 0.72), height: Math.floor(minEdge * 0.72) };
-            },
-            rememberLastUsedCamera: true,
-            aspectRatio: 1.0
-          });
-
-          scanner.render((decodedText) => {
-            if (decodedText) {
-              handleProcessCode(decodedText);
-            }
-          }, (err) => {
-            // Ignorar errores comunes de búsqueda de frame
-          });
-
-          html5ScannerRef.current = scanner;
-          setIsScannerRunning(true);
-        }
-      } catch (e) {
-        console.warn('Error inicializando escáner:', e);
+        const html5QrCode = new Html5Qrcode('logistics-live-scanner');
+        html5ScannerRef.current = html5QrCode;
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          { fps: 15, qrbox: { width: 240, height: 240 } },
+          (decodedText) => {
+            if (decodedText) handleProcessCode(decodedText);
+          },
+          () => {}
+        );
+        setIsScannerRunning(true);
+        setIsScannerReady(true);
+      } catch (fallbackErr) {
+        console.warn('Error iniciando escáner de respaldo', fallbackErr);
+        setIsScannerRunning(false);
       }
-    }, 200);
+    }
+  }, [selectedCameraId]);
 
-    return () => {
-      clearTimeout(scannerTimer);
-      if (scanner) {
-        scanner.clear().catch(() => {});
-      }
-      setIsScannerRunning(false);
-    };
-  }, [floatingItem, showManualModal, selectedCampaignId]);
+  const stopScanner = useCallback(async () => {
+    if (html5ScannerRef.current) {
+      try {
+        await html5ScannerRef.current.stop();
+        html5ScannerRef.current.clear();
+      } catch (e) {}
+      html5ScannerRef.current = null;
+    }
+    setIsScannerRunning(false);
+  }, []);
+
+  useEffect(() => {
+    if (floatingItem || showManualModal || !selectedCampaignId) {
+      stopScanner();
+      return;
+    }
+    startScanner();
+    return () => stopScanner();
+  }, [floatingItem, showManualModal, selectedCampaignId, startScanner, stopScanner]);
+
+  const handleCameraChange = async (e) => {
+    const newId = e.target.value;
+    setSelectedCameraId(newId);
+    await startScanner(newId);
+  };
 
   // 5. Acción: Guardar Asignación Rápida
   const handleSaveRegistration = async (e) => {
@@ -349,16 +393,38 @@ const LogisticsStaff = () => {
 
       {/* ─── VISOR DE CÁMARA DIRECTA CON SENSOR Y LÁSER ────────────────────────── */}
       <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {cameras.length > 1 && (
+          <div style={{ maxWidth: '280px', margin: '0 auto 16px auto', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center', width: '100%' }}>
+            <label style={{ fontSize: '0.68rem', color: 'var(--accent)', fontWeight: 'bold' }}>📸 Cambiar Lente / Cámara</label>
+            <select 
+              value={selectedCameraId} 
+              onChange={handleCameraChange}
+              style={{ 
+                padding: '8px 12px', fontSize: '0.82rem', borderRadius: '12px', 
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', 
+                color: '#fff', cursor: 'pointer', textAlign: 'center', width: '100%'
+              }}
+            >
+              {cameras.map((cam) => (
+                <option key={cam.id} value={cam.id} style={{ background: '#111', color: '#fff' }}>
+                  {cam.label || `Cámara ${cam.id.slice(0,6)}...`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        
         <div 
           className="glass-panel" 
           style={{ 
-            position: 'relative', borderRadius: '22px', overflow: 'hidden', 
-            background: '#090a0f', border: '2px solid rgba(222,184,65,0.3)',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.6)', minHeight: '380px'
+            position: 'relative', borderRadius: '24px', overflow: 'hidden', 
+            background: '#000', border: '2px solid rgba(222,184,65,0.4)',
+            boxShadow: '0 0 50px rgba(222,184,65,0.18)',
+            width: '100%', maxWidth: '340px', aspectRatio: '1/1', margin: '0 auto', minHeight: 'auto'
           }}
         >
           {/* Contenedor del Escáner HTML5 */}
-          <div id="logistics-live-scanner" style={{ width: '100%', minHeight: '380px' }} />
+          <div id="logistics-live-scanner" style={{ width: '100%', height: '100%' }} />
 
           {/* HUD & Mira Láser Holográfica */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
