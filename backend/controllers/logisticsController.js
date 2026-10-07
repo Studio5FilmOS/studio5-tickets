@@ -18,10 +18,11 @@ exports.getCampaigns = async (req, res) => {
     `;
     const params = [];
 
-    // Si es organizador (no admin), sólo ver sus propias campañas
-    if (user && user.role === 'organizer') {
+    // Separación estricta por inquilino/organizador para todos los roles
+    if (user) {
+      const targetOrgId = user.role === 'staff' ? user.workgroup_organizer_id : user.id;
       sql += ' WHERE c.organizer_id = $1';
-      params.push(user.id);
+      params.push(targetOrgId);
     }
 
     sql += ' GROUP BY c.id, u.name ORDER BY c.created_at DESC';
@@ -36,13 +37,16 @@ exports.getCampaigns = async (req, res) => {
 // Obtener detalle de una campaña
 exports.getCampaignById = async (req, res) => {
   const { id } = req.params;
+  const user = req.user;
   try {
+    const targetOrgId = user?.role === 'staff' ? user.workgroup_organizer_id : user?.id;
+    
     const result = await query(
       `SELECT c.*, u.name as organizer_name 
        FROM logistics_campaigns c
        LEFT JOIN users u ON c.organizer_id = u.id
-       WHERE c.id = $1`,
-      [id]
+       WHERE c.id = $1 AND c.organizer_id = $2`,
+      [id, targetOrgId]
     );
 
     if (result.rows.length === 0) {
@@ -120,8 +124,10 @@ exports.createCampaign = async (req, res) => {
 // Eliminar campaña
 exports.deleteCampaign = async (req, res) => {
   const { id } = req.params;
+  const user = req.user;
   try {
-    await query('DELETE FROM logistics_campaigns WHERE id = $1', [id]);
+    const targetOrgId = user?.role === 'staff' ? user.workgroup_organizer_id : user?.id;
+    await query('DELETE FROM logistics_campaigns WHERE id = $1 AND organizer_id = $2', [id, targetOrgId]);
     res.json({ status: 'OK', message: 'Campaña eliminada correctamente.' });
   } catch (error) {
     res.status(500).json({ status: 'ERROR', message: error.message });
