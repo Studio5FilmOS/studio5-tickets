@@ -361,15 +361,13 @@ const LogisticsAdmin = () => {
                         <Users size={16} /> Asignar Staff & Lotes
                       </button>
 
-                      <a 
-                        href={`/${tenant || 'studio5'}/belen?cid=${camp.id}`}
-                        target="_blank"
-                        rel="noreferrer"
+                      <Link 
+                        to={`/${tenant || 'studio5'}/metas?cid=${camp.id}`}
                         className="btn-secondary" 
                         style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '9px', fontSize: '0.82rem', background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)', color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}
                       >
                         <ExternalLink size={16} /> Pantalla de Metas
-                      </a>
+                      </Link>
 
                       <button 
                         onClick={() => handleDeleteCampaign(camp.id, camp.name)} 

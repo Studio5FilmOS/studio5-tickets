@@ -45,7 +45,7 @@ const BottomNavigation = () => {
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
     location.pathname.startsWith('/payphone-redirect') ||
-    location.pathname.includes('/belen')
+    location.pathname.match(/\/(belen|metas|animated)/i)
   ) {
     return null;
   }
@@ -68,7 +68,7 @@ const BottomNavigation = () => {
           </Link>
         )}
 
-        <Link to={`/${tenantSlug}/belen`} className={`mobile-nav-item ${location.pathname.includes('/belen') ? 'active' : ''}`}>
+        <Link to={`/${tenantSlug}/metas`} className={`mobile-nav-item ${location.pathname.match(/\/(belen|metas|animated)/i) ? 'active' : ''}`}>
           <ExternalLink size={20} />
           <span>Metas</span>
         </Link>
@@ -257,7 +257,7 @@ const Sidebar = () => {
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
     location.pathname.startsWith('/payphone-redirect') ||
-    location.pathname.includes('/belen')
+    location.pathname.match(/\/(belen|metas|animated)/i)
   ) {
     return null;
   }
@@ -291,7 +291,7 @@ const Sidebar = () => {
                 </Link>
               )}
 
-              <Link to={`/${tenantSlug}/belen`} className={`sidebar-item ${location.pathname.includes('/belen') ? 'active' : ''}`}>
+              <Link to={`/${tenantSlug}/metas`} className={`sidebar-item ${location.pathname.match(/\/(belen|metas|animated)/i) ? 'active' : ''}`}>
                 <ExternalLink size={18} />
                 <span>Pantalla de Metas</span>
               </Link>
@@ -384,7 +384,7 @@ const HeaderMobile = () => {
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
     location.pathname.startsWith('/payphone-redirect') ||
-    location.pathname.includes('/belen')
+    location.pathname.match(/\/(belen|metas|animated)/i)
   ) {
     return null;
   }
@@ -408,7 +408,7 @@ const HeaderMobile = () => {
 
 const AppContent = () => {
   const location = useLocation();
-  const isStandalone = location.pathname.includes('/belen') || 
+  const isStandalone = location.pathname.match(/\/(belen|metas|animated)/i) || 
                        location.pathname.startsWith('/boleto/') || 
                        location.pathname.startsWith('/orden/') || 
                        location.pathname.startsWith('/interaccion/') || 
@@ -421,7 +421,9 @@ const AppContent = () => {
         <Route path="/orden/:code" element={<OrdenView />} />
         <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
         <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
+        <Route path="/:tenant/metas" element={<BelenDashboard />} />
         <Route path="/:tenant/belen" element={<BelenDashboard />} />
+        <Route path="/:tenant/animated" element={<BelenDashboard />} />
       </Routes>
     );
   }
