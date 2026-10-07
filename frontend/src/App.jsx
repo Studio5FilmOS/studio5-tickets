@@ -45,7 +45,7 @@ const BottomNavigation = () => {
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
     location.pathname.startsWith('/payphone-redirect') ||
-    location.pathname.endsWith('/belen')
+    location.pathname.includes('/belen')
   ) {
     return null;
   }
@@ -257,7 +257,7 @@ const Sidebar = () => {
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
     location.pathname.startsWith('/payphone-redirect') ||
-    location.pathname.endsWith('/belen')
+    location.pathname.includes('/belen')
   ) {
     return null;
   }
@@ -291,7 +291,7 @@ const Sidebar = () => {
                 </Link>
               )}
 
-              <Link to={`/${tenantSlug}/belen`} target="_blank" className={`sidebar-item ${location.pathname.includes('/belen') ? 'active' : ''}`}>
+              <Link to={`/${tenantSlug}/belen`} className={`sidebar-item ${location.pathname.includes('/belen') ? 'active' : ''}`}>
                 <ExternalLink size={18} />
                 <span>Pantalla de Metas</span>
               </Link>
@@ -384,7 +384,7 @@ const HeaderMobile = () => {
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
     location.pathname.startsWith('/payphone-redirect') ||
-    location.pathname.endsWith('/belen')
+    location.pathname.includes('/belen')
   ) {
     return null;
   }
