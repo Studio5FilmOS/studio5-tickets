@@ -407,6 +407,25 @@ const HeaderMobile = () => {
 };
 
 const AppContent = () => {
+  const location = useLocation();
+  const isStandalone = location.pathname.includes('/belen') || 
+                       location.pathname.startsWith('/boleto/') || 
+                       location.pathname.startsWith('/orden/') || 
+                       location.pathname.startsWith('/interaccion/') || 
+                       location.pathname.startsWith('/payphone-redirect');
+
+  if (isStandalone) {
+    return (
+      <Routes>
+        <Route path="/boleto/:code" element={<BoletoView />} />
+        <Route path="/orden/:code" element={<OrdenView />} />
+        <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
+        <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
+        <Route path="/:tenant/belen" element={<BelenDashboard />} />
+      </Routes>
+    );
+  }
+
   return (
     <div className="app-layout">
       <Sidebar />
@@ -416,15 +435,10 @@ const AppContent = () => {
           <Routes>
             <Route path="/" element={<Cartelera />} />
             <Route path="/evento/:id" element={<DetalleObra />} />
-            <Route path="/boleto/:code" element={<BoletoView />} />
-            <Route path="/orden/:code" element={<OrdenView />} />
             <Route path="/login" element={<Login />} />
             <Route path="/registro" element={<Register />} />
-            <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
-            <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
             <Route path="/terminos" element={<TermsAndPolicies />} />
             <Route path="/politicas" element={<TermsAndPolicies />} />
-            <Route path="/:tenant/belen" element={<BelenDashboard />} />
 
             {/* Portal del Cliente (Cualquier usuario autenticado) */}
             <Route 
