@@ -38,12 +38,21 @@ exports.getAllEvents = async (req, res) => {
   const isStaff = user && user.role === 'staff';
   const isOrganizer = user && user.role === 'organizer';
   const isManageMode = req.query.manage === 'true';
+  const tenantSlug = req.query.tenant;
 
   try {
     let sqlEvents;
     let params = [];
 
-    if (isOrganizer) {
+    if (tenantSlug) {
+      sqlEvents = `
+        SELECT e.* FROM events e
+        JOIN users u ON e.organizer_id = u.id
+        WHERE LOWER(u.tenant_slug) = LOWER($1) AND e.status = 'active' AND e.is_archived = FALSE
+        ORDER BY e.created_at DESC
+      `;
+      params = [tenantSlug];
+    } else if (isOrganizer) {
       // Un organizador NUNCA debe ver los eventos de Studio 5, SOLO sus propios eventos de marca blanca
       if (isManageMode) {
         sqlEvents = 'SELECT * FROM events WHERE organizer_id = $1 ORDER BY created_at DESC';

@@ -436,9 +436,17 @@ const AppContent = () => {
         <div className="app-page-wrapper">
           <Routes>
             <Route path="/" element={<Cartelera />} />
+            <Route path="/:tenant" element={<Cartelera />} />
+            
             <Route path="/evento/:id" element={<DetalleObra />} />
+            <Route path="/:tenant/evento/:id" element={<DetalleObra />} />
+            
             <Route path="/login" element={<Login />} />
+            <Route path="/:tenant/login" element={<Login />} />
+            
             <Route path="/registro" element={<Register />} />
+            <Route path="/:tenant/registro" element={<Register />} />
+            
             <Route path="/terminos" element={<TermsAndPolicies />} />
             <Route path="/politicas" element={<TermsAndPolicies />} />
 

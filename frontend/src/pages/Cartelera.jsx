@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { MapPin, Clock, ChevronRight, Ticket, Flame, Star, Sparkles, UserPlus, Lock, Phone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import VersionModal from '../components/VersionModal';
 import { getPublicSettings } from '../services/settingsService';
 
@@ -19,6 +20,7 @@ const getImageUrl = (url) => {
 
 const Cartelera = () => {
   const { user, isAuthenticated } = useAuth();
+  const { theme } = useTheme();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,7 +40,8 @@ const Cartelera = () => {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const res = await api.get('/events');
+        const url = theme.tenantSlug ? `/events?tenant=${theme.tenantSlug}` : '/events';
+        const res = await api.get(url);
         if (res.data.status === 'OK') {
           setEvents(res.data.events);
         }
@@ -61,7 +64,7 @@ const Cartelera = () => {
     };
     fetchEvents();
     fetchPromotion();
-  }, []);
+  }, [theme.tenantSlug]);
 
   const getNextSchedule = (schedules) => {
     if (!schedules || schedules.length === 0) return null;

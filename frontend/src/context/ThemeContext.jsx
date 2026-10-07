@@ -47,6 +47,43 @@ export const ThemeProvider = ({ children }) => {
     }
   });
 
+  const updateTheme = (newTheme) => {
+    const merged = { ...theme, ...newTheme };
+    setThemeState(merged);
+    try {
+      localStorage.setItem('studio5_theme_config', JSON.stringify(merged));
+    } catch (e) {
+      console.warn('Error saving theme to localStorage:', e);
+    }
+    applyThemeToCSS(merged);
+  };
+
+  useEffect(() => {
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const potentialSlug = pathParts[0];
+
+    const ignorePaths = ['login', 'registro', 'admin', 'mis-tickets', 'boleto', 'orden', 'staff', 'terminos', 'politicas', 'marca'];
+    
+    if (potentialSlug && !ignorePaths.includes(potentialSlug)) {
+      const fetchPublicBrand = async () => {
+        try {
+          const apiUrl = import.meta.env.VITE_API_URL || 'https://ticket.studio5film.com/api';
+          const res = await fetch(`${apiUrl}/users/tenant/${potentialSlug}`);
+          const data = await res.json();
+          if (data.status === 'OK' && data.tenant) {
+            const tc = data.tenant.theme_config;
+            const parsedConfig = typeof tc === 'string' ? JSON.parse(tc) : (tc || {});
+            const newTheme = { ...defaultTheme, ...parsedConfig, tenantName: data.tenant.name, tenantSlug: potentialSlug };
+            updateTheme(newTheme);
+          }
+        } catch (e) {
+          console.warn('Could not fetch public brand for slug:', potentialSlug, e);
+        }
+      };
+      fetchPublicBrand();
+    }
+  }, []);
+
   const applyThemeToCSS = (themeData) => {
     try {
       const data = themeData || defaultTheme;
@@ -75,17 +112,6 @@ export const ThemeProvider = ({ children }) => {
   useEffect(() => {
     applyThemeToCSS(theme);
   }, [theme]);
-
-  const updateTheme = (newTheme) => {
-    const merged = { ...theme, ...newTheme };
-    setThemeState(merged);
-    try {
-      localStorage.setItem('studio5_theme_config', JSON.stringify(merged));
-    } catch (e) {
-      console.warn('Error saving theme to localStorage:', e);
-    }
-    applyThemeToCSS(merged);
-  };
 
   const applyEventTheme = (eventThemeConfig) => {
     if (!eventThemeConfig) return;
