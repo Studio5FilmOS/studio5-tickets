@@ -193,7 +193,8 @@ const BelenDashboard = () => {
 
   const handleCopyPublicLink = () => {
     if (!selectedCampaignId) return;
-    const publicUrl = `${window.location.origin}/metas/live/${selectedCampaignId}`;
+    const tenantPrefix = params.tenant ? `/${params.tenant}` : '';
+    const publicUrl = `${window.location.origin}${tenantPrefix}/metas/live/${selectedCampaignId}`;
     navigator.clipboard.writeText(publicUrl);
     Swal.fire({
       icon: 'success',
@@ -218,12 +219,12 @@ const BelenDashboard = () => {
     return (
       <div 
         style={{ 
-          minHeight: '100vh', 
-          background: 'radial-gradient(ellipse at bottom, #0d1527 0%, #050608 100%)', 
+          width: '100%',
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center', 
-          padding: '24px 16px' 
+          padding: '28px 16px',
+          minHeight: 'calc(100vh - 160px)'
         }}
       >
         <div 
@@ -235,7 +236,8 @@ const BelenDashboard = () => {
             borderRadius: '24px', 
             textAlign: 'center',
             boxShadow: '0 25px 60px rgba(0,0,0,0.7)',
-            border: '1px solid rgba(222,184,65,0.25)'
+            border: '1px solid rgba(222,184,65,0.25)',
+            background: 'linear-gradient(145deg, rgba(22, 24, 34, 0.98), rgba(12, 13, 18, 0.99))'
           }}
         >
           <div 
@@ -321,7 +323,12 @@ const BelenDashboard = () => {
           {/* Botones Principales */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button
-              onClick={() => setIsLive(true)}
+              onClick={() => {
+                const liveUrl = selectedCampaignId 
+                  ? (params.tenant ? `/${params.tenant}/metas/live/${selectedCampaignId}` : `/metas/live/${selectedCampaignId}`)
+                  : (params.tenant ? `/${params.tenant}/metas/live/all` : `/metas/live/all`);
+                window.open(liveUrl, '_blank');
+              }}
               className="btn-primary"
               style={{
                 padding: '14px', borderRadius: '12px', fontSize: '0.95rem', fontWeight: 900,
@@ -341,16 +348,6 @@ const BelenDashboard = () => {
               }}
             >
               <Copy size={16} /> Copiar Enlace Público (TV / Proyector)
-            </button>
-
-            <button
-              onClick={() => navigate(-1)}
-              style={{
-                background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
-                fontSize: '0.8rem', padding: '8px', marginTop: '4px'
-              }}
-            >
-              ← Regresar al Panel
             </button>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -7,9 +7,9 @@ import {
   Camera, Keyboard, ArrowRightCircle, CheckCircle2, 
   PackageSearch, RefreshCw, AlertTriangle, Layers, X, 
   Plus, Minus, Check, Sparkles, UserCheck, Phone, User,
-  Search, ClipboardList, ChevronLeft, ChevronRight
+  Search, ClipboardList, ChevronLeft, ChevronRight, Power, Video
 } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 const playBeep = () => {
   try {
@@ -45,6 +45,9 @@ const LogisticsStaff = () => {
 
   // Escáner & Sensor
   const [isScannerRunning, setIsScannerRunning] = useState(false);
+  const [isStartingScanner, setIsStartingScanner] = useState(false);
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const [showCameraSelectModal, setShowCameraSelectModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualCodeInput, setManualCodeInput] = useState('');
   const html5ScannerRef = useRef(null);
@@ -188,52 +191,131 @@ const LogisticsStaff = () => {
     }
   };
 
-  // 4. Iniciar Escáner de Cámara Automático
-  useEffect(() => {
-    // Si la modal está abierta, pausar el escaneo
-    if (floatingItem || showManualModal || showRegistrationsModal || !selectedCampaignId) {
-      return;
-    }
+  // 4. Funciones y Control del Escáner
+  const isMobileDevice = () => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
+  };
 
-    let scanner = null;
-    const scannerTimer = setTimeout(() => {
+  const stopScanner = useCallback(async () => {
+    if (html5ScannerRef.current) {
       try {
-        const container = document.getElementById('logistics-live-scanner');
-        if (container) {
-          scanner = new Html5QrcodeScanner('logistics-live-scanner', {
+        if (html5ScannerRef.current.isScanning) {
+          await html5ScannerRef.current.stop();
+        }
+        html5ScannerRef.current.clear();
+      } catch (e) {
+        console.warn('Error al detener scanner:', e);
+      }
+      html5ScannerRef.current = null;
+    }
+    setIsScannerRunning(false);
+    setIsStartingScanner(false);
+  }, []);
+
+  const startCameraWithConfig = async (cameraConfig) => {
+    setIsStartingScanner(true);
+    await stopScanner();
+
+    setTimeout(async () => {
+      try {
+        const qrRegion = document.getElementById('logistics-live-scanner');
+        if (!qrRegion) {
+          setIsStartingScanner(false);
+          return;
+        }
+
+        const html5QrCode = new Html5Qrcode('logistics-live-scanner');
+        html5ScannerRef.current = html5QrCode;
+
+        await html5QrCode.start(
+          cameraConfig,
+          {
             fps: 15,
             qrbox: (viewfinderWidth, viewfinderHeight) => {
               const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
               return { width: Math.floor(minEdge * 0.72), height: Math.floor(minEdge * 0.72) };
             },
-            rememberLastUsedCamera: true,
             aspectRatio: 1.0
-          });
-
-          scanner.render((decodedText) => {
+          },
+          (decodedText) => {
             if (decodedText) {
               handleProcessCode(decodedText);
             }
-          }, (err) => {
-            // Ignorar errores comunes de búsqueda de frame
+          },
+          () => {} // Ignorar errores comunes de búsqueda de frame
+        );
+
+        setIsScannerRunning(true);
+      } catch (err) {
+        console.error('Error iniciando escáner:', err);
+        await stopScanner();
+        Swal.fire({
+          icon: 'warning',
+          title: 'Acceso a la Cámara',
+          text: 'No se pudo acceder a la cámara. Por favor verifica los permisos en tu navegador o selecciona otro lente.',
+          background: '#16171f',
+          color: '#fff',
+          confirmButtonColor: '#DEB841'
+        });
+      } finally {
+        setIsStartingScanner(false);
+      }
+    }, 120);
+  };
+
+  const handleStartScanClick = async () => {
+    if (isStartingScanner || isScannerRunning) return;
+
+    if (isMobileDevice()) {
+      // Móvil: Activar directamente la cámara trasera
+      await startCameraWithConfig({ facingMode: "environment" });
+    } else {
+      // PC: Consultar cámaras disponibles
+      try {
+        setIsStartingScanner(true);
+        const devices = await Html5Qrcode.getCameras();
+        setIsStartingScanner(false);
+
+        if (!devices || devices.length === 0) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Sin Cámara',
+            text: 'No se detectó ninguna cámara conectada en tu equipo.',
+            background: '#16171f',
+            color: '#fff',
+            confirmButtonColor: '#ef4444'
           });
-
-          html5ScannerRef.current = scanner;
-          setIsScannerRunning(true);
+          return;
         }
-      } catch (e) {
-        console.warn('Error inicializando escáner:', e);
-      }
-    }, 200);
 
-    return () => {
-      clearTimeout(scannerTimer);
-      if (scanner) {
-        scanner.clear().catch(() => {});
+        if (devices.length === 1) {
+          await startCameraWithConfig({ deviceId: { exact: devices[0].id } });
+        } else {
+          setAvailableCameras(devices);
+          setShowCameraSelectModal(true);
+        }
+      } catch (err) {
+        setIsStartingScanner(false);
+        console.warn('Error listando cámaras en PC:', err);
+        await startCameraWithConfig({ facingMode: "environment" });
       }
-      setIsScannerRunning(false);
+    }
+  };
+
+  // Pausar/Detener cámara si se abre alguna modal
+  useEffect(() => {
+    if (floatingItem || showManualModal || showRegistrationsModal) {
+      stopScanner();
+    }
+  }, [floatingItem, showManualModal, showRegistrationsModal, stopScanner]);
+
+  // Limpiar escáner al desmontar
+  useEffect(() => {
+    return () => {
+      stopScanner();
     };
-  }, [floatingItem, showManualModal, showRegistrationsModal, selectedCampaignId]);
+  }, [stopScanner]);
 
   // 5. Acción: Guardar Asignación Rápida
   const handleSaveRegistration = async (e) => {
@@ -400,38 +482,119 @@ const LogisticsStaff = () => {
           className="glass-panel" 
           style={{ 
             position: 'relative', borderRadius: '22px', overflow: 'hidden', 
-            background: '#090a0f', border: '2px solid rgba(222,184,65,0.3)',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.6)', minHeight: '380px'
+            background: '#090a0f', border: '2px solid rgba(222,184,65,0.35)',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.6)', minHeight: '380px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}
         >
-          {/* Contenedor del Escáner HTML5 */}
-          <div id="logistics-live-scanner" style={{ width: '100%', minHeight: '380px' }} />
+          {/* Contenedor nativo donde Html5Qrcode inyectará el video */}
+          <div 
+            id="logistics-live-scanner" 
+            style={{ 
+              width: '100%', 
+              minHeight: '380px',
+              display: isScannerRunning ? 'block' : 'none'
+            }} 
+          />
 
-          {/* HUD & Mira Láser Holográfica */}
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            
-            {/* Cuadro Objetivo Central */}
-            <div style={{ position: 'relative', width: '230px', height: '230px' }}>
-              {/* Esquinas Neón */}
-              <div style={{ position: 'absolute', top: 0, left: 0, width: '28px', height: '28px', borderTop: '4px solid var(--accent)', borderLeft: '4px solid var(--accent)', borderRadius: '4px 0 0 0' }} />
-              <div style={{ position: 'absolute', top: 0, right: 0, width: '28px', height: '28px', borderTop: '4px solid var(--accent)', borderRight: '4px solid var(--accent)', borderRadius: '0 4px 0 0' }} />
-              <div style={{ position: 'absolute', bottom: 0, left: 0, width: '28px', height: '28px', borderBottom: '4px solid var(--accent)', borderLeft: '4px solid var(--accent)', borderRadius: '0 0 0 4px' }} />
-              <div style={{ position: 'absolute', bottom: 0, right: 0, width: '28px', height: '28px', borderBottom: '4px solid var(--accent)', borderRight: '4px solid var(--accent)', borderRadius: '0 0 4px 0' }} />
-              
-              {/* Línea Láser Animada */}
-              <div className="scanner-laser-line" />
-            </div>
-
-            {/* Badge de Sensor Activo */}
+          {/* ESTADO EN REPOSO: Botón único Escanear y diseño premium */}
+          {!isScannerRunning && !isStartingScanner && (
             <div style={{
-              marginTop: '16px', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
-              padding: '6px 16px', borderRadius: '20px', border: '1px solid rgba(222,184,65,0.4)',
-              display: 'flex', alignItems: 'center', gap: '8px', color: '#fff', fontSize: '0.78rem', fontWeight: 700
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: '36px 20px', textAlign: 'center', gap: '14px', width: '100%'
             }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 10px #10b981' }} />
-              Sensor Activo · Apunta al código QR
+              <div style={{
+                width: '74px', height: '74px', borderRadius: '50%',
+                background: 'rgba(222,184,65,0.08)', border: '1px solid rgba(222,184,65,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 25px rgba(222,184,65,0.15)'
+              }}>
+                <Camera size={34} color="var(--accent)" />
+              </div>
+
+              <div>
+                <h4 style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 800, margin: '0 0 4px 0' }}>
+                  Escáner en Espera
+                </h4>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, maxWidth: '280px' }}>
+                  Activa la cámara para escanear el código QR del beneficiario o sticker.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleStartScanClick}
+                className="btn-primary"
+                style={{
+                  width: 'auto', minWidth: '180px', padding: '12px 28px',
+                  borderRadius: '12px', fontWeight: 800, fontSize: '0.92rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  marginTop: '6px'
+                }}
+              >
+                <Camera size={18} /> Escanear
+              </button>
             </div>
-          </div>
+          )}
+
+          {/* SPINNER DE INICIALIZACIÓN */}
+          {isStartingScanner && (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: '40px 20px', gap: '14px', zIndex: 10
+            }}>
+              <div className="spinner" style={{ width: '38px', height: '38px', borderTopColor: 'var(--accent)' }} />
+              <p style={{ color: 'var(--accent)', fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>
+                Iniciando sensor de cámara...
+              </p>
+            </div>
+          )}
+
+          {/* HUD & Mira Láser Holográfica (Visible solo al escanear) */}
+          {isScannerRunning && (
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              
+              {/* Cuadro Objetivo Central */}
+              <div style={{ position: 'relative', width: '230px', height: '230px' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, width: '28px', height: '28px', borderTop: '4px solid var(--accent)', borderLeft: '4px solid var(--accent)', borderRadius: '4px 0 0 0' }} />
+                <div style={{ position: 'absolute', top: 0, right: 0, width: '28px', height: '28px', borderTop: '4px solid var(--accent)', borderRight: '4px solid var(--accent)', borderRadius: '0 4px 0 0' }} />
+                <div style={{ position: 'absolute', bottom: 0, left: 0, width: '28px', height: '28px', borderBottom: '4px solid var(--accent)', borderLeft: '4px solid var(--accent)', borderRadius: '0 0 0 4px' }} />
+                <div style={{ position: 'absolute', bottom: 0, right: 0, width: '28px', height: '28px', borderBottom: '4px solid var(--accent)', borderRight: '4px solid var(--accent)', borderRadius: '0 0 4px 0' }} />
+                
+                {/* Línea Láser Animada */}
+                <div className="scanner-laser-line" />
+              </div>
+
+              {/* Badge de Sensor Activo */}
+              <div style={{
+                marginTop: '16px', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
+                padding: '6px 16px', borderRadius: '20px', border: '1px solid rgba(222,184,65,0.4)',
+                display: 'flex', alignItems: 'center', gap: '8px', color: '#fff', fontSize: '0.78rem', fontWeight: 700
+              }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 10px #10b981' }} />
+                Sensor Activo · Apunta al código QR
+              </div>
+            </div>
+          )}
+
+          {/* Botón flotante para Detener Escáner (cuando esté activo) */}
+          {isScannerRunning && (
+            <button
+              type="button"
+              onClick={stopScanner}
+              style={{
+                position: 'absolute', top: '12px', right: '12px',
+                background: 'rgba(0,0,0,0.75)', border: '1px solid rgba(255,255,255,0.15)',
+                backdropFilter: 'blur(8px)', borderRadius: '20px',
+                padding: '6px 14px', color: '#fff', fontSize: '0.75rem', fontWeight: 700,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                zIndex: 20
+              }}
+            >
+              <Power size={13} color="#ef4444" />
+              <span>Detener</span>
+            </button>
+          )}
 
           {/* Overlay de Carga si está consultando */}
           {isLookingUp && (
@@ -442,6 +605,72 @@ const LogisticsStaff = () => {
           )}
         </div>
       </div>
+
+      {/* ─── MODAL SELECTOR DE CÁMARA (PC) ──────────────────────────────────── */}
+      {showCameraSelectModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, padding: '16px'
+        }}>
+          <div 
+            className="glass-panel" 
+            style={{ 
+              width: '100%', maxWidth: '420px', padding: '24px',
+              background: 'linear-gradient(145deg, rgba(22, 24, 34, 0.98), rgba(12, 13, 18, 0.99))',
+              border: '1px solid rgba(222, 184, 65, 0.35)', borderRadius: '20px',
+              boxShadow: '0 25px 50px rgba(0,0,0,0.8), 0 0 30px rgba(222,184,65,0.15)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Video size={18} color="var(--accent)" />
+                <h3 style={{ color: '#fff', fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>
+                  Seleccionar Cámara
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowCameraSelectModal(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+                  width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#a1a1aa', cursor: 'pointer'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+              Se detectaron múltiples dispositivos de video. Elige la cámara con la que deseas escanear:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {availableCameras.map((cam, idx) => (
+                <button
+                  key={cam.id}
+                  onClick={async () => {
+                    setShowCameraSelectModal(false);
+                    await startCameraWithConfig({ deviceId: { exact: cam.id } });
+                  }}
+                  className="btn-secondary"
+                  style={{
+                    padding: '12px 14px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 700,
+                    display: 'flex', alignItems: 'center', gap: '10px', textAlign: 'left',
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                    color: '#fff', cursor: 'pointer', transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'rgba(222,184,65,0.08)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                >
+                  <Camera size={16} color="var(--accent)" />
+                  <span style={{ flex: 1 }}>{cam.label || `Cámara ${idx + 1}`}</span>
+                  <ArrowRightCircle size={16} color="var(--text-muted)" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── MODAL FLOTANTE / BOTTOM SHEET AL DETECTAR CÓDIGO ─────────────────── */}
       {floatingItem && (
@@ -774,82 +1003,138 @@ const LogisticsStaff = () => {
         }
       `}</style>
 
-      {/* ─── MODAL LISTA DE REGISTROS PARA STAFF (Item 4) ──────────────────── */}
+      {/* ─── MODAL LISTA DE REGISTROS PARA STAFF (Item 1 & 4) ──────────────────── */}
       {showRegistrationsModal && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '12px'
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '14px'
         }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '580px', height: '88vh', display: 'flex', flexDirection: 'column', padding: '16px', borderRadius: '18px', overflow: 'hidden' }}>
+          <div 
+            className="glass-panel" 
+            style={{ 
+              width: '100%', maxWidth: '620px', height: '88vh', display: 'flex', flexDirection: 'column', 
+              padding: '24px 20px', borderRadius: '24px', overflow: 'hidden',
+              background: 'linear-gradient(145deg, rgba(22, 24, 34, 0.98), rgba(12, 13, 18, 0.99))',
+              border: '1px solid rgba(222, 184, 65, 0.35)',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.85), 0 0 35px rgba(222, 184, 65, 0.12)'
+            }}
+          >
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div>
-                <h3 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>
-                  📋 Registros de Campaña
-                </h3>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  {staffRecordsTotal} tickets registrados
-                </span>
+            {/* Header del Modal */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '38px', height: '38px', borderRadius: '10px',
+                  background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <ClipboardList size={20} color="var(--accent)" />
+                </div>
+                <div>
+                  <h3 style={{ color: '#fff', fontSize: '1.15rem', fontWeight: 900, margin: 0, letterSpacing: '0.3px' }}>
+                    Registros de Campaña
+                  </h3>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    {staffRecordsTotal} tickets registrados en tiempo real
+                  </span>
+                </div>
               </div>
+
               <button
                 onClick={() => setShowRegistrationsModal(false)}
                 style={{
-                  background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '8px',
-                  width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', cursor: 'pointer'
+                  background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+                  width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#a1a1aa', cursor: 'pointer', transition: 'all 0.2s'
                 }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#a1a1aa'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
-            {/* Barra de Filtros y Búsqueda */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <Search size={15} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-                <input
-                  type="text"
-                  placeholder="Buscar código o nombre..."
-                  value={staffRecordsSearch}
-                  onChange={(e) => {
-                    setStaffRecordsSearch(e.target.value);
-                    setStaffRecordsPage(0);
-                    fetchStaffRecords(selectedCampaignId, 0, e.target.value, staffRecordsStatus);
-                  }}
-                  style={{
-                    width: '100%', padding: '8px 10px 8px 32px', borderRadius: '8px',
-                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                    color: '#fff', fontSize: '0.8rem', marginBottom: 0
-                  }}
-                />
-              </div>
-
-              <select
-                value={staffRecordsStatus}
+            {/* Barra de Búsqueda */}
+            <div style={{ position: 'relative', marginBottom: '12px' }}>
+              <Search size={16} color="var(--accent)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                placeholder="Buscar por código, beneficiario o celular..."
+                value={staffRecordsSearch}
                 onChange={(e) => {
-                  setStaffRecordsStatus(e.target.value);
+                  setStaffRecordsSearch(e.target.value);
                   setStaffRecordsPage(0);
-                  fetchStaffRecords(selectedCampaignId, 0, staffRecordsSearch, e.target.value);
+                  fetchStaffRecords(selectedCampaignId, 0, e.target.value, staffRecordsStatus);
                 }}
                 style={{
-                  padding: '8px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.78rem', marginBottom: 0
+                  width: '100%', padding: '10px 14px 10px 38px', borderRadius: '12px',
+                  background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#fff', fontSize: '0.84rem', marginBottom: 0, outline: 'none'
                 }}
-              >
-                <option value="ALL">Todos</option>
-                <option value="AVAILABLE">Disponibles</option>
-                <option value="DISPATCHED">Asignados</option>
-                <option value="RECEIVED">Entregados</option>
-              </select>
+                onFocus={(e) => { e.target.style.borderColor = 'var(--accent)'; e.target.style.boxShadow = '0 0 12px rgba(222,184,65,0.25)'; }}
+                onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; }}
+              />
+              {staffRecordsSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStaffRecordsSearch('');
+                    setStaffRecordsPage(0);
+                    fetchStaffRecords(selectedCampaignId, 0, '', staffRecordsStatus);
+                  }}
+                  style={{
+                    position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px'
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
 
-            {/* Listado con scroll */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {/* Filtros por Pestañas / Pills (Cero desplegables blancos) */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', overflowX: 'auto', paddingBottom: '2px' }}>
+              {[
+                { key: 'ALL', label: 'Todos' },
+                { key: 'AVAILABLE', label: 'Disponibles', color: '#94a3b8' },
+                { key: 'DISPATCHED', label: 'Asignados', color: '#38bdf8' },
+                { key: 'RECEIVED', label: 'Entregados', color: '#10b981' }
+              ].map(f => {
+                const isActive = staffRecordsStatus === f.key;
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => {
+                      setStaffRecordsStatus(f.key);
+                      setStaffRecordsPage(0);
+                      fetchStaffRecords(selectedCampaignId, 0, staffRecordsSearch, f.key);
+                    }}
+                    style={{
+                      padding: '6px 14px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 800,
+                      cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s',
+                      background: isActive ? 'linear-gradient(135deg, var(--accent) 0%, #b08d2b 100%)' : 'rgba(255,255,255,0.04)',
+                      color: isActive ? '#000' : (f.color || '#cbd5e1'),
+                      border: isActive ? '1px solid var(--accent)' : '1px solid rgba(255,255,255,0.08)',
+                      boxShadow: isActive ? '0 2px 12px rgba(222,184,65,0.35)' : 'none'
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Listado con scroll elegante */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
               {staffRecordsLoading ? (
-                <div className="spinner" style={{ margin: '50px auto' }}></div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: '12px' }}>
+                  <div className="spinner" style={{ width: '32px', height: '32px', borderTopColor: 'var(--accent)' }} />
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cargando registros...</span>
+                </div>
               ) : staffRecords.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                  No se encontraron registros.
+                <div style={{ textAlign: 'center', padding: '50px 16px', color: 'var(--text-muted)', fontSize: '0.85rem', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', border: '1px dashed rgba(255,255,255,0.08)' }}>
+                  No se encontraron tickets con los filtros aplicados.
                 </div>
               ) : (
                 staffRecords.map(item => {
@@ -858,42 +1143,52 @@ const LogisticsStaff = () => {
                   const isDone = item.status === 'RECEIVED';
                   const isDisp = item.status === 'DISPATCHED';
 
-                  const badgeColor = isDone ? '#10b981' : isDisp ? '#3b82f6' : '#94a3b8';
-                  const badgeBg = isDone ? 'rgba(16,185,129,0.12)' : isDisp ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.05)';
+                  const badgeColor = isDone ? '#10b981' : isDisp ? '#38bdf8' : '#94a3b8';
+                  const badgeBg = isDone ? 'rgba(16,185,129,0.12)' : isDisp ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.05)';
+                  const badgeBorder = isDone ? 'rgba(16,185,129,0.3)' : isDisp ? 'rgba(56,189,248,0.3)' : 'rgba(255,255,255,0.1)';
 
                   return (
                     <div 
                       key={item.id}
                       style={{
-                        padding: '10px 12px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)',
+                        padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.03)',
                         border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between',
-                        alignItems: 'center', gap: '10px'
+                        alignItems: 'center', gap: '12px', transition: 'all 0.2s'
                       }}
                     >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontWeight: 800, color: 'var(--accent)', fontSize: '0.85rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: 900, color: 'var(--accent)', fontSize: '0.92rem', letterSpacing: '0.5px' }}>
                             #{item.item_code}
                           </span>
-                          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 6px', borderRadius: '5px', background: badgeBg, color: badgeColor }}>
+                          <span style={{
+                            fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px',
+                            background: badgeBg, color: badgeColor, border: `1px solid ${badgeBorder}`
+                          }}>
                             {isDone ? 'Entregado' : isDisp ? 'Asignado' : 'Disponible'}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.82rem', color: '#fff', fontWeight: 600, marginTop: '2px' }}>
-                          {item.assigned_data?.nombre || <span style={{ color: 'var(--text-muted)' }}>Sin asignar</span>}
+
+                        <div style={{ fontSize: '0.86rem', color: '#f1f5f9', fontWeight: 700, marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.assigned_data?.nombre || <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Sin asignar</span>}
                         </div>
+
                         {item.assigned_data?.celular && (
-                          <div style={{ fontSize: '0.72rem', color: '#38bdf8', marginTop: '2px' }}>
-                            📞 {item.assigned_data.celular}
+                          <div style={{ fontSize: '0.74rem', color: '#38bdf8', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Phone size={12} />
+                            <span>{item.assigned_data.celular}</span>
                           </div>
                         )}
                       </div>
 
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff' }}>
+                      <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                        <div style={{
+                          fontSize: '0.88rem', fontWeight: 900,
+                          color: isDone ? '#10b981' : isDisp ? 'var(--accent)' : '#94a3b8'
+                        }}>
                           {delivered} / {assigned}
                         </div>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
                           artículos
                         </div>
                       </div>
@@ -904,28 +1199,38 @@ const LogisticsStaff = () => {
             </div>
 
             {/* Paginación */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              <span>{staffRecords.length} de {staffRecordsTotal}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <span>Página {staffRecordsPage + 1} ({staffRecords.length} de {staffRecordsTotal})</span>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button
+                  type="button"
                   disabled={staffRecordsPage === 0}
                   onClick={() => {
                     const p = staffRecordsPage - 1;
                     setStaffRecordsPage(p);
                     fetchStaffRecords(selectedCampaignId, p, staffRecordsSearch, staffRecordsStatus);
                   }}
-                  style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', cursor: 'pointer', opacity: staffRecordsPage === 0 ? 0.3 : 1 }}
+                  style={{
+                    padding: '6px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer',
+                    opacity: staffRecordsPage === 0 ? 0.3 : 1, fontWeight: 700
+                  }}
                 >
                   Prev
                 </button>
                 <button
+                  type="button"
                   disabled={(staffRecordsPage + 1) * 25 >= staffRecordsTotal}
                   onClick={() => {
                     const p = staffRecordsPage + 1;
                     setStaffRecordsPage(p);
                     fetchStaffRecords(selectedCampaignId, p, staffRecordsSearch, staffRecordsStatus);
                   }}
-                  style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', cursor: 'pointer', opacity: (staffRecordsPage + 1) * 25 >= staffRecordsTotal ? 0.3 : 1 }}
+                  style={{
+                    padding: '6px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer',
+                    opacity: (staffRecordsPage + 1) * 25 >= staffRecordsTotal ? 0.3 : 1, fontWeight: 700
+                  }}
                 >
                   Sig
                 </button>

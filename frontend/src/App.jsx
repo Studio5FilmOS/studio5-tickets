@@ -408,7 +408,7 @@ const HeaderMobile = () => {
 
 const AppContent = () => {
   const location = useLocation();
-  const isStandalone = location.pathname.match(/\/(belen|metas|animated)/i) || 
+  const isStandalone = location.pathname.includes('/live') || 
                        location.pathname.startsWith('/boleto/') || 
                        location.pathname.startsWith('/orden/') || 
                        location.pathname.startsWith('/interaccion/') || 
@@ -421,14 +421,8 @@ const AppContent = () => {
         <Route path="/orden/:code" element={<OrdenView />} />
         <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
         <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
-        <Route path="/metas" element={<BelenDashboard />} />
-        <Route path="/metas/:cid" element={<BelenDashboard />} />
         <Route path="/metas/live/:cid" element={<BelenDashboard />} />
-        <Route path="/:tenant/metas" element={<BelenDashboard />} />
-        <Route path="/:tenant/metas/:cid" element={<BelenDashboard />} />
         <Route path="/:tenant/metas/live/:cid" element={<BelenDashboard />} />
-        <Route path="/:tenant/belen" element={<BelenDashboard />} />
-        <Route path="/:tenant/animated" element={<BelenDashboard />} />
       </Routes>
     );
   }
@@ -550,6 +544,14 @@ const AppContent = () => {
                 </PrivateRoute>
               } 
             />
+
+            {/* Pantalla de Metas & Proyección (Dentro del Layout con Menú) */}
+            <Route path="/metas" element={<BelenDashboard />} />
+            <Route path="/metas/:cid" element={<BelenDashboard />} />
+            <Route path="/:tenant/metas" element={<BelenDashboard />} />
+            <Route path="/:tenant/metas/:cid" element={<BelenDashboard />} />
+            <Route path="/:tenant/belen" element={<BelenDashboard />} />
+            <Route path="/:tenant/animated" element={<BelenDashboard />} />
           </Routes>
         </div>
 
