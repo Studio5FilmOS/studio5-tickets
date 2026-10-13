@@ -5,7 +5,7 @@ import api from '../../services/api';
 import Swal from 'sweetalert2';
 import { 
   Package, Plus, Printer, Users, Palette, Settings, 
-  Trash2, CheckCircle2, Clock, Check, ExternalLink,
+  Trash2, CheckCircle2, Clock, Check, ExternalLink, Tv,
   ChevronDown, ChevronUp, Layers, Hash, Calendar, ArrowRight,
   FileSpreadsheet, Download, Search, X, ClipboardList, Filter,
   ChevronLeft, Phone
@@ -500,7 +500,7 @@ const LogisticsAdmin = () => {
                         className="btn-secondary" 
                         style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '9px', fontSize: '0.82rem', background: 'rgba(222,184,65,0.1)', border: '1px solid rgba(222,184,65,0.3)', color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}
                       >
-                        <ExternalLink size={16} /> Pantalla de Metas
+                        <Tv size={16} /> Pantalla de Metas
                       </Link>
 
                       <button 

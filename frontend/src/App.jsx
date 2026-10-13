@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
@@ -7,7 +7,7 @@ import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import { getPublicSettings } from './services/settingsService';
 import { 
   Play, ScanLine, Flame, ShieldAlert, LogIn, LogOut, Ticket, 
-  UserPlus, Phone, Lock, Layers, Package, CheckCircle2, ExternalLink, Palette 
+  UserPlus, Phone, Lock, Layers, Package, CheckCircle2, ExternalLink, Palette, Tv 
 } from 'lucide-react';
 
 // Importar Vistas (Pages)
@@ -69,7 +69,7 @@ const BottomNavigation = () => {
         )}
 
         <Link to={`/${tenantSlug}/metas`} className={`mobile-nav-item ${location.pathname.includes('/metas') ? 'active' : ''}`}>
-          <ExternalLink size={20} />
+          <Tv size={20} />
           <span>Metas</span>
         </Link>
 
@@ -292,7 +292,7 @@ const Sidebar = () => {
               )}
 
               <Link to={`/${tenantSlug}/metas`} className={`sidebar-item ${location.pathname.includes('/metas') ? 'active' : ''}`}>
-                <ExternalLink size={18} />
+                <Tv size={18} />
                 <span>Pantalla de Metas</span>
               </Link>
             </>
@@ -404,6 +404,17 @@ const HeaderMobile = () => {
       <WorkspaceSwitcher />
     </header>
   );
+};
+
+const TenantMetasRedirect = () => {
+  const { tenant } = useParams();
+  const location = useLocation();
+  return <Navigate to={`/${tenant}/metas${location.search}`} replace />;
+};
+
+const MetasRedirect = () => {
+  const location = useLocation();
+  return <Navigate to={`/metas${location.search}`} replace />;
 };
 
 const AppContent = () => {
@@ -560,8 +571,12 @@ const AppContent = () => {
             <Route path="/metas/:cid" element={<BelenDashboard />} />
             <Route path="/:tenant/metas" element={<BelenDashboard />} />
             <Route path="/:tenant/metas/:cid" element={<BelenDashboard />} />
-            <Route path="/:tenant/belen" element={<BelenDashboard />} />
-            <Route path="/:tenant/animated" element={<BelenDashboard />} />
+
+            {/* Redirecciones automáticas para URLs antiguas hacia /metas */}
+            <Route path="/belen" element={<MetasRedirect />} />
+            <Route path="/:tenant/belen" element={<TenantMetasRedirect />} />
+            <Route path="/animated" element={<MetasRedirect />} />
+            <Route path="/:tenant/animated" element={<TenantMetasRedirect />} />
           </Routes>
         </div>
 

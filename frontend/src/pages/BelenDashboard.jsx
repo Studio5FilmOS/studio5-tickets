@@ -323,19 +323,31 @@ const BelenDashboard = () => {
           {/* Botones Principales */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button
-              onClick={() => {
-                const liveUrl = selectedCampaignId 
-                  ? (params.tenant ? `/${params.tenant}/metas/live/${selectedCampaignId}` : `/metas/live/${selectedCampaignId}`)
-                  : (params.tenant ? `/${params.tenant}/metas/live/all` : `/metas/live/all`);
-                window.open(liveUrl, '_blank');
-              }}
+              onClick={() => setIsLive(true)}
               className="btn-primary"
               style={{
                 padding: '14px', borderRadius: '12px', fontSize: '0.95rem', fontWeight: 900,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
               }}
             >
-              <Play size={18} /> Lanzar Animación en Vivo
+              <Play size={18} /> Iniciar Animación en Esta Pantalla
+            </button>
+
+            <button
+              onClick={() => {
+                const liveUrl = selectedCampaignId 
+                  ? (params.tenant ? `/${params.tenant}/metas/live/${selectedCampaignId}` : `/metas/live/${selectedCampaignId}`)
+                  : (params.tenant ? `/${params.tenant}/metas/live/all` : `/metas/live/all`);
+                window.open(liveUrl, '_blank');
+              }}
+              className="btn-secondary"
+              style={{
+                padding: '12px', borderRadius: '12px', fontSize: '0.82rem', fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                background: 'rgba(255,255,255,0.06)', color: '#fff'
+              }}
+            >
+              <ExternalLink size={16} /> Abrir Ventana para TV / Proyector
             </button>
 
             <button
@@ -344,7 +356,7 @@ const BelenDashboard = () => {
               style={{
                 padding: '12px', borderRadius: '12px', fontSize: '0.82rem', fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                background: 'rgba(255,255,255,0.06)', color: '#fff'
+                background: 'rgba(255,255,255,0.03)', color: '#94a3b8'
               }}
             >
               <Copy size={16} /> Copiar Enlace Público (TV / Proyector)
@@ -369,6 +381,7 @@ const BelenDashboard = () => {
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
+        zIndex: 9999,
         background: activeTheme === 'belen' 
           ? 'radial-gradient(ellipse at bottom, #0d1527 0%, #050608 100%)'
           : activeTheme === 'garden'
