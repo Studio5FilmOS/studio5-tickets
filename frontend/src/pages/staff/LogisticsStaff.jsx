@@ -217,59 +217,98 @@ const LogisticsStaff = () => {
     setIsStartingScanner(true);
     await stopScanner();
 
-    setTimeout(async () => {
+    const qrRegion = document.getElementById('logistics-live-scanner');
+    if (!qrRegion) {
+      setIsStartingScanner(false);
+      return;
+    }
+
+    try {
+      const html5QrCode = new Html5Qrcode('logistics-live-scanner');
+      html5ScannerRef.current = html5QrCode;
+
+      await html5QrCode.start(
+        cameraConfig,
+        {
+          fps: 15,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            return { width: Math.floor(minEdge * 0.72), height: Math.floor(minEdge * 0.72) };
+          },
+          aspectRatio: 1.0
+        },
+        (decodedText) => {
+          if (decodedText) {
+            handleProcessCode(decodedText);
+          }
+        },
+        () => {} // Ignorar errores comunes de búsqueda de frame
+      );
+
+      setIsScannerRunning(true);
+    } catch (err) {
+      console.error('Error iniciando escáner con config:', cameraConfig, err);
+      throw err;
+    } finally {
+      setIsStartingScanner(false);
+    }
+  };
+
+  const startCameraDirectly = async () => {
+    setIsStartingScanner(true);
+    await stopScanner();
+
+    try {
+      // 1. Intentar enumerar cámaras y seleccionar la cámara trasera
       try {
-        const qrRegion = document.getElementById('logistics-live-scanner');
-        if (!qrRegion) {
-          setIsStartingScanner(false);
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          const backCamera = devices.find(d =>
+            d.label.toLowerCase().includes('back') ||
+            d.label.toLowerCase().includes('trasera') ||
+            d.label.toLowerCase().includes('rear') ||
+            d.label.toLowerCase().includes('environment')
+          );
+          const targetId = backCamera ? backCamera.id : devices[devices.length - 1].id;
+          await startCameraWithConfig({ deviceId: { exact: targetId } });
           return;
         }
-
-        const html5QrCode = new Html5Qrcode('logistics-live-scanner');
-        html5ScannerRef.current = html5QrCode;
-
-        await html5QrCode.start(
-          cameraConfig,
-          {
-            fps: 15,
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-              return { width: Math.floor(minEdge * 0.72), height: Math.floor(minEdge * 0.72) };
-            },
-            aspectRatio: 1.0
-          },
-          (decodedText) => {
-            if (decodedText) {
-              handleProcessCode(decodedText);
-            }
-          },
-          () => {} // Ignorar errores comunes de búsqueda de frame
-        );
-
-        setIsScannerRunning(true);
-      } catch (err) {
-        console.error('Error iniciando escáner:', err);
-        await stopScanner();
-        Swal.fire({
-          icon: 'warning',
-          title: 'Acceso a la Cámara',
-          text: 'No se pudo acceder a la cámara. Por favor verifica los permisos en tu navegador o selecciona otro lente.',
-          background: '#16171f',
-          color: '#fff',
-          confirmButtonColor: '#DEB841'
-        });
-      } finally {
-        setIsStartingScanner(false);
+      } catch (enumErr) {
+        console.warn('No se pudieron listar cámaras, probando facingMode directo:', enumErr);
       }
-    }, 120);
+
+      // 2. Si no enumeró o falló deviceId, intentar facingMode environment
+      try {
+        await startCameraWithConfig({ facingMode: "environment" });
+        return;
+      } catch (faceErr) {
+        console.warn('Fallo facingMode environment:', faceErr);
+      }
+
+      // 3. Fallback con cámara frontal o genérica
+      await startCameraWithConfig({ facingMode: "user" });
+    } catch (finalErr) {
+      console.error('Error total al iniciar cámara:', finalErr);
+      await stopScanner();
+      Swal.fire({
+        icon: 'warning',
+        title: 'Acceso a la Cámara',
+        text: 'No se pudo acceder a la cámara. Por favor verifica que diste permisos de cámara a la página en tu navegador.',
+        background: '#16171f',
+        color: '#fff',
+        confirmButtonColor: '#DEB841'
+      });
+    } finally {
+      setIsStartingScanner(false);
+    }
   };
 
   const handleStartScanClick = async () => {
     if (isStartingScanner || isScannerRunning) return;
 
     if (isMobileDevice()) {
-      // Móvil: Activar directamente la cámara trasera
-      await startCameraWithConfig({ facingMode: "environment" });
+      // Móvil: Activar directamente la cámara trasera sin retrasos
+      await startCameraDirectly();
     } else {
       // PC: Consultar cámaras disponibles
       try {
@@ -298,7 +337,7 @@ const LogisticsStaff = () => {
       } catch (err) {
         setIsStartingScanner(false);
         console.warn('Error listando cámaras en PC:', err);
-        await startCameraWithConfig({ facingMode: "environment" });
+        await startCameraDirectly();
       }
     }
   };
@@ -487,21 +526,24 @@ const LogisticsStaff = () => {
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}
         >
-          {/* Contenedor nativo donde Html5Qrcode inyectará el video */}
+          {/* Contenedor nativo donde Html5Qrcode inyectará el video (siempre renderizado con dimensiones para visor) */}
           <div 
             id="logistics-live-scanner" 
             style={{ 
               width: '100%', 
               minHeight: '380px',
-              display: isScannerRunning ? 'block' : 'none'
+              height: '100%'
             }} 
           />
 
-          {/* ESTADO EN REPOSO: Botón único Escanear y diseño premium */}
+          {/* ESTADO EN REPOSO: Botón único Escanear sobre overlay */}
           {!isScannerRunning && !isStartingScanner && (
             <div style={{
+              position: 'absolute', inset: 0,
+              background: '#090a0f',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '36px 20px', textAlign: 'center', gap: '14px', width: '100%'
+              padding: '36px 20px', textAlign: 'center', gap: '14px', width: '100%',
+              zIndex: 10
             }}>
               <div style={{
                 width: '74px', height: '74px', borderRadius: '50%',
@@ -529,7 +571,7 @@ const LogisticsStaff = () => {
                   width: 'auto', minWidth: '180px', padding: '12px 28px',
                   borderRadius: '12px', fontWeight: 800, fontSize: '0.92rem',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  marginTop: '6px'
+                  marginTop: '6px', cursor: 'pointer'
                 }}
               >
                 <Camera size={18} /> Escanear
@@ -540,8 +582,10 @@ const LogisticsStaff = () => {
           {/* SPINNER DE INICIALIZACIÓN */}
           {isStartingScanner && (
             <div style={{
+              position: 'absolute', inset: 0,
+              background: 'rgba(9, 10, 15, 0.94)',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '40px 20px', gap: '14px', zIndex: 10
+              padding: '40px 20px', gap: '14px', zIndex: 12
             }}>
               <div className="spinner" style={{ width: '38px', height: '38px', borderTopColor: 'var(--accent)' }} />
               <p style={{ color: 'var(--accent)', fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>
@@ -1000,6 +1044,12 @@ const LogisticsStaff = () => {
         @keyframes slideUp {
           from { transform: translateY(100%); }
           to { transform: translateY(0); }
+        }
+        #logistics-live-scanner video {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: cover !important;
+          border-radius: 20px !important;
         }
       `}</style>
 

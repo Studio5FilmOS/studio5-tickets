@@ -45,7 +45,7 @@ const BottomNavigation = () => {
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
     location.pathname.startsWith('/payphone-redirect') ||
-    location.pathname.match(/\/(belen|metas|animated)/i)
+    location.pathname.includes('/live')
   ) {
     return null;
   }
@@ -68,7 +68,7 @@ const BottomNavigation = () => {
           </Link>
         )}
 
-        <Link to={`/${tenantSlug}/metas`} className={`mobile-nav-item ${location.pathname.match(/\/(belen|metas|animated)/i) ? 'active' : ''}`}>
+        <Link to={`/${tenantSlug}/metas`} className={`mobile-nav-item ${location.pathname.includes('/metas') ? 'active' : ''}`}>
           <ExternalLink size={20} />
           <span>Metas</span>
         </Link>
@@ -257,7 +257,7 @@ const Sidebar = () => {
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
     location.pathname.startsWith('/payphone-redirect') ||
-    location.pathname.match(/\/(belen|metas|animated)/i)
+    location.pathname.includes('/live')
   ) {
     return null;
   }
@@ -291,7 +291,7 @@ const Sidebar = () => {
                 </Link>
               )}
 
-              <Link to={`/${tenantSlug}/metas`} className={`sidebar-item ${location.pathname.match(/\/(belen|metas|animated)/i) ? 'active' : ''}`}>
+              <Link to={`/${tenantSlug}/metas`} className={`sidebar-item ${location.pathname.includes('/metas') ? 'active' : ''}`}>
                 <ExternalLink size={18} />
                 <span>Pantalla de Metas</span>
               </Link>
@@ -384,7 +384,7 @@ const HeaderMobile = () => {
     location.pathname.startsWith('/orden/') || 
     location.pathname.startsWith('/interaccion/') || 
     location.pathname.startsWith('/payphone-redirect') ||
-    location.pathname.match(/\/(belen|metas|animated)/i)
+    location.pathname.includes('/live')
   ) {
     return null;
   }
@@ -408,6 +408,16 @@ const HeaderMobile = () => {
 
 const AppContent = () => {
   const location = useLocation();
+  const { setActiveWorkspace, activeWorkspace } = useWorkspace();
+
+  useEffect(() => {
+    if (location.pathname.includes('/logistica') || location.pathname.includes('/metas') || location.pathname.includes('/belen')) {
+      if (activeWorkspace !== 'logistica') {
+        setActiveWorkspace('logistica');
+      }
+    }
+  }, [location.pathname, activeWorkspace, setActiveWorkspace]);
+
   const isStandalone = location.pathname.includes('/live') || 
                        location.pathname.startsWith('/boleto/') || 
                        location.pathname.startsWith('/orden/') || 
