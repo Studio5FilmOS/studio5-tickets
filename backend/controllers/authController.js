@@ -116,8 +116,18 @@ exports.verifyOtp = async (req, res) => {
 
     // Verificar si ya estaba verificado
     if (user.is_verified) {
+      let tenant_slug = user.tenant_slug;
+      let theme_config = user.theme_config;
+      if (user.role === 'staff' && user.workgroup_organizer_id) {
+        const orgRes = await query('SELECT tenant_slug, theme_config FROM users WHERE id = $1', [user.workgroup_organizer_id]);
+        if (orgRes.rows.length > 0) {
+          tenant_slug = orgRes.rows[0].tenant_slug;
+          theme_config = orgRes.rows[0].theme_config;
+        }
+      }
+
       const token = jwt.sign(
-        { id: user.id, name: user.name, email: user.email, role: user.role },
+        { id: user.id, name: user.name, email: user.email, role: user.role, workgroup_organizer_id: user.workgroup_organizer_id },
         process.env.JWT_SECRET || 'super_secreto_studio5_2026',
         { expiresIn: '30d' }
       );
@@ -134,7 +144,10 @@ exports.verifyOtp = async (req, res) => {
           token_tarjeta: user.token_tarjeta,
           debt_balance: user.debt_balance,
           module_cartelera: user.module_cartelera,
-          module_logistics: user.module_logistics
+          module_logistics: user.module_logistics,
+          tenant_slug,
+          theme_config,
+          workgroup_organizer_id: user.workgroup_organizer_id
         }
       });
     }
@@ -162,9 +175,19 @@ exports.verifyOtp = async (req, res) => {
       [user.id]
     );
 
+    let tenant_slug = user.tenant_slug;
+    let theme_config = user.theme_config;
+    if (user.role === 'staff' && user.workgroup_organizer_id) {
+      const orgRes = await query('SELECT tenant_slug, theme_config FROM users WHERE id = $1', [user.workgroup_organizer_id]);
+      if (orgRes.rows.length > 0) {
+        tenant_slug = orgRes.rows[0].tenant_slug;
+        theme_config = orgRes.rows[0].theme_config;
+      }
+    }
+
     // Emitir Token JWT
     const token = jwt.sign(
-      { id: user.id, name: user.name, email: user.email, role: user.role },
+      { id: user.id, name: user.name, email: user.email, role: user.role, workgroup_organizer_id: user.workgroup_organizer_id },
       process.env.JWT_SECRET || 'super_secreto_studio5_2026',
       { expiresIn: '30d' }
     );
@@ -183,8 +206,8 @@ exports.verifyOtp = async (req, res) => {
         debt_balance: user.debt_balance,
         module_cartelera: user.module_cartelera,
         module_logistics: user.module_logistics,
-        tenant_slug: user.tenant_slug,
-        theme_config: user.theme_config,
+        tenant_slug,
+        theme_config,
         workgroup_organizer_id: user.workgroup_organizer_id
       }
     });
@@ -326,9 +349,19 @@ exports.login = async (req, res) => {
       });
     }
 
+    let tenant_slug = user.tenant_slug;
+    let theme_config = user.theme_config;
+    if (user.role === 'staff' && user.workgroup_organizer_id) {
+      const orgRes = await query('SELECT tenant_slug, theme_config FROM users WHERE id = $1', [user.workgroup_organizer_id]);
+      if (orgRes.rows.length > 0) {
+        tenant_slug = orgRes.rows[0].tenant_slug;
+        theme_config = orgRes.rows[0].theme_config;
+      }
+    }
+
     // Firmar JWT
     const token = jwt.sign(
-      { id: user.id, name: user.name, email: user.email, role: user.role },
+      { id: user.id, name: user.name, email: user.email, role: user.role, workgroup_organizer_id: user.workgroup_organizer_id },
       process.env.JWT_SECRET || 'super_secreto_studio5_2026',
       { expiresIn: '30d' }
     );
@@ -347,8 +380,8 @@ exports.login = async (req, res) => {
         debt_balance: user.debt_balance,
         module_cartelera: user.module_cartelera,
         module_logistics: user.module_logistics,
-        tenant_slug: user.tenant_slug,
-        theme_config: user.theme_config,
+        tenant_slug,
+        theme_config,
         workgroup_organizer_id: user.workgroup_organizer_id
       }
     });
@@ -374,9 +407,19 @@ exports.getMe = async (req, res) => {
         message: 'Usuario no encontrado.'
       });
     }
+
+    const userData = userRes.rows[0];
+    if (userData.role === 'staff' && userData.workgroup_organizer_id) {
+      const orgRes = await query('SELECT tenant_slug, theme_config FROM users WHERE id = $1', [userData.workgroup_organizer_id]);
+      if (orgRes.rows.length > 0) {
+        userData.tenant_slug = orgRes.rows[0].tenant_slug;
+        userData.theme_config = orgRes.rows[0].theme_config;
+      }
+    }
+
     res.json({
       status: 'OK',
-      user: userRes.rows[0]
+      user: userData
     });
   } catch (err) {
     res.status(500).json({

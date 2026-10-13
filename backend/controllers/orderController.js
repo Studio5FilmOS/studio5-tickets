@@ -453,6 +453,7 @@ exports.createOrder = async (req, res) => {
 exports.getAllOrders = async (req, res) => {
   const user = req.user;
   const isOrganizer = user && user.role === 'organizer';
+  const isStaffWithOrg = user && user.role === 'staff' && user.workgroup_organizer_id;
 
   try {
     const { event_id, schedule_id, date_from, date_to } = req.query;
@@ -461,6 +462,9 @@ exports.getAllOrders = async (req, res) => {
 
     if (isOrganizer) {
       params.push(user.id);
+      conditions.push(`e.organizer_id = $${params.length}`);
+    } else if (isStaffWithOrg) {
+      params.push(user.workgroup_organizer_id);
       conditions.push(`e.organizer_id = $${params.length}`);
     }
 

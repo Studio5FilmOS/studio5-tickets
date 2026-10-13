@@ -24,7 +24,8 @@ router.get('/item/lookup', authMiddleware, roleMiddleware(['admin', 'organizer',
 router.post('/dispatch', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.dispatchItems);
 router.post('/receive', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.receiveItem);
 
-// Ruta de Métricas (Dashboard / Pantalla)
+// Ruta de Métricas y Campaña Pública (Dashboard / Pantalla en Vivo)
 router.get('/metrics/:campaign_id', logisticsController.getMetrics);
+router.get('/public/campaign/:id', logisticsController.getPublicCampaign);
 
 module.exports = router;

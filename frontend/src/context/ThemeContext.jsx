@@ -25,6 +25,7 @@ export const getContrastTextColor = (hexColor) => {
 const defaultTheme = {
   primaryColor: '#DEB841',
   secondaryColor: '#b08d2b',
+  bgColor: '#050505',
   textColor: '#FFFFFF',
   buttonStyle: 'gradient', // 'gradient' | 'solid'
   logoUrl: 'https://i.imgur.com/0z5756T.png',
@@ -90,20 +91,26 @@ export const ThemeProvider = ({ children }) => {
       const root = document.documentElement;
       const primary = (typeof data.primaryColor === 'string' && data.primaryColor) ? data.primaryColor : defaultTheme.primaryColor;
       const secondary = (typeof data.secondaryColor === 'string' && data.secondaryColor) ? data.secondaryColor : defaultTheme.secondaryColor;
+      const bgDark = (typeof data.bgColor === 'string' && data.bgColor) ? data.bgColor : defaultTheme.bgColor;
       const buttonStyle = data.buttonStyle || 'gradient';
       const btnTextColor = getContrastTextColor(primary);
       const titleTextColor = (typeof data.textColor === 'string' && data.textColor) ? data.textColor : '#FFFFFF';
-      const logoUrl = (typeof data.logoUrl === 'string' && data.logoUrl) ? data.logoUrl : defaultTheme.logoUrl;
+      
+      let rawLogo = (typeof data.logoUrl === 'string' && data.logoUrl) ? data.logoUrl : defaultTheme.logoUrl;
+      const formattedLogoUrl = (rawLogo && !rawLogo.startsWith('http://') && !rawLogo.startsWith('https://') && !rawLogo.startsWith('data:'))
+        ? `${(import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')}${rawLogo.startsWith('/') ? rawLogo : '/' + rawLogo}`
+        : rawLogo;
 
       root.style.setProperty('--primary-color', primary);
       root.style.setProperty('--accent', primary);
       root.style.setProperty('--accent-glow', `${primary}55`);
       root.style.setProperty('--secondary-color', secondary);
       root.style.setProperty('--accent-secondary', secondary);
+      root.style.setProperty('--bg-dark', bgDark);
       root.style.setProperty('--btn-text-color', btnTextColor);
       root.style.setProperty('--title-text-color', titleTextColor);
       root.style.setProperty('--btn-bg', buttonStyle === 'solid' ? primary : `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`);
-      root.style.setProperty('--logo-url', `url("${logoUrl}")`);
+      root.style.setProperty('--logo-url', `url("${formattedLogoUrl}")`);
     } catch (err) {
       console.warn('Error applying theme:', err);
     }

@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useParams, useLocation } from 'react-router-dom';
 import api from '../services/api';
-import { Sparkles, Moon, Flower2, BarChart3, RefreshCw, Maximize, Minimize, Layers, ChevronLeft } from 'lucide-react';
+import Swal from 'sweetalert2';
+import { 
+  Sparkles, Maximize, Minimize, ChevronLeft, 
+  Play, Copy, ExternalLink, Layers, CheckCircle2,
+  Flower2, Moon, BarChart3
+} from 'lucide-react';
 
 // ─── COMPONENTE ESTRELLA DE 5 PUNTAS (SVG) ──────────────────────────────────
 const ClassicStar = ({ isLit, index, total }) => {
@@ -82,9 +87,16 @@ const BloomingRose = ({ isLit, index }) => {
 const BelenDashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams();
+
+  // Detección de si debe iniciar directamente en modo Live (Enlace público o param live=true)
+  const isDirectLiveUrl = location.pathname.includes('/live') || searchParams.get('live') === 'true';
+  const [isLive, setIsLive] = useState(isDirectLiveUrl);
 
   const [campaigns, setCampaigns] = useState([]);
-  const [selectedCampaignId, setSelectedCampaignId] = useState('');
+  const [selectedCampaignId, setSelectedCampaignId] = useState(params.cid || searchParams.get('cid') || '');
+  const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [activeTheme, setActiveTheme] = useState('belen');
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -93,36 +105,60 @@ const BelenDashboard = () => {
   const [campaignTitle, setCampaignTitle] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // 1. Cargar Campañas disponibles
+  // 1. Cargar Campañas o Datos Públicos de la Campaña
   useEffect(() => {
-    const fetchCampaigns = async () => {
+    const initData = async () => {
+      const targetCid = params.cid || searchParams.get('cid');
+
       try {
+        // Intento 1: Cargar campañas disponibles autenticadas
         const res = await api.get('/logistics/campaigns');
         if (res.data?.status === 'OK' && res.data.data.length > 0) {
           setCampaigns(res.data.data);
-          const cidFromUrl = searchParams.get('cid');
-          if (cidFromUrl && res.data.data.some(c => c.id === cidFromUrl)) {
-            setSelectedCampaignId(cidFromUrl);
+          let chosen = null;
+          if (targetCid && res.data.data.some(c => c.id === targetCid)) {
+            chosen = res.data.data.find(c => c.id === targetCid);
           } else {
-            setSelectedCampaignId(res.data.data[0].id);
+            chosen = res.data.data[0];
+          }
+          if (chosen) {
+            setSelectedCampaignId(chosen.id);
+            setSelectedCampaign(chosen);
+            setCampaignTitle(chosen.name);
+            setActiveTheme(chosen.theme_config?.theme || 'belen');
           }
         }
-      } catch (err) {
-        console.error('Error al cargar campañas en metas:', err);
+      } catch (authErr) {
+        // Si no está autenticado (enlace público abierto en TV o proyector):
+        if (targetCid) {
+          try {
+            const pubRes = await api.get(`/logistics/public/campaign/${targetCid}`);
+            if (pubRes.data?.status === 'OK') {
+              const pubCamp = pubRes.data.data;
+              setSelectedCampaignId(pubCamp.id);
+              setSelectedCampaign(pubCamp);
+              setCampaignTitle(pubCamp.name);
+              setActiveTheme(pubCamp.theme_config?.theme || 'belen');
+            }
+          } catch (pubErr) {
+            console.error('Error cargando campaña pública:', pubErr);
+          }
+        }
       } finally {
         setLoading(false);
       }
     };
-    fetchCampaigns();
-  }, [searchParams]);
 
-  // 2. Cargar Métricas en tiempo real con polling cada 4 segundos
+    initData();
+  }, [params.cid, searchParams]);
+
+  // 2. Cargar Métricas en tiempo real con polling cada 3.5 segundos
   useEffect(() => {
     if (!selectedCampaignId) return;
 
     const fetchMetrics = async () => {
       try {
-        const camp = campaigns.find(c => c.id === selectedCampaignId);
+        const camp = campaigns.find(c => c.id === selectedCampaignId) || selectedCampaign;
         if (camp) {
           setCampaignTitle(camp.name);
           if (camp.theme_config?.theme) {
@@ -133,8 +169,9 @@ const BelenDashboard = () => {
         const res = await api.get(`/logistics/metrics/${selectedCampaignId}`);
         if (res.data?.status === 'OK') {
           const m = res.data.data;
-          setTotalItems(m.TOTAL || 0);
-          setReceivedItems(m.RECEIVED || 0);
+          setTotalItems(m.TOTAL || m.TOTAL_ITEMS || 0);
+          // Tomar unidades entregadas exactas (incluyendo parciales):
+          setReceivedItems(m.TOTAL_DELIVERED_UNITS ?? m.RECEIVED ?? 0);
         }
       } catch (err) {
         console.error('Error al obtener métricas en vivo:', err);
@@ -142,9 +179,9 @@ const BelenDashboard = () => {
     };
 
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, 4000);
+    const interval = setInterval(fetchMetrics, 3500);
     return () => clearInterval(interval);
-  }, [selectedCampaignId, campaigns]);
+  }, [selectedCampaignId, campaigns, selectedCampaign]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -154,11 +191,177 @@ const BelenDashboard = () => {
     }
   };
 
-  const percentage = totalItems > 0 ? Math.min(100, (receivedItems / totalItems) * 100).toFixed(1) : '0';
+  const handleCopyPublicLink = () => {
+    if (!selectedCampaignId) return;
+    const publicUrl = `${window.location.origin}/metas/live/${selectedCampaignId}`;
+    navigator.clipboard.writeText(publicUrl);
+    Swal.fire({
+      icon: 'success',
+      title: '¡Enlace Público Copiado!',
+      html: `
+        <p style="font-size: 0.9rem; color: #cbd5e1;">Puedes abrir este enlace en cualquier Smart TV o proyector sin necesidad de iniciar sesión:</p>
+        <code style="background: rgba(255,255,255,0.08); padding: 6px 10px; borderRadius: 8px; color: var(--accent); font-size: 0.8rem; word-break: break-all;">${publicUrl}</code>
+      `,
+      background: '#16171f',
+      color: '#fff',
+      confirmButtonColor: '#DEB841'
+    });
+  };
 
-  // Total de elementos para renderizar la cuadrícula (máximo 400 para rendimiento visual)
+  const percentage = totalItems > 0 ? Math.min(100, (receivedItems / totalItems) * 100).toFixed(1) : '0';
   const displayCount = Math.min(Math.max(totalItems, 20), 400);
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // MODO 1: PANEL / VENTANA PREVIA DE CONFIGURACIÓN Y SELECCIÓN (Item 6)
+  // ───────────────────────────────────────────────────────────────────────────
+  if (!isLive) {
+    return (
+      <div 
+        style={{ 
+          minHeight: '100vh', 
+          background: 'radial-gradient(ellipse at bottom, #0d1527 0%, #050608 100%)', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          padding: '24px 16px' 
+        }}
+      >
+        <div 
+          className="glass-panel" 
+          style={{ 
+            maxWidth: '560px', 
+            width: '100%', 
+            padding: '36px 28px', 
+            borderRadius: '24px', 
+            textAlign: 'center',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.7)',
+            border: '1px solid rgba(222,184,65,0.25)'
+          }}
+        >
+          <div 
+            style={{ 
+              width: '64px', height: '64px', borderRadius: '20px', 
+              background: 'rgba(222,184,65,0.15)', display: 'flex', alignItems: 'center', 
+              justifyContent: 'center', margin: '0 auto 16px', border: '1px solid rgba(222,184,65,0.3)' 
+            }}
+          >
+            <Sparkles size={32} color="#DEB841" />
+          </div>
+
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff', marginBottom: '8px' }}>
+            Pantalla de Metas & Proyección
+          </h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '24px', lineHeight: 1.5 }}>
+            Selecciona la campaña de entrega para lanzar la pantalla interactiva o copiar el enlace para proyector o Smart TV.
+          </p>
+
+          {/* Selector de Campaña */}
+          {campaigns.length > 0 && (
+            <div style={{ textAlign: 'left', marginBottom: '18px' }}>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <Layers size={14} /> Seleccionar Campaña
+              </label>
+              <select
+                value={selectedCampaignId}
+                onChange={(e) => {
+                  setSelectedCampaignId(e.target.value);
+                  setSearchParams({ cid: e.target.value });
+                  const c = campaigns.find(item => item.id === e.target.value);
+                  if (c) {
+                    setSelectedCampaign(c);
+                    setCampaignTitle(c.name);
+                    setActiveTheme(c.theme_config?.theme || 'belen');
+                  }
+                }}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: '12px', background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '0.92rem', fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                {campaigns.map(c => (
+                  <option key={c.id} value={c.id} style={{ background: '#161722', color: '#fff' }}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Tarjeta de Resumen con datos */}
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Modo Configurado:</span>
+              <span style={{ 
+                fontSize: '0.78rem', fontWeight: 800, padding: '4px 10px', borderRadius: '8px',
+                background: activeTheme === 'belen' ? 'rgba(222,184,65,0.15)' : activeTheme === 'garden' ? 'rgba(244,63,94,0.15)' : 'rgba(16,185,129,0.15)',
+                color: activeTheme === 'belen' ? '#DEB841' : activeTheme === 'garden' ? '#fda4af' : '#6ee7b7'
+              }}>
+                {activeTheme === 'belen' ? '🌟 Estrellas de Belén' : activeTheme === 'garden' ? '🌹 Jardín de Rosas' : '📊 Barra de Progreso'}
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Canjeados</span>
+                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#10b981', marginTop: '2px' }}>
+                  {receivedItems} <span style={{ fontSize: '0.9rem', color: '#64748b' }}>/ {totalItems}</span>
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(222,184,65,0.06)', border: '1px solid rgba(222,184,65,0.2)', padding: '12px', borderRadius: '10px', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.68rem', color: 'var(--accent)', textTransform: 'uppercase', fontWeight: 800 }}>Porcentaje</span>
+                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: 'var(--accent)', marginTop: '2px' }}>
+                  {percentage}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Botones Principales */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button
+              onClick={() => setIsLive(true)}
+              className="btn-primary"
+              style={{
+                padding: '14px', borderRadius: '12px', fontSize: '0.95rem', fontWeight: 900,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+              }}
+            >
+              <Play size={18} /> Lanzar Animación en Vivo
+            </button>
+
+            <button
+              onClick={handleCopyPublicLink}
+              className="btn-secondary"
+              style={{
+                padding: '12px', borderRadius: '12px', fontSize: '0.82rem', fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                background: 'rgba(255,255,255,0.06)', color: '#fff'
+              }}
+            >
+              <Copy size={16} /> Copiar Enlace Público (TV / Proyector)
+            </button>
+
+            <button
+              onClick={() => navigate(-1)}
+              style={{
+                background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
+                fontSize: '0.8rem', padding: '8px', marginTop: '4px'
+              }}
+            >
+              ← Regresar al Panel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // MODO 2: PANTALLA EN VIVO COMPLETA E INDEPENDIENTE (Item 7)
+  // Sin barras de Studio 5, con tema fijo configurado y botón para regresar
+  // ───────────────────────────────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -179,184 +382,82 @@ const BelenDashboard = () => {
       }}
     >
       
-      {/* ─── BARRA SUPERIOR FIJA NO INTRUSIVA ─────────────────────────────────── */}
+      {/* ─── BARRA FLOTANTE MÍNIMA Y NO INVASIVA ──────────────────────────────── */}
       <header
         style={{
           flexShrink: 0,
-          background: 'rgba(10, 12, 18, 0.85)',
+          background: 'rgba(10, 12, 18, 0.75)',
           backdropFilter: 'blur(16px)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-          padding: '12px 24px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          padding: '10px 20px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '16px',
-          zIndex: 100,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+          zIndex: 100
         }}
       >
-        {/* Selector de Campaña & Título */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* Botón discreto para regresar al panel */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => setIsLive(false)}
             style={{
               background: 'rgba(255,255,255,0.08)',
-              border: 'none',
+              border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: '8px',
-              padding: '8px',
+              padding: '6px 12px',
               color: '#fff',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
+              gap: '6px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
               transition: 'background 0.2s'
             }}
-            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
-            onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            title="Volver"
+            title="Volver al panel"
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={16} /> Regresar al Panel
           </button>
+
           <div>
-            <span style={{ fontSize: '0.65rem', color: '#DEB841', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Sparkles size={12} /> Pantalla Oficial en Vivo
+            <span style={{ fontSize: '0.62rem', color: '#DEB841', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Sparkles size={11} /> Proyección Oficial
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px' }}>
-              {campaigns.length > 0 ? (
-                <select
-                  value={selectedCampaignId}
-                  onChange={(e) => {
-                    setSelectedCampaignId(e.target.value);
-                    setSearchParams({ cid: e.target.value });
-                  }}
-                  style={{
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    color: '#fff',
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    fontWeight: 800,
-                    fontSize: '1rem',
-                    cursor: 'pointer',
-                    outline: 'none'
-                  }}
-                >
-                  {campaigns.map(c => (
-                    <option key={c.id} value={c.id} style={{ background: '#161722', color: '#fff' }}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <h2 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>Cargando campaña...</h2>
-              )}
-            </div>
+            <h2 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, color: '#fff' }}>
+              {campaignTitle || 'Campaña en Vivo'}
+            </h2>
           </div>
         </div>
 
-        {/* Contador Central Enorme */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        {/* Métricas y Porcentaje */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
-              Entregas Realizadas
+            <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
+              Entregas
             </span>
-            <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#DEB841', lineHeight: 1 }}>
-              {receivedItems} <span style={{ fontSize: '1.1rem', color: '#94a3b8' }}>/ {totalItems}</span>
+            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#DEB841', lineHeight: 1 }}>
+              {receivedItems} <span style={{ fontSize: '0.95rem', color: '#94a3b8' }}>/ {totalItems}</span>
             </div>
           </div>
 
-          {/* Pill Porcentaje */}
           <div
             style={{
               background: 'linear-gradient(135deg, rgba(222,184,65,0.2) 0%, rgba(222,184,65,0.05) 100%)',
               border: '1px solid rgba(222,184,65,0.4)',
-              borderRadius: '14px',
-              padding: '6px 16px',
+              borderRadius: '12px',
+              padding: '4px 14px',
               textAlign: 'center'
             }}
           >
-            <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff', lineHeight: 1 }}>
+            <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fff', lineHeight: 1 }}>
               {percentage}%
             </div>
-            <span style={{ fontSize: '0.62rem', color: '#DEB841', fontWeight: 800, textTransform: 'uppercase' }}>
-              Completado
+            <span style={{ fontSize: '0.58rem', color: '#DEB841', fontWeight: 800, textTransform: 'uppercase' }}>
+              Meta
             </span>
           </div>
-        </div>
 
-        {/* Selector de Tema & Fullscreen */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              borderRadius: '10px',
-              padding: '4px',
-              display: 'flex',
-              gap: '4px',
-              border: '1px solid rgba(255,255,255,0.1)'
-            }}
-          >
-            <button
-              onClick={() => setActiveTheme('belen')}
-              style={{
-                background: activeTheme === 'belen' ? 'rgba(222,184,65,0.25)' : 'transparent',
-                border: 'none',
-                color: activeTheme === 'belen' ? '#DEB841' : '#cbd5e1',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.78rem',
-                fontWeight: 700
-              }}
-              title="Estrellas de Belén"
-            >
-              <Moon size={14} /> Belén
-            </button>
-
-            <button
-              onClick={() => setActiveTheme('garden')}
-              style={{
-                background: activeTheme === 'garden' ? 'rgba(244,63,94,0.25)' : 'transparent',
-                border: 'none',
-                color: activeTheme === 'garden' ? '#fda4af' : '#cbd5e1',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.78rem',
-                fontWeight: 700
-              }}
-              title="Jardín de Rosas"
-            >
-              <Flower2 size={14} /> Rosas
-            </button>
-
-            <button
-              onClick={() => setActiveTheme('bar')}
-              style={{
-                background: activeTheme === 'bar' ? 'rgba(16,185,129,0.25)' : 'transparent',
-                border: 'none',
-                color: activeTheme === 'bar' ? '#6ee7b7' : '#cbd5e1',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.78rem',
-                fontWeight: 700
-              }}
-              title="Barra de Progreso"
-            >
-              <BarChart3 size={14} /> Barra
-            </button>
-          </div>
-
+          {/* Botón Fullscreen */}
           <button
             onClick={toggleFullscreen}
             style={{
@@ -364,7 +465,7 @@ const BelenDashboard = () => {
               border: '1px solid rgba(255,255,255,0.12)',
               color: '#cbd5e1',
               borderRadius: '8px',
-              padding: '8px 10px',
+              padding: '8px',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center'
@@ -376,7 +477,7 @@ const BelenDashboard = () => {
         </div>
       </header>
 
-      {/* ─── ÁREA PRINCIPAL DE VISUALIZACIÓN (CUADRÍCULA / MATRIZ) ─────────────── */}
+      {/* ─── ÁREA PRINCIPAL DE ANIMACIÓN EN VIVO (SIN MENÚS) ──────────────────── */}
       <main
         style={{
           flex: 1,
@@ -389,33 +490,33 @@ const BelenDashboard = () => {
         }}
       >
         {activeTheme === 'bar' ? (
-          /* VISTA BARRA */
+          /* VISTA 1: BARRA DE PROGRESO */
           <div style={{ width: '100%', maxWidth: '850px', textAlign: 'center' }}>
-            <h1 style={{ fontSize: '3rem', fontWeight: 900, marginBottom: '20px', color: '#fff' }}>
-              {campaignTitle || 'Progreso de Entregas'}
+            <h1 style={{ fontSize: '2.8rem', fontWeight: 900, marginBottom: '24px', color: '#fff', letterSpacing: '-0.5px' }}>
+              {campaignTitle}
             </h1>
             
-            <div style={{ width: '100%', height: '36px', background: 'rgba(255,255,255,0.08)', borderRadius: '18px', overflow: 'hidden', padding: '4px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 0 40px rgba(0,0,0,0.5)' }}>
+            <div style={{ width: '100%', height: '40px', background: 'rgba(255,255,255,0.08)', borderRadius: '20px', overflow: 'hidden', padding: '4px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 0 50px rgba(0,0,0,0.6)' }}>
               <div
                 style={{
                   width: `${percentage}%`,
                   height: '100%',
                   background: 'linear-gradient(90deg, #DEB841 0%, #10b981 100%)',
-                  borderRadius: '14px',
-                  boxShadow: '0 0 20px rgba(16,185,129,0.7)',
+                  borderRadius: '16px',
+                  boxShadow: '0 0 24px rgba(16,185,129,0.7)',
                   transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)'
                 }}
               />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', color: '#94a3b8', fontSize: '1.2rem', fontWeight: 700 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '18px', color: '#94a3b8', fontSize: '1.2rem', fontWeight: 700 }}>
               <span>0 canastas</span>
               <span style={{ color: '#fff', fontSize: '1.8rem', fontWeight: 900 }}>{receivedItems} Entregadas</span>
               <span>{totalItems} Meta</span>
             </div>
           </div>
         ) : (
-          /* VISTA MATRIZ / CUADRÍCULA (BELÉN O JARDÍN) */
+          /* VISTA 2 O 3: MATRIZ DE ELEMENTOS (ESTRELLAS O ROSAS) */
           <div style={{ width: '100%', maxWidth: '1400px' }}>
             <div
               style={{

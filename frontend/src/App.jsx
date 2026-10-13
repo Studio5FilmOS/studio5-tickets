@@ -421,7 +421,12 @@ const AppContent = () => {
         <Route path="/orden/:code" element={<OrdenView />} />
         <Route path="/interaccion/:scheduleId" element={<PublicInteraction />} />
         <Route path="/payphone-redirect" element={<PayphoneRedirect />} />
+        <Route path="/metas" element={<BelenDashboard />} />
+        <Route path="/metas/:cid" element={<BelenDashboard />} />
+        <Route path="/metas/live/:cid" element={<BelenDashboard />} />
         <Route path="/:tenant/metas" element={<BelenDashboard />} />
+        <Route path="/:tenant/metas/:cid" element={<BelenDashboard />} />
+        <Route path="/:tenant/metas/live/:cid" element={<BelenDashboard />} />
         <Route path="/:tenant/belen" element={<BelenDashboard />} />
         <Route path="/:tenant/animated" element={<BelenDashboard />} />
       </Routes>
@@ -548,14 +553,16 @@ const AppContent = () => {
           </Routes>
         </div>
 
-        {/* Footer Sutil Marca Blanca */}
-        <footer className="whitelabel-footer" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <span>Powered by <strong>Studio 5 Tickets Pro v2.1.0</strong> &bull; Sistema de Boletaje Inteligente</span>
-          <span>&bull;</span>
-          <Link to="/terminos" style={{ color: 'var(--text-muted)', textDecoration: 'underline', fontSize: '0.75rem' }}>
-            Términos & Políticas de Marca Blanca
-          </Link>
-        </footer>
+        {/* Footer Sutil Plataforma (Item 3) */}
+        {!location.pathname.match(/\/(scan|pistas|logistica\/staff)/i) && (
+          <footer className="whitelabel-footer" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <span>Powered by <strong>Studio 5</strong> · Ticket Pro</span>
+            <span>&bull;</span>
+            <Link to="/terminos" style={{ color: 'var(--text-muted)', textDecoration: 'underline', fontSize: '0.75rem' }}>
+              Términos & Condiciones de la Plataforma
+            </Link>
+          </footer>
+        )}
       </div>
       <BottomNavigation />
     </div>

@@ -18,7 +18,10 @@ const BrandSettings = () => {
   const [tenantSlug, setTenantSlug] = useState(user?.tenant_slug || '');
   const [primaryColor, setPrimaryColor] = useState(theme?.primaryColor || '#DEB841');
   const [secondaryColor, setSecondaryColor] = useState(theme?.secondaryColor || '#b08d2b');
+  const [bgColor, setBgColor] = useState(theme?.bgColor || '#050505');
   const [logoUrl, setLogoUrl] = useState(theme?.logoUrl || '');
+  const [logoCompressMetrics, setLogoCompressMetrics] = useState('');
+  const [isCompressingLogo, setIsCompressingLogo] = useState(false);
   const [isSavingBrand, setIsSavingBrand] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -34,6 +37,110 @@ const BrandSettings = () => {
   });
   const [isCreatingStaff, setIsCreatingStaff] = useState(false);
 
+  // Helper para resolver URL absoluta de logotipo
+  const formatLogoUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+      return url;
+    }
+    const backendUrl = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '');
+    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    return `${backendUrl}${cleanUrl}`;
+  };
+
+  // Compresión inteligente del logotipo en cliente (Canvas)
+  const compressLogoImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 500; // Logotipo para web/móvil no necesita más de 500px
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Si es JPEG usamos 0.85, si es PNG/SVG/WebP preservamos transparencia
+          const format = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+          resolve(canvas.toDataURL(format, 0.85));
+        };
+        img.onerror = () => reject(new Error('No se pudo procesar la imagen seleccionada.'));
+        img.src = e.target.result;
+      };
+      reader.onerror = () => reject(new Error('Error al leer el archivo.'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Manejador de subida de logotipo
+  const handleLogoFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      Swal.fire('Formato Inválido', 'Por favor selecciona un archivo de imagen (PNG, JPG, WebP, SVG).', 'error');
+      return;
+    }
+
+    setIsCompressingLogo(true);
+    Swal.fire({
+      title: 'Comprimiendo logotipo...',
+      text: 'Ajustando dimensiones y peso ideal para tu marca',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    try {
+      const compressedBase64 = await compressLogoImage(file);
+      
+      const originalSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      const base64Length = compressedBase64.length - (compressedBase64.indexOf(',') + 1);
+      const compressedSizeKB = (Math.ceil(base64Length * 3 / 4) / 1024).toFixed(0);
+      const reduction = Math.max(0, Math.round((1 - (Math.ceil(base64Length * 3 / 4) / file.size)) * 100));
+      const metrics = `Optimizado: ${file.size > 1024*1024 ? originalSizeMB + 'MB' : (file.size/1024).toFixed(0) + 'KB'} → ${compressedSizeKB}KB (-${reduction}%)`;
+      setLogoCompressMetrics(metrics);
+
+      // Subir archivo optimizado al servidor
+      const res = await api.post('/events/upload', { image: compressedBase64, type: 'logo' });
+      Swal.close();
+
+      if (res.data?.status === 'OK' && res.data.url) {
+        setLogoUrl(res.data.url);
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'success',
+          title: 'Logo cargado y optimizado con éxito',
+          showConfirmButton: false,
+          timer: 2000
+        });
+      } else {
+        setLogoUrl(compressedBase64);
+      }
+    } catch (err) {
+      Swal.close();
+      console.error(err);
+      Swal.fire('Error', err.message || 'No se pudo subir el logotipo.', 'error');
+    } finally {
+      setIsCompressingLogo(false);
+    }
+  };
+
   // 1. Cargar configuración de marca existente
   useEffect(() => {
     const fetchBrand = async () => {
@@ -47,6 +154,7 @@ const BrandSettings = () => {
             const tc = typeof b.theme_config === 'string' ? JSON.parse(b.theme_config) : b.theme_config;
             if (tc.primaryColor) setPrimaryColor(tc.primaryColor);
             if (tc.secondaryColor) setSecondaryColor(tc.secondaryColor);
+            if (tc.bgColor) setBgColor(tc.bgColor);
             if (tc.logoUrl) setLogoUrl(tc.logoUrl);
           }
         }
@@ -86,6 +194,7 @@ const BrandSettings = () => {
       const themeConfig = {
         primaryColor,
         secondaryColor,
+        bgColor,
         logoUrl: logoUrl.trim(),
         tenantName: brandName.trim()
       };
@@ -195,7 +304,7 @@ const BrandSettings = () => {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '24px' }}>
 
         {/* ─── TARJETA 1: ENLACE DIRECTO & MARCA BLANCA ────────────────────────── */}
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -276,80 +385,276 @@ const BrandSettings = () => {
               />
             </div>
 
+            {/* ── SECCIÓN LOGOTIPO CON COMPRESOR ── */}
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                URL del Logotipo (PNG transparente recomendado):
+              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span>Logotipo Oficial (PNG Transparente / SVG / WebP):</span>
+                {logoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => { setLogoUrl(''); setLogoCompressMetrics(''); }}
+                    style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    ✕ Quitar logo
+                  </button>
+                )}
               </label>
-              <input 
-                type="url"
-                className="input-field"
-                value={logoUrl}
-                onChange={e => setLogoUrl(e.target.value)}
-                placeholder="https://..."
-              />
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                  Color Principal:
+              <div style={{
+                border: '2px dashed rgba(222,184,65,0.3)',
+                borderRadius: '14px',
+                padding: '16px',
+                textAlign: 'center',
+                background: 'rgba(255,255,255,0.02)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                {logoUrl && (
+                  <div style={{ padding: '8px 16px', background: 'rgba(0,0,0,0.4)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <img 
+                      src={formatLogoUrl(logoUrl)} 
+                      alt="Logo Preview" 
+                      style={{ maxHeight: '48px', maxWidth: '100%', objectFit: 'contain' }} 
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  </div>
+                )}
+
+                <input
+                  type="file"
+                  id="brand-logo-file-input"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={handleLogoFileChange}
+                  style={{ display: 'none' }}
+                />
+
+                <label
+                  htmlFor="brand-logo-file-input"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 18px',
+                    borderRadius: '10px',
+                    background: 'rgba(222,184,65,0.15)',
+                    border: '1px solid rgba(222,184,65,0.35)',
+                    color: 'var(--accent)',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: isCompressingLogo ? 'wait' : 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <ImageIcon size={18} /> {isCompressingLogo ? 'Comprimiendo...' : (logoUrl ? 'Cambiar y Comprimir Imagen' : 'Subir y Comprimir Logotipo')}
                 </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+                {logoCompressMetrics && (
+                  <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700, background: 'rgba(16,185,129,0.1)', padding: '4px 10px', borderRadius: '6px' }}>
+                    ⚡ {logoCompressMetrics}
+                  </div>
+                )}
+
+                <div style={{ width: '100%', marginTop: '4px' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                    O ingresar enlace URL directo si ya está alojado:
+                  </span>
                   <input 
-                    type="color" 
-                    value={primaryColor} 
-                    onChange={e => setPrimaryColor(e.target.value)}
-                    style={{ width: '40px', height: '40px', borderRadius: '8px', border: 'none', cursor: 'pointer', background: 'transparent' }}
-                  />
-                  <input 
-                    type="text" 
-                    value={primaryColor} 
-                    onChange={e => setPrimaryColor(e.target.value)}
-                    className="input-field" 
-                    style={{ textTransform: 'uppercase', fontSize: '0.82rem' }}
+                    type="url"
+                    className="input-field"
+                    value={logoUrl}
+                    onChange={e => setLogoUrl(e.target.value)}
+                    placeholder="https://ejemplo.com/logo.png"
+                    style={{ fontSize: '0.78rem', padding: '8px 10px' }}
                   />
                 </div>
               </div>
+            </div>
 
+            {/* ── PALETA DE COLORES VISUAL (Item 2) ── */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '14px' }}>
+                {/* Color Principal */}
+                <div>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, display: 'block', marginBottom: '6px' }}>
+                    Color Principal:
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Swatch visual con picker interactivo */}
+                    <div 
+                      title="Haz clic para seleccionar color"
+                      style={{ 
+                        position: 'relative', width: '42px', height: '42px', borderRadius: '10px', 
+                        backgroundColor: primaryColor, border: '2px solid rgba(255,255,255,0.3)', 
+                        boxShadow: `0 4px 12px ${primaryColor}55`, cursor: 'pointer', overflow: 'hidden', flexShrink: 0 
+                      }}
+                    >
+                      <input 
+                        type="color" 
+                        value={primaryColor} 
+                        onChange={e => setPrimaryColor(e.target.value)}
+                        style={{ position: 'absolute', top: '-10px', left: '-10px', width: '200%', height: '200%', opacity: 0, cursor: 'pointer' }}
+                      />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={primaryColor} 
+                      onChange={e => setPrimaryColor(e.target.value)}
+                      className="input-field" 
+                      style={{ textTransform: 'uppercase', fontSize: '0.82rem', fontWeight: 700 }}
+                    />
+                  </div>
+                </div>
+
+                {/* Color Secundario */}
+                <div>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, display: 'block', marginBottom: '6px' }}>
+                    Color Secundario:
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div 
+                      title="Haz clic para seleccionar color"
+                      style={{ 
+                        position: 'relative', width: '42px', height: '42px', borderRadius: '10px', 
+                        backgroundColor: secondaryColor, border: '2px solid rgba(255,255,255,0.3)', 
+                        boxShadow: `0 4px 12px ${secondaryColor}55`, cursor: 'pointer', overflow: 'hidden', flexShrink: 0 
+                      }}
+                    >
+                      <input 
+                        type="color" 
+                        value={secondaryColor} 
+                        onChange={e => setSecondaryColor(e.target.value)}
+                        style={{ position: 'absolute', top: '-10px', left: '-10px', width: '200%', height: '200%', opacity: 0, cursor: 'pointer' }}
+                      />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={secondaryColor} 
+                      onChange={e => setSecondaryColor(e.target.value)}
+                      className="input-field" 
+                      style={{ textTransform: 'uppercase', fontSize: '0.82rem', fontWeight: 700 }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Presets Rápidos de Marca */}
               <div>
-                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                  Color Secundario:
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                  Paletas populares predefinidas:
+                </span>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {[
+                    { name: 'Dorado', pri: '#DEB841', sec: '#b08d2b' },
+                    { name: 'Azul Real', pri: '#2563EB', sec: '#1D4ED8' },
+                    { name: 'Esmeralda', pri: '#10B981', sec: '#059669' },
+                    { name: 'Violeta', pri: '#8B5CF6', sec: '#6D28D9' },
+                    { name: 'Carmesí', pri: '#EF4444', sec: '#DC2626' },
+                    { name: 'Fucsia', pri: '#EC4899', sec: '#BE185D' }
+                  ].map(p => (
+                    <button
+                      key={p.name}
+                      type="button"
+                      onClick={() => { setPrimaryColor(p.pri); setSecondaryColor(p.sec); }}
+                      style={{
+                        padding: '4px 10px', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 700,
+                        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                        color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                      }}
+                    >
+                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: p.pri, display: 'inline-block' }}></span>
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── FONDO TOTAL DE LA PÁGINA (Item 2 - Consulta de Fondo) ── */}
+              <div style={{ marginTop: '6px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, display: 'block', marginBottom: '6px' }}>
+                  Fondo Total de la Plataforma:
                 </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input 
-                    type="color" 
-                    value={secondaryColor} 
-                    onChange={e => setSecondaryColor(e.target.value)}
-                    style={{ width: '40px', height: '40px', borderRadius: '8px', border: 'none', cursor: 'pointer', background: 'transparent' }}
-                  />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <div 
+                    title="Haz clic para seleccionar fondo"
+                    style={{ 
+                      position: 'relative', width: '42px', height: '42px', borderRadius: '10px', 
+                      backgroundColor: bgColor, border: '2px solid rgba(255,255,255,0.3)', 
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.6)', cursor: 'pointer', overflow: 'hidden', flexShrink: 0 
+                    }}
+                  >
+                    <input 
+                      type="color" 
+                      value={bgColor} 
+                      onChange={e => setBgColor(e.target.value)}
+                      style={{ position: 'absolute', top: '-10px', left: '-10px', width: '200%', height: '200%', opacity: 0, cursor: 'pointer' }}
+                    />
+                  </div>
                   <input 
                     type="text" 
-                    value={secondaryColor} 
-                    onChange={e => setSecondaryColor(e.target.value)}
+                    value={bgColor} 
+                    onChange={e => setBgColor(e.target.value)}
                     className="input-field" 
-                    style={{ textTransform: 'uppercase', fontSize: '0.82rem' }}
+                    style={{ textTransform: 'uppercase', fontSize: '0.82rem', fontWeight: 700 }}
                   />
+                </div>
+
+                {/* Presets de fondo */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Negro Puro', color: '#050505' },
+                    { label: 'Grafito Slate', color: '#0f1117' },
+                    { label: 'Azul Marino', color: '#0b1120' },
+                    { label: 'Púrpura Oscuro', color: '#120c1f' }
+                  ].map(b => (
+                    <button
+                      key={b.color}
+                      type="button"
+                      onClick={() => setBgColor(b.color)}
+                      style={{
+                        padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem',
+                        background: bgColor === b.color ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${bgColor === b.color ? 'var(--accent)' : 'rgba(255,255,255,0.08)'}`,
+                        color: bgColor === b.color ? '#fff' : 'var(--text-muted)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {b.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
 
             {/* Vista Previa de Estilo */}
             <div style={{
-              marginTop: '4px', padding: '16px', borderRadius: '12px',
-              background: `linear-gradient(135deg, ${primaryColor}22 0%, rgba(20,20,25,0.8) 100%)`,
+              marginTop: '8px', padding: '16px', borderRadius: '14px',
+              backgroundColor: bgColor,
+              background: `linear-gradient(135deg, ${primaryColor}22 0%, ${bgColor} 100%)`,
               border: `1px solid ${primaryColor}44`,
-              display: 'flex', alignItems: 'center', gap: '14px'
+              display: 'flex', alignItems: 'center', gap: '14px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
             }}>
               {logoUrl ? (
-                <img src={logoUrl} alt="Logo Preview" style={{ height: '36px', maxWidth: '80px', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                <img 
+                  src={formatLogoUrl(logoUrl)} 
+                  alt="Logo Preview" 
+                  style={{ height: '40px', maxWidth: '90px', objectFit: 'contain' }} 
+                  onError={(e) => { e.target.style.display = 'none'; }} 
+                />
               ) : (
-                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: primaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 900 }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: primaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 900 }}>
                   {brandName ? brandName.charAt(0).toUpperCase() : 'M'}
                 </div>
               )}
-              <div>
-                <div style={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{brandName || 'Tu Marca'}</div>
-                <div style={{ color: primaryColor, fontSize: '0.75rem', fontWeight: 600 }}>Vista previa de personalización</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {brandName || 'Tu Marca'}
+                </div>
+                <div style={{ color: primaryColor, fontSize: '0.75rem', fontWeight: 600 }}>
+                  Vista previa con colores y fondo activos
+                </div>
               </div>
             </div>
 

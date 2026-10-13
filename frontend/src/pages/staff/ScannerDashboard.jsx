@@ -36,37 +36,51 @@ const QRScannerTab = () => {
     }
 
     try {
-      const devices = await Html5Qrcode.getCameras();
-      if (!devices || devices.length === 0) {
-        Swal.fire('Sin cámara', 'No se encontró ninguna cámara en este dispositivo.', 'error');
-        return;
-      }
-      setCameras(devices);
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      let cameraConfig;
 
-      let targetCameraId = cameraIdToUse || selectedCameraId;
-      if (!targetCameraId) {
-        // Priorizar cámara trasera (environment)
-        const backCamera = devices.find(d =>
-          d.label.toLowerCase().includes('back') ||
-          d.label.toLowerCase().includes('trasera') ||
-          d.label.toLowerCase().includes('rear') ||
-          d.label.toLowerCase().includes('environment')
-        );
-        targetCameraId = backCamera ? backCamera.id : devices[devices.length - 1].id;
-        setSelectedCameraId(targetCameraId);
+      if (cameraIdToUse) {
+        cameraConfig = { deviceId: { exact: cameraIdToUse } };
+      } else if (isMobile) {
+        // En móviles, pedir directamente la cámara trasera sin obligar a elegir
+        cameraConfig = { facingMode: "environment" };
+      } else {
+        // En PC o escritorio, enumerar cámaras disponibles
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          setCameras(devices);
+          const backCamera = devices.find(d =>
+            d.label.toLowerCase().includes('back') ||
+            d.label.toLowerCase().includes('trasera') ||
+            d.label.toLowerCase().includes('rear') ||
+            d.label.toLowerCase().includes('environment')
+          );
+          const targetCameraId = backCamera ? backCamera.id : devices[0].id;
+          setSelectedCameraId(targetCameraId);
+          cameraConfig = { deviceId: { exact: targetCameraId } };
+        } else {
+          cameraConfig = { facingMode: "environment" };
+        }
       }
 
       const html5QrCode = new Html5Qrcode(scannerContainerId);
       html5QrCodeRef.current = html5QrCode;
 
       await html5QrCode.start(
-        { deviceId: { exact: targetCameraId } },
+        cameraConfig,
         { fps: 15, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
         onScanSuccess,
         () => {} // Silenciar errores de frame
       );
 
       setIsScanning(true);
+
+      // Si es móvil y no teníamos la lista de cámaras, cargarla de fondo para el selector
+      if (isMobile && cameras.length === 0) {
+        Html5Qrcode.getCameras().then(devs => {
+          if (devs && devs.length > 0) setCameras(devs);
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error('Error al iniciar cámara:', err);
       // Fallback: usar facingMode 'environment' directamente

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
 import { 
   Package, Plus, Printer, Users, Palette, Settings, 
   Trash2, CheckCircle2, Clock, Check, ExternalLink,
-  ChevronDown, ChevronUp, Layers, Hash, Calendar, ArrowRight
+  ChevronDown, ChevronUp, Layers, Hash, Calendar, ArrowRight,
+  FileSpreadsheet, Download, Search, X, ClipboardList, Filter,
+  ChevronLeft, Phone
 } from 'lucide-react';
 
 const LogisticsAdmin = () => {
@@ -24,6 +26,123 @@ const LogisticsAdmin = () => {
   const [staffAssignments, setStaffAssignments] = useState({}); // { [staff_id]: { assigned: bool, start: '', end: '', qty: 0 } }
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [isSavingAssignments, setIsSavingAssignments] = useState(false);
+
+  // Estado para visualización y búsqueda de registros (Item 4)
+  const [viewingRegistrationsCampaign, setViewingRegistrationsCampaign] = useState(null);
+  const [records, setRecords] = useState([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsSearch, setRecordsSearch] = useState('');
+  const [recordsStatus, setRecordsStatus] = useState('ALL');
+  const [recordsPage, setRecordsPage] = useState(0);
+  const [recordsTotal, setRecordsTotal] = useState(0);
+  const RECORDS_PER_PAGE = 25;
+
+  const fetchCampaignRecords = async (campaignId, page = 0, search = '', status = 'ALL') => {
+    if (!campaignId) return;
+    setRecordsLoading(true);
+    try {
+      const offset = page * RECORDS_PER_PAGE;
+      const q = new URLSearchParams({
+        limit: RECORDS_PER_PAGE,
+        offset,
+        status,
+        search
+      });
+      const res = await api.get(`/logistics/campaigns/${campaignId}/items?${q.toString()}`);
+      if (res.data?.status === 'OK') {
+        setRecords(res.data.data || []);
+        setRecordsTotal(res.data.total || 0);
+      }
+    } catch (err) {
+      console.error('Error fetching records:', err);
+    } finally {
+      setRecordsLoading(false);
+    }
+  };
+
+  const openRegistrationsModal = (campaign) => {
+    setViewingRegistrationsCampaign(campaign);
+    setRecordsSearch('');
+    setRecordsStatus('ALL');
+    setRecordsPage(0);
+    fetchCampaignRecords(campaign.id, 0, '', 'ALL');
+  };
+
+  const exportCampaignToExcel = async (campaign) => {
+    try {
+      Swal.fire({
+        title: 'Generando archivo Excel...',
+        text: 'Extrayendo todos los registros de la campaña.',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+      });
+
+      const res = await api.get(`/logistics/campaigns/${campaign.id}/items?export_all=true`);
+      const items = res.data?.data || [];
+
+      if (items.length === 0) {
+        Swal.fire('Sin registros', 'Esta campaña no contiene registros para exportar.', 'info');
+        return;
+      }
+
+      const headers = [
+        'Código',
+        'Estado',
+        'Beneficiario',
+        'Celular',
+        'Cantidad Asignada',
+        'Cantidad Entregada',
+        'Pendiente',
+        'Fecha Despacho',
+        'Despachado Por',
+        'Fecha Entrega',
+        'Entregado Por'
+      ];
+
+      const clean = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
+
+      const rows = items.map(item => {
+        const assigned = item.assigned_data?.cantidad ? parseInt(item.assigned_data.cantidad, 10) : (item.status === 'AVAILABLE' ? 0 : 1);
+        const delivered = parseInt(item.delivered_quantity || (item.status === 'RECEIVED' ? assigned : 0), 10);
+        const pending = Math.max(0, assigned - delivered);
+        const statusLabel = item.status === 'RECEIVED' ? 'Entregado' : item.status === 'DISPATCHED' ? 'Asignado / En Proceso' : 'Disponible';
+
+        return [
+          clean(item.item_code),
+          clean(statusLabel),
+          clean(item.assigned_data?.nombre || ''),
+          clean(item.assigned_data?.celular || ''),
+          clean(assigned),
+          clean(delivered),
+          clean(pending),
+          clean(item.dispatched_at ? new Date(item.dispatched_at).toLocaleString('es-EC') : ''),
+          clean(item.dispatched_by_name || ''),
+          clean(item.received_at ? new Date(item.received_at).toLocaleString('es-EC') : ''),
+          clean(item.received_by_name || '')
+        ].join(';');
+      });
+
+      const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const cleanCampName = campaign.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Registros_${cleanCampName}_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      Swal.fire({
+        icon: 'success',
+        title: '¡Excel Descargado!',
+        text: `Se exportaron ${items.length} registros exitosamente.`,
+        timer: 2000
+      });
+    } catch (err) {
+      Swal.fire('Error', 'No se pudo generar el archivo de exportación.', 'error');
+    }
+  };
 
   // Estado de nueva campaña
   const [newCampaign, setNewCampaign] = useState({
@@ -354,6 +473,21 @@ const LogisticsAdmin = () => {
                       </button>
 
                       <button 
+                        onClick={() => openRegistrationsModal(camp)} 
+                        className="btn-secondary" 
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '9px', fontSize: '0.82rem', color: '#fff', background: 'rgba(255,255,255,0.08)', fontWeight: 700 }}
+                      >
+                        <ClipboardList size={16} /> Ver Registros
+                      </button>
+
+                      <button 
+                        onClick={() => exportCampaignToExcel(camp)} 
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '9px', fontSize: '0.82rem', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', cursor: 'pointer', fontWeight: 700 }}
+                      >
+                        <FileSpreadsheet size={16} /> Exportar Excel
+                      </button>
+
+                      <button 
                         onClick={() => openAssignStaffModal(camp)} 
                         className="btn-secondary" 
                         style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '9px', fontSize: '0.82rem', color: '#fff', background: 'rgba(255,255,255,0.06)' }}
@@ -667,6 +801,209 @@ const LogisticsAdmin = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL VISUALIZAR Y BUSCAR REGISTROS (Item 4) ──────────────────── */}
+      {viewingRegistrationsCampaign && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '16px'
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '960px', height: '90vh', display: 'flex', flexDirection: 'column', padding: '20px', borderRadius: '20px', overflow: 'hidden' }}>
+            
+            {/* Header del Modal */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ color: '#fff', fontSize: '1.25rem', fontWeight: 900, margin: 0 }}>
+                    📋 Registros de Entrega: {viewingRegistrationsCampaign.name}
+                  </h3>
+                  <span style={{ fontSize: '0.75rem', background: 'rgba(222,184,65,0.15)', color: 'var(--accent)', padding: '3px 8px', borderRadius: '8px', fontWeight: 800 }}>
+                    {recordsTotal} tickets
+                  </span>
+                </div>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>
+                  Busca por beneficiario, teléfono o código para auditar entregas y canjes.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => exportCampaignToExcel(viewingRegistrationsCampaign)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px',
+                    borderRadius: '9px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)',
+                    color: '#10b981', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer'
+                  }}
+                >
+                  <FileSpreadsheet size={15} /> Exportar Excel
+                </button>
+
+                <button
+                  onClick={() => setViewingRegistrationsCampaign(null)}
+                  style={{
+                    background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '9px',
+                    width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', cursor: 'pointer'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Barra de Filtros y Búsqueda */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+                <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar por código, nombre o celular..."
+                  value={recordsSearch}
+                  onChange={(e) => {
+                    setRecordsSearch(e.target.value);
+                    setRecordsPage(0);
+                    fetchCampaignRecords(viewingRegistrationsCampaign.id, 0, e.target.value, recordsStatus);
+                  }}
+                  style={{
+                    width: '100%', padding: '10px 12px 10px 38px', borderRadius: '10px',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#fff', fontSize: '0.85rem', marginBottom: 0
+                  }}
+                />
+              </div>
+
+              <select
+                value={recordsStatus}
+                onChange={(e) => {
+                  setRecordsStatus(e.target.value);
+                  setRecordsPage(0);
+                  fetchCampaignRecords(viewingRegistrationsCampaign.id, 0, recordsSearch, e.target.value);
+                }}
+                style={{
+                  padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.85rem', marginBottom: 0,
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="ALL">Todos los Estados</option>
+                <option value="AVAILABLE">Disponibles</option>
+                <option value="DISPATCHED">Asignados</option>
+                <option value="RECEIVED">Entregados</option>
+              </select>
+            </div>
+
+            {/* Tabla con Scroll horizontal y vertical para móviles */}
+            <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
+              {recordsLoading ? (
+                <div className="spinner" style={{ margin: '60px auto' }}></div>
+              ) : records.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
+                  No se encontraron registros con los filtros seleccionados.
+                </div>
+              ) : (
+                <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                  <thead style={{ background: 'rgba(255,255,255,0.04)', position: 'sticky', top: 0, zIndex: 2 }}>
+                    <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <th style={{ padding: '12px 14px' }}>CÓDIGO</th>
+                      <th style={{ padding: '12px 14px' }}>BENEFICIARIO</th>
+                      <th style={{ padding: '12px 14px' }}>CELULAR</th>
+                      <th style={{ padding: '12px 14px' }}>ESTADO</th>
+                      <th style={{ padding: '12px 14px' }}>CANTIDAD</th>
+                      <th style={{ padding: '12px 14px' }}>OPERADOR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records.map(row => {
+                      const assigned = row.assigned_data?.cantidad ? parseInt(row.assigned_data.cantidad, 10) : (row.status === 'AVAILABLE' ? 0 : 1);
+                      const delivered = parseInt(row.delivered_quantity || (row.status === 'RECEIVED' ? assigned : 0), 10);
+                      const isComplete = row.status === 'RECEIVED';
+                      const isDispatched = row.status === 'DISPATCHED';
+
+                      const statusColor = isComplete ? '#10b981' : isDispatched ? '#3b82f6' : '#94a3b8';
+                      const statusBg = isComplete ? 'rgba(16,185,129,0.12)' : isDispatched ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.05)';
+                      const statusLabel = isComplete ? 'Entregado' : isDispatched ? 'Asignado' : 'Disponible';
+
+                      return (
+                        <tr key={row.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--accent)' }}>
+                            #{row.item_code}
+                          </td>
+                          <td style={{ padding: '12px 14px', color: '#fff', fontWeight: 600 }}>
+                            {row.assigned_data?.nombre || <span style={{ color: 'var(--text-muted)' }}>Sin asignar</span>}
+                          </td>
+                          <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>
+                            {row.assigned_data?.celular ? (
+                              <a
+                                href={`https://wa.me/${row.assigned_data.celular.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ color: '#38bdf8', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <Phone size={12} /> {row.assigned_data.celular}
+                              </a>
+                            ) : '-'}
+                          </td>
+                          <td style={{ padding: '12px 14px' }}>
+                            <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, background: statusBg, color: statusColor, border: `1px solid ${statusColor}33` }}>
+                              {statusLabel}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 14px', color: '#fff', fontWeight: 700 }}>
+                            {delivered} / {assigned}
+                          </td>
+                          <td style={{ padding: '12px 14px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                            {row.received_by_name ? `Entregado por: ${row.received_by_name}` : row.dispatched_by_name ? `Despachado por: ${row.dispatched_by_name}` : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Paginación */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              <span>
+                Mostrando {records.length} de {recordsTotal} registros
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  disabled={recordsPage === 0}
+                  onClick={() => {
+                    const newP = recordsPage - 1;
+                    setRecordsPage(newP);
+                    fetchCampaignRecords(viewingRegistrationsCampaign.id, newP, recordsSearch, recordsStatus);
+                  }}
+                  style={{
+                    padding: '6px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: recordsPage === 0 ? 'not-allowed' : 'pointer',
+                    opacity: recordsPage === 0 ? 0.4 : 1
+                  }}
+                >
+                  Anterior
+                </button>
+                <button
+                  disabled={(recordsPage + 1) * RECORDS_PER_PAGE >= recordsTotal}
+                  onClick={() => {
+                    const newP = recordsPage + 1;
+                    setRecordsPage(newP);
+                    fetchCampaignRecords(viewingRegistrationsCampaign.id, newP, recordsSearch, recordsStatus);
+                  }}
+                  style={{
+                    padding: '6px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: (recordsPage + 1) * RECORDS_PER_PAGE >= recordsTotal ? 'not-allowed' : 'pointer',
+                    opacity: (recordsPage + 1) * RECORDS_PER_PAGE >= recordsTotal ? 0.4 : 1
+                  }}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

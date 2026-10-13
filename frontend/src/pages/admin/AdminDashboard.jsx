@@ -2472,13 +2472,22 @@ const AdminDashboard = () => {
 
                 <div>
                   <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Color Principal (Botones y Destacados)</label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                    <input
-                      type="color"
-                      value={themeForm.primaryColor}
-                      onChange={e => setThemeForm({ ...themeForm, primaryColor: e.target.value })}
-                      style={{ width: '42px', height: '42px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
-                    />
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+                    <div 
+                      title="Haz clic para seleccionar color"
+                      style={{ 
+                        position: 'relative', width: '42px', height: '42px', borderRadius: '10px', 
+                        backgroundColor: themeForm.primaryColor, border: '2px solid rgba(255,255,255,0.3)', 
+                        boxShadow: `0 4px 12px ${themeForm.primaryColor}55`, cursor: 'pointer', overflow: 'hidden', flexShrink: 0 
+                      }}
+                    >
+                      <input
+                        type="color"
+                        value={themeForm.primaryColor}
+                        onChange={e => setThemeForm({ ...themeForm, primaryColor: e.target.value })}
+                        style={{ position: 'absolute', top: '-10px', left: '-10px', width: '200%', height: '200%', opacity: 0, cursor: 'pointer' }}
+                      />
+                    </div>
                     <input
                       type="text"
                       value={themeForm.primaryColor}
@@ -2491,13 +2500,22 @@ const AdminDashboard = () => {
                 {themeForm.buttonStyle !== 'solid' && (
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Color Secundario (Gradientes)</label>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                      <input
-                        type="color"
-                        value={themeForm.secondaryColor}
-                        onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
-                        style={{ width: '42px', height: '42px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
-                      />
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+                      <div 
+                        title="Haz clic para seleccionar color"
+                        style={{ 
+                          position: 'relative', width: '42px', height: '42px', borderRadius: '10px', 
+                          backgroundColor: themeForm.secondaryColor, border: '2px solid rgba(255,255,255,0.3)', 
+                          boxShadow: `0 4px 12px ${themeForm.secondaryColor}55`, cursor: 'pointer', overflow: 'hidden', flexShrink: 0 
+                        }}
+                      >
+                        <input
+                          type="color"
+                          value={themeForm.secondaryColor}
+                          onChange={e => setThemeForm({ ...themeForm, secondaryColor: e.target.value })}
+                          style={{ position: 'absolute', top: '-10px', left: '-10px', width: '200%', height: '200%', opacity: 0, cursor: 'pointer' }}
+                        />
+                      </div>
                       <input
                         type="text"
                         value={themeForm.secondaryColor}
@@ -2519,13 +2537,22 @@ const AdminDashboard = () => {
                       Restaurar Blanco
                     </button>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                    <input
-                      type="color"
-                      value={themeForm.textColor || '#FFFFFF'}
-                      onChange={e => setThemeForm({ ...themeForm, textColor: e.target.value })}
-                      style={{ width: '42px', height: '42px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }}
-                    />
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+                    <div 
+                      title="Haz clic para seleccionar color"
+                      style={{ 
+                        position: 'relative', width: '42px', height: '42px', borderRadius: '10px', 
+                        backgroundColor: themeForm.textColor || '#FFFFFF', border: '2px solid rgba(255,255,255,0.3)', 
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)', cursor: 'pointer', overflow: 'hidden', flexShrink: 0 
+                      }}
+                    >
+                      <input
+                        type="color"
+                        value={themeForm.textColor || '#FFFFFF'}
+                        onChange={e => setThemeForm({ ...themeForm, textColor: e.target.value })}
+                        style={{ position: 'absolute', top: '-10px', left: '-10px', width: '200%', height: '200%', opacity: 0, cursor: 'pointer' }}
+                      />
+                    </div>
                     <input
                       type="text"
                       value={themeForm.textColor || '#FFFFFF'}

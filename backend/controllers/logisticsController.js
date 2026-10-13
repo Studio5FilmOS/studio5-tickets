@@ -10,7 +10,7 @@ exports.getCampaigns = async (req, res) => {
         u.name as organizer_name,
         COUNT(i.id) FILTER (WHERE i.status = 'AVAILABLE') as available_count,
         COUNT(i.id) FILTER (WHERE i.status = 'DISPATCHED') as dispatched_count,
-        COUNT(i.id) FILTER (WHERE i.status = 'RECEIVED') as received_count,
+        COALESCE(SUM(COALESCE(i.delivered_quantity, CASE WHEN i.status = 'RECEIVED' THEN 1 ELSE 0 END)), 0)::integer as received_count,
         COUNT(i.id) as total_items_count
       FROM logistics_campaigns c
       LEFT JOIN users u ON c.organizer_id = u.id
@@ -18,11 +18,13 @@ exports.getCampaigns = async (req, res) => {
     `;
     const params = [];
 
-    // Separación estricta por inquilino/organizador para todos los roles
-    if (user) {
+    // Separación estricta por inquilino/organizador
+    if (user && user.role !== 'admin') {
       const targetOrgId = user.role === 'staff' ? user.workgroup_organizer_id : user.id;
-      sql += ' WHERE c.organizer_id = $1';
-      params.push(targetOrgId);
+      if (targetOrgId) {
+        sql += ' WHERE c.organizer_id = $1';
+        params.push(targetOrgId);
+      }
     }
 
     sql += ' GROUP BY c.id, u.name ORDER BY c.created_at DESC';
@@ -134,25 +136,63 @@ exports.deleteCampaign = async (req, res) => {
   }
 };
 
-// Obtener items/tickets de una campaña (para imprimir stickers o listado)
+// Obtener items/tickets de una campaña (para imprimir stickers, ver registros o exportar)
 exports.getCampaignItems = async (req, res) => {
   const { campaign_id } = req.params;
-  const { status, limit = 1000, offset = 0 } = req.query;
+  const { status, limit = 50, offset = 0, search, export_all } = req.query;
 
   try {
-    let sql = 'SELECT * FROM logistics_items WHERE campaign_id = $1';
+    let sql = `
+      SELECT 
+        i.*,
+        u_disp.name as dispatched_by_name,
+        u_recv.name as received_by_name
+      FROM logistics_items i
+      LEFT JOIN users u_disp ON i.dispatched_by = u_disp.id
+      LEFT JOIN users u_recv ON i.received_by = u_recv.id
+      WHERE i.campaign_id = $1
+    `;
     const params = [campaign_id];
 
-    if (status) {
+    if (status && status !== 'ALL') {
       params.push(status);
-      sql += ` AND status = $${params.length}`;
+      sql += ` AND i.status = $${params.length}`;
     }
 
-    sql += ` ORDER BY item_code ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(parseInt(limit, 10), parseInt(offset, 10));
+    if (search && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      sql += ` AND (
+        LOWER(i.item_code) LIKE $${params.length} 
+        OR LOWER(COALESCE(i.assigned_data->>'nombre', '')) LIKE $${params.length} 
+        OR LOWER(COALESCE(i.assigned_data->>'celular', '')) LIKE $${params.length}
+      )`;
+    }
+
+    sql += ' ORDER BY i.item_code ASC';
+
+    if (export_all !== 'true') {
+      params.push(parseInt(limit, 10) || 50, parseInt(offset, 10) || 0);
+      sql += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+    }
 
     const result = await query(sql, params);
-    const totalCountRes = await query('SELECT COUNT(*) FROM logistics_items WHERE campaign_id = $1', [campaign_id]);
+
+    // Contar total con los mismos filtros
+    let countSql = 'SELECT COUNT(*) FROM logistics_items i WHERE i.campaign_id = $1';
+    const countParams = [campaign_id];
+    if (status && status !== 'ALL') {
+      countParams.push(status);
+      countSql += ` AND i.status = $${countParams.length}`;
+    }
+    if (search && search.trim()) {
+      countParams.push(`%${search.trim().toLowerCase()}%`);
+      countSql += ` AND (
+        LOWER(i.item_code) LIKE $${countParams.length} 
+        OR LOWER(COALESCE(i.assigned_data->>'nombre', '')) LIKE $${countParams.length} 
+        OR LOWER(COALESCE(i.assigned_data->>'celular', '')) LIKE $${countParams.length}
+      )`;
+    }
+    const totalCountRes = await query(countSql, countParams);
 
     res.json({ 
       status: 'OK', 
@@ -202,9 +242,25 @@ exports.assignStaff = async (req, res) => {
   }
 };
 
+// Helper para validar si un código está dentro del rango asignado a un staff
+const isCodeWithinBatch = (code, startCode, endCode) => {
+  if (!startCode || !endCode) return true;
+  const numCode = parseInt(code, 10);
+  const numStart = parseInt(startCode, 10);
+  const numEnd = parseInt(endCode, 10);
+  if (!isNaN(numCode) && !isNaN(numStart) && !isNaN(numEnd)) {
+    return numCode >= numStart && numCode <= numEnd;
+  }
+  const cleanCode = String(code).padStart(4, '0');
+  const cleanStart = String(startCode).padStart(4, '0');
+  const cleanEnd = String(endCode).padStart(4, '0');
+  return cleanCode >= cleanStart && cleanCode <= cleanEnd;
+};
+
 // Consultar estado de un código/ticket para el escáner flotante
 exports.lookupItem = async (req, res) => {
   const { campaign_id, item_code } = req.query;
+  const user = req.user;
   if (!campaign_id || !item_code) {
     return res.status(400).json({ status: 'ERROR', message: 'campaign_id e item_code son requeridos.' });
   }
@@ -212,6 +268,26 @@ exports.lookupItem = async (req, res) => {
   try {
     const rawCode = item_code.trim();
     const padded = rawCode.padStart(4, '0');
+
+    // 1. Validar restricción de lotes si el operador es Staff
+    if (user && user.role === 'staff') {
+      const assignRes = await query(
+        `SELECT batch_start_code, batch_end_code FROM logistics_staff_assignments 
+         WHERE campaign_id = $1 AND staff_id = $2`,
+        [campaign_id, user.id]
+      );
+      if (assignRes.rows.length > 0) {
+        const { batch_start_code, batch_end_code } = assignRes.rows[0];
+        if (batch_start_code && batch_end_code) {
+          if (!isCodeWithinBatch(rawCode, batch_start_code, batch_end_code)) {
+            return res.status(403).json({
+              status: 'FORBIDDEN_BATCH',
+              message: `⛔ ACCESO RESTRINGIDO\nEl código #${rawCode} no pertenece a tu lote autorizado.\nTu rango asignado es del #${batch_start_code} al #${batch_end_code}.`
+            });
+          }
+        }
+      }
+    }
 
     const result = await query(
       `SELECT i.*, c.name as campaign_name, c.items_breakdown 
@@ -253,29 +329,30 @@ exports.lookupItem = async (req, res) => {
   }
 };
 
-// Obtener campañas asignadas al staff actual
+// Obtener campañas asignadas al staff actual (o de su organizador padre)
 exports.getStaffCampaigns = async (req, res) => {
-  const userId = req.user?.id;
+  const user = req.user;
+  const userId = user?.id;
   try {
     let sql;
     let params = [];
 
-    // Admin u Organizador pueden ver sus activas
-    if (req.user?.role === 'admin') {
+    if (user?.role === 'admin') {
       sql = `SELECT * FROM logistics_campaigns WHERE status = 'active' ORDER BY created_at DESC`;
-    } else if (req.user?.role === 'organizer') {
+    } else if (user?.role === 'organizer') {
       sql = `SELECT * FROM logistics_campaigns WHERE organizer_id = $1 AND status = 'active' ORDER BY created_at DESC`;
       params = [userId];
     } else {
-      // Staff regular: campañas a las que fue asignado (con info de su lote si existe)
+      // Staff: campañas asignadas o de su organizador de trabajo
+      const orgId = user?.workgroup_organizer_id;
       sql = `
-        SELECT c.*, a.batch_start_code, a.batch_end_code, a.quantity_assigned 
+        SELECT DISTINCT c.*, a.batch_start_code, a.batch_end_code, a.quantity_assigned 
         FROM logistics_campaigns c
-        JOIN logistics_staff_assignments a ON c.id = a.campaign_id
-        WHERE a.staff_id = $1 AND c.status = 'active'
+        LEFT JOIN logistics_staff_assignments a ON c.id = a.campaign_id AND a.staff_id = $1
+        WHERE (a.staff_id = $1 OR c.organizer_id = $2) AND c.status = 'active'
         ORDER BY c.created_at DESC
       `;
-      params = [userId];
+      params = [userId, orgId || userId];
     }
 
     const result = await query(sql, params);
@@ -288,13 +365,42 @@ exports.getStaffCampaigns = async (req, res) => {
 // Asignar un lote de canastas / tickets (Registro o Despacho)
 exports.dispatchItems = async (req, res) => {
   const { campaign_id, start_code, quantity = 1, assigned_data, immediate_delivery = false } = req.body;
-  const staff_id = req.user?.id || null;
+  const user = req.user;
+  const staff_id = user?.id || null;
   const countToAssign = Math.max(1, parseInt(quantity, 10));
 
   try {
-    await query('BEGIN');
-
     const cleanStart = start_code.trim().padStart(4, '0');
+
+    // 1. Validar restricción de lotes para personal de Staff
+    if (user && user.role === 'staff') {
+      const assignRes = await query(
+        `SELECT batch_start_code, batch_end_code FROM logistics_staff_assignments 
+         WHERE campaign_id = $1 AND staff_id = $2`,
+        [campaign_id, user.id]
+      );
+      if (assignRes.rows.length > 0) {
+        const { batch_start_code, batch_end_code } = assignRes.rows[0];
+        if (batch_start_code && batch_end_code) {
+          const numStart = parseInt(batch_start_code, 10);
+          const numEnd = parseInt(batch_end_code, 10);
+          const numCode = parseInt(cleanStart, 10);
+          const lastCodeToAssign = numCode + countToAssign - 1;
+
+          const isStartOk = (!isNaN(numCode) && !isNaN(numStart)) ? (numCode >= numStart) : isCodeWithinBatch(cleanStart, batch_start_code, batch_end_code);
+          const isEndOk = (!isNaN(lastCodeToAssign) && !isNaN(numEnd)) ? (lastCodeToAssign <= numEnd) : true;
+
+          if (!isStartOk || !isEndOk) {
+            return res.status(403).json({
+              status: 'ERROR',
+              message: `⛔ CÓDIGO RESTRINGIDO\nNo puedes registrar códigos fuera de tu lote autorizado (#${batch_start_code} al #${batch_end_code}).`
+            });
+          }
+        }
+      }
+    }
+
+    await query('BEGIN');
 
     // Buscar disponibles secuenciales a partir de start_code
     const itemsResult = await query(
@@ -328,7 +434,7 @@ exports.dispatchItems = async (req, res) => {
       `UPDATE logistics_items 
        SET status = $1, 
            assigned_data = $2, 
-           delivered_quantity = $3,
+           delivered_quantity = $3, 
            dispatched_at = NOW(), 
            dispatched_by = $4,
            received_at = CASE WHEN $5 THEN NOW() ELSE received_at END,
@@ -355,11 +461,32 @@ exports.dispatchItems = async (req, res) => {
 // Validar Recepción / Canje de un código con selector de cantidad
 exports.receiveItem = async (req, res) => {
   const { item_code, campaign_id, quantity_to_deliver = 1 } = req.body;
-  const staff_id = req.user?.id || null;
+  const user = req.user;
+  const staff_id = user?.id || null;
 
   try {
     const rawCode = item_code.trim();
     const padded = rawCode.padStart(4, '0');
+
+    // 1. Validar restricción de lotes para personal de Staff
+    if (user && user.role === 'staff') {
+      const assignRes = await query(
+        `SELECT batch_start_code, batch_end_code FROM logistics_staff_assignments 
+         WHERE campaign_id = $1 AND staff_id = $2`,
+        [campaign_id, user.id]
+      );
+      if (assignRes.rows.length > 0) {
+        const { batch_start_code, batch_end_code } = assignRes.rows[0];
+        if (batch_start_code && batch_end_code) {
+          if (!isCodeWithinBatch(rawCode, batch_start_code, batch_end_code)) {
+            return res.status(403).json({
+              status: 'ERROR',
+              message: `⛔ CÓDIGO RESTRINGIDO\nEl código #${rawCode} no pertenece a tu lote autorizado (#${batch_start_code} al #${batch_end_code}).`
+            });
+          }
+        }
+      }
+    }
 
     const itemResult = await query(
       `SELECT i.*, c.name as campaign_name, c.items_breakdown 
@@ -428,23 +555,63 @@ exports.receiveItem = async (req, res) => {
   }
 };
 
-// Obtener métricas de la campaña
+// Obtener métricas en tiempo real de la campaña (con soporte exacto para entregas parciales)
 exports.getMetrics = async (req, res) => {
   const { campaign_id } = req.params;
 
   try {
     const statsResult = await query(
-      `SELECT status, COUNT(*) as count FROM logistics_items WHERE campaign_id = $1 GROUP BY status`,
+      `SELECT 
+        COUNT(*) as total_items,
+        COUNT(*) FILTER (WHERE status = 'AVAILABLE') as available_count,
+        COUNT(*) FILTER (WHERE status = 'DISPATCHED') as dispatched_count,
+        COUNT(*) FILTER (WHERE status = 'RECEIVED') as received_completed_count,
+        COALESCE(SUM(COALESCE(delivered_quantity, CASE WHEN status = 'RECEIVED' THEN 1 ELSE 0 END)), 0)::integer as total_delivered_units,
+        COALESCE(SUM(CASE WHEN status IN ('DISPATCHED', 'RECEIVED') THEN COALESCE((assigned_data->>'cantidad')::integer, 1) ELSE 0 END), 0)::integer as total_assigned_units
+       FROM logistics_items 
+       WHERE campaign_id = $1`,
       [campaign_id]
     );
 
-    const metrics = { AVAILABLE: 0, DISPATCHED: 0, RECEIVED: 0, TOTAL: 0 };
-    statsResult.rows.forEach(row => {
-      metrics[row.status] = parseInt(row.count, 10);
-      metrics.TOTAL += parseInt(row.count, 10);
-    });
+    const row = statsResult.rows[0];
+    const deliveredUnits = parseInt(row.total_delivered_units, 10);
+    const assignedUnits = parseInt(row.total_assigned_units, 10);
+    const totalItems = parseInt(row.total_items, 10);
+
+    const metrics = {
+      TOTAL: totalItems,
+      AVAILABLE: parseInt(row.available_count, 10),
+      DISPATCHED: parseInt(row.dispatched_count, 10),
+      // Mapeo retrocompatible para interfaces que leen RECEIVED:
+      RECEIVED: deliveredUnits,
+      TOTAL_DELIVERED_UNITS: deliveredUnits,
+      TOTAL_ASSIGNED_UNITS: assignedUnits,
+      TOTAL_ITEMS: totalItems
+    };
 
     res.json({ status: 'OK', data: metrics });
+  } catch (error) {
+    res.status(500).json({ status: 'ERROR', message: error.message });
+  }
+};
+
+// Obtener datos públicos de una campaña para pantalla en vivo
+exports.getPublicCampaign = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await query(
+      `SELECT c.id, c.name, c.description, c.total_items, c.items_breakdown, c.theme_config, u.name as organizer_name
+       FROM logistics_campaigns c
+       LEFT JOIN users u ON c.organizer_id = u.id
+       WHERE c.id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Campaña no encontrada.' });
+    }
+
+    res.json({ status: 'OK', data: result.rows[0] });
   } catch (error) {
     res.status(500).json({ status: 'ERROR', message: error.message });
   }

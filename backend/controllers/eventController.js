@@ -52,16 +52,17 @@ exports.getAllEvents = async (req, res) => {
         ORDER BY e.created_at DESC
       `;
       params = [tenantSlug];
-    } else if (isOrganizer) {
-      // Un organizador NUNCA debe ver los eventos de Studio 5, SOLO sus propios eventos de marca blanca
+    } else if (isOrganizer || (isStaff && user.workgroup_organizer_id)) {
+      // Un organizador y su personal de Staff SOLO ven sus propios eventos asignados
+      const orgId = isOrganizer ? user.id : user.workgroup_organizer_id;
       if (isManageMode) {
         sqlEvents = 'SELECT * FROM events WHERE organizer_id = $1 ORDER BY created_at DESC';
       } else {
         sqlEvents = "SELECT * FROM events WHERE organizer_id = $1 AND status = 'active' AND is_archived = FALSE ORDER BY created_at DESC";
       }
-      params = [user.id];
+      params = [orgId];
     } else if (isManageMode && (isAdmin || isStaff)) {
-      // En modo administración del dueño o staff, ve todos los eventos para gestión
+      // Solo el administrador global (o staff sin organizador padre) ve los eventos globales
       sqlEvents = 'SELECT * FROM events ORDER BY created_at DESC';
     } else {
       // En la Cartelera Pública general de Studio 5, mostrar eventos del dueño / oficiales de la plataforma

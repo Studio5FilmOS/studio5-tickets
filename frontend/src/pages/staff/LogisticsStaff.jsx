@@ -6,9 +6,10 @@ import Swal from 'sweetalert2';
 import { 
   Camera, Keyboard, ArrowRightCircle, CheckCircle2, 
   PackageSearch, RefreshCw, AlertTriangle, Layers, X, 
-  Plus, Minus, Check, Sparkles, UserCheck, Phone, User
+  Plus, Minus, Check, Sparkles, UserCheck, Phone, User,
+  Search, ClipboardList, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 
 const playBeep = () => {
   try {
@@ -63,6 +64,33 @@ const LogisticsStaff = () => {
 
   // Estados para Entrega por Lotes (Si ya está asignado)
   const [deliverCount, setDeliverCount] = useState(1);
+
+  // Estados para visualización y búsqueda de registros (Item 4)
+  const [showRegistrationsModal, setShowRegistrationsModal] = useState(false);
+  const [staffRecords, setStaffRecords] = useState([]);
+  const [staffRecordsLoading, setStaffRecordsLoading] = useState(false);
+  const [staffRecordsSearch, setStaffRecordsSearch] = useState('');
+  const [staffRecordsStatus, setStaffRecordsStatus] = useState('ALL');
+  const [staffRecordsPage, setStaffRecordsPage] = useState(0);
+  const [staffRecordsTotal, setStaffRecordsTotal] = useState(0);
+
+  const fetchStaffRecords = async (campaignId, page = 0, search = '', status = 'ALL') => {
+    if (!campaignId) return;
+    setStaffRecordsLoading(true);
+    try {
+      const offset = page * 25;
+      const q = new URLSearchParams({ limit: 25, offset, status, search });
+      const res = await api.get(`/logistics/campaigns/${campaignId}/items?${q.toString()}`);
+      if (res.data?.status === 'OK') {
+        setStaffRecords(res.data.data || []);
+        setStaffRecordsTotal(res.data.total || 0);
+      }
+    } catch (err) {
+      console.error('Error cargando registros:', err);
+    } finally {
+      setStaffRecordsLoading(false);
+    }
+  };
 
   // 1. Cargar Campañas
   useEffect(() => {
@@ -171,6 +199,41 @@ const LogisticsStaff = () => {
       html5ScannerRef.current = null;
     }
 
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
+
+    const qrConfig = {
+      fps: 20,
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1.0
+    };
+
+    const onScan = (decodedText) => {
+      if (decodedText) handleProcessCode(decodedText);
+    };
+
+    const containerEl = document.getElementById('logistics-live-scanner');
+    if (!containerEl) return;
+
+    const html5QrCode = new Html5Qrcode('logistics-live-scanner');
+    html5ScannerRef.current = html5QrCode;
+
+    // Si es móvil y no se especificó un ID manual, ir directo a la cámara posterior (facingMode: environment)
+    if (isMobile && !cameraIdToUse) {
+      try {
+        await html5QrCode.start({ facingMode: "environment" }, qrConfig, onScan, () => {});
+        setIsScannerRunning(true);
+        setIsScannerReady(true);
+        // Cargar lista de cámaras secundarias en segundo plano
+        Html5Qrcode.getCameras().then(devices => {
+          if (devices && devices.length > 0) setCameras(devices);
+        }).catch(() => {});
+        return;
+      } catch (err) {
+        console.warn('Fallo cámara trasera directa en móvil, probando selector de dispositivos...', err);
+      }
+    }
+
+    // En PC o como fallback: listar dispositivos
     try {
       const devices = await Html5Qrcode.getCameras();
       if (!devices || devices.length === 0) {
@@ -187,33 +250,25 @@ const LogisticsStaff = () => {
           d.label.toLowerCase().includes('rear') ||
           d.label.toLowerCase().includes('environment')
         );
-        targetCameraId = backCamera ? backCamera.id : devices[devices.length - 1].id;
+        targetCameraId = backCamera ? backCamera.id : devices[0].id;
         setSelectedCameraId(targetCameraId);
       }
 
-      const html5QrCode = new Html5Qrcode('logistics-live-scanner');
-      html5ScannerRef.current = html5QrCode;
-
       await html5QrCode.start(
         { deviceId: { exact: targetCameraId } },
-        { fps: 15, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
-        (decodedText) => {
-          if (decodedText) handleProcessCode(decodedText);
-        },
+        qrConfig,
+        onScan,
         () => {}
       );
       setIsScannerRunning(true);
       setIsScannerReady(true);
     } catch (err) {
+      // Fallback final
       try {
-        const html5QrCode = new Html5Qrcode('logistics-live-scanner');
-        html5ScannerRef.current = html5QrCode;
         await html5QrCode.start(
           { facingMode: 'environment' },
-          { fps: 15, qrbox: { width: 240, height: 240 } },
-          (decodedText) => {
-            if (decodedText) handleProcessCode(decodedText);
-          },
+          qrConfig,
+          onScan,
           () => {}
         );
         setIsScannerRunning(true);
@@ -221,6 +276,7 @@ const LogisticsStaff = () => {
       } catch (fallbackErr) {
         console.warn('Error iniciando escáner de respaldo', fallbackErr);
         setIsScannerRunning(false);
+        setIsScannerReady(false);
       }
     }
   }, [selectedCameraId]);
@@ -358,19 +414,38 @@ const LogisticsStaff = () => {
           </select>
         </div>
 
-        <button 
-          onClick={() => setShowManualModal(true)}
-          className="btn-secondary"
-          style={{ 
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
-            padding: '8px 12px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-            color: '#cbd5e1', fontSize: '0.72rem', fontWeight: 700, minWidth: '65px' 
-          }}
-          title="Ingresar código con teclado"
-        >
-          <Keyboard size={18} style={{ marginBottom: '2px' }} />
-          <span>Manual</span>
-        </button>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button 
+            onClick={() => {
+              setShowRegistrationsModal(true);
+              fetchStaffRecords(selectedCampaignId, 0, '', 'ALL');
+            }}
+            className="btn-secondary"
+            style={{ 
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+              padding: '8px 10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+              color: '#cbd5e1', fontSize: '0.72rem', fontWeight: 700, minWidth: '60px' 
+            }}
+            title="Ver listado de registros"
+          >
+            <ClipboardList size={18} style={{ marginBottom: '2px' }} />
+            <span>Registros</span>
+          </button>
+
+          <button 
+            onClick={() => setShowManualModal(true)}
+            className="btn-secondary"
+            style={{ 
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+              padding: '8px 10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+              color: '#cbd5e1', fontSize: '0.72rem', fontWeight: 700, minWidth: '60px' 
+            }}
+            title="Ingresar código con teclado"
+          >
+            <Keyboard size={18} style={{ marginBottom: '2px' }} />
+            <span>Manual</span>
+          </button>
+        </div>
       </div>
 
       {/* Mini Métricas Rápidas en Vivo */}
@@ -792,6 +867,168 @@ const LogisticsStaff = () => {
           to { transform: translateY(0); }
         }
       `}</style>
+
+      {/* ─── MODAL LISTA DE REGISTROS PARA STAFF (Item 4) ──────────────────── */}
+      {showRegistrationsModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '12px'
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '580px', height: '88vh', display: 'flex', flexDirection: 'column', padding: '16px', borderRadius: '18px', overflow: 'hidden' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <h3 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>
+                  📋 Registros de Campaña
+                </h3>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  {staffRecordsTotal} tickets registrados
+                </span>
+              </div>
+              <button
+                onClick={() => setShowRegistrationsModal(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '8px',
+                  width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', cursor: 'pointer'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Barra de Filtros y Búsqueda */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search size={15} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar código o nombre..."
+                  value={staffRecordsSearch}
+                  onChange={(e) => {
+                    setStaffRecordsSearch(e.target.value);
+                    setStaffRecordsPage(0);
+                    fetchStaffRecords(selectedCampaignId, 0, e.target.value, staffRecordsStatus);
+                  }}
+                  style={{
+                    width: '100%', padding: '8px 10px 8px 32px', borderRadius: '8px',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#fff', fontSize: '0.8rem', marginBottom: 0
+                  }}
+                />
+              </div>
+
+              <select
+                value={staffRecordsStatus}
+                onChange={(e) => {
+                  setStaffRecordsStatus(e.target.value);
+                  setStaffRecordsPage(0);
+                  fetchStaffRecords(selectedCampaignId, 0, staffRecordsSearch, e.target.value);
+                }}
+                style={{
+                  padding: '8px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.78rem', marginBottom: 0
+                }}
+              >
+                <option value="ALL">Todos</option>
+                <option value="AVAILABLE">Disponibles</option>
+                <option value="DISPATCHED">Asignados</option>
+                <option value="RECEIVED">Entregados</option>
+              </select>
+            </div>
+
+            {/* Listado con scroll */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {staffRecordsLoading ? (
+                <div className="spinner" style={{ margin: '50px auto' }}></div>
+              ) : staffRecords.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  No se encontraron registros.
+                </div>
+              ) : (
+                staffRecords.map(item => {
+                  const assigned = item.assigned_data?.cantidad ? parseInt(item.assigned_data.cantidad, 10) : (item.status === 'AVAILABLE' ? 0 : 1);
+                  const delivered = parseInt(item.delivered_quantity || (item.status === 'RECEIVED' ? assigned : 0), 10);
+                  const isDone = item.status === 'RECEIVED';
+                  const isDisp = item.status === 'DISPATCHED';
+
+                  const badgeColor = isDone ? '#10b981' : isDisp ? '#3b82f6' : '#94a3b8';
+                  const badgeBg = isDone ? 'rgba(16,185,129,0.12)' : isDisp ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.05)';
+
+                  return (
+                    <div 
+                      key={item.id}
+                      style={{
+                        padding: '10px 12px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'center', gap: '10px'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 800, color: 'var(--accent)', fontSize: '0.85rem' }}>
+                            #{item.item_code}
+                          </span>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 6px', borderRadius: '5px', background: badgeBg, color: badgeColor }}>
+                            {isDone ? 'Entregado' : isDisp ? 'Asignado' : 'Disponible'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.82rem', color: '#fff', fontWeight: 600, marginTop: '2px' }}>
+                          {item.assigned_data?.nombre || <span style={{ color: 'var(--text-muted)' }}>Sin asignar</span>}
+                        </div>
+                        {item.assigned_data?.celular && (
+                          <div style={{ fontSize: '0.72rem', color: '#38bdf8', marginTop: '2px' }}>
+                            📞 {item.assigned_data.celular}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff' }}>
+                          {delivered} / {assigned}
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                          artículos
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Paginación */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <span>{staffRecords.length} de {staffRecordsTotal}</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  disabled={staffRecordsPage === 0}
+                  onClick={() => {
+                    const p = staffRecordsPage - 1;
+                    setStaffRecordsPage(p);
+                    fetchStaffRecords(selectedCampaignId, p, staffRecordsSearch, staffRecordsStatus);
+                  }}
+                  style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', cursor: 'pointer', opacity: staffRecordsPage === 0 ? 0.3 : 1 }}
+                >
+                  Prev
+                </button>
+                <button
+                  disabled={(staffRecordsPage + 1) * 25 >= staffRecordsTotal}
+                  onClick={() => {
+                    const p = staffRecordsPage + 1;
+                    setStaffRecordsPage(p);
+                    fetchStaffRecords(selectedCampaignId, p, staffRecordsSearch, staffRecordsStatus);
+                  }}
+                  style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', cursor: 'pointer', opacity: (staffRecordsPage + 1) * 25 >= staffRecordsTotal ? 0.3 : 1 }}
+                >
+                  Sig
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
