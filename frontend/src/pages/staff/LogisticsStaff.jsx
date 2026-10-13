@@ -9,7 +9,7 @@ import {
   Plus, Minus, Check, Sparkles, UserCheck, Phone, User,
   Search, ClipboardList, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const playBeep = () => {
   try {
@@ -188,124 +188,52 @@ const LogisticsStaff = () => {
     }
   };
 
-  const startScanner = useCallback(async (cameraIdToUse) => {
-    if (html5ScannerRef.current) {
-      try {
-        await html5ScannerRef.current.stop();
-        html5ScannerRef.current.clear();
-      } catch (e) {
-        console.warn('Error al detener cámara previa:', e);
-      }
-      html5ScannerRef.current = null;
-    }
-
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
-
-    const qrConfig = {
-      fps: 20,
-      qrbox: { width: 250, height: 250 },
-      aspectRatio: 1.0
-    };
-
-    const onScan = (decodedText) => {
-      if (decodedText) handleProcessCode(decodedText);
-    };
-
-    const containerEl = document.getElementById('logistics-live-scanner');
-    if (!containerEl) return;
-
-    const html5QrCode = new Html5Qrcode('logistics-live-scanner');
-    html5ScannerRef.current = html5QrCode;
-
-    // Si es móvil y no se especificó un ID manual, ir directo a la cámara posterior (facingMode: environment)
-    if (isMobile && !cameraIdToUse) {
-      try {
-        await html5QrCode.start({ facingMode: "environment" }, qrConfig, onScan, () => {});
-        setIsScannerRunning(true);
-        setIsScannerReady(true);
-        // Cargar lista de cámaras secundarias en segundo plano
-        Html5Qrcode.getCameras().then(devices => {
-          if (devices && devices.length > 0) setCameras(devices);
-        }).catch(() => {});
-        return;
-      } catch (err) {
-        console.warn('Fallo cámara trasera directa en móvil, probando selector de dispositivos...', err);
-      }
-    }
-
-    // En PC o como fallback: listar dispositivos
-    try {
-      const devices = await Html5Qrcode.getCameras();
-      if (!devices || devices.length === 0) {
-        setIsScannerRunning(false);
-        return;
-      }
-      setCameras(devices);
-
-      let targetCameraId = cameraIdToUse || selectedCameraId;
-      if (!targetCameraId) {
-        const backCamera = devices.find(d =>
-          d.label.toLowerCase().includes('back') ||
-          d.label.toLowerCase().includes('trasera') ||
-          d.label.toLowerCase().includes('rear') ||
-          d.label.toLowerCase().includes('environment')
-        );
-        targetCameraId = backCamera ? backCamera.id : devices[0].id;
-        setSelectedCameraId(targetCameraId);
-      }
-
-      await html5QrCode.start(
-        { deviceId: { exact: targetCameraId } },
-        qrConfig,
-        onScan,
-        () => {}
-      );
-      setIsScannerRunning(true);
-      setIsScannerReady(true);
-    } catch (err) {
-      // Fallback final
-      try {
-        await html5QrCode.start(
-          { facingMode: 'environment' },
-          qrConfig,
-          onScan,
-          () => {}
-        );
-        setIsScannerRunning(true);
-        setIsScannerReady(true);
-      } catch (fallbackErr) {
-        console.warn('Error iniciando escáner de respaldo', fallbackErr);
-        setIsScannerRunning(false);
-        setIsScannerReady(false);
-      }
-    }
-  }, [selectedCameraId]);
-
-  const stopScanner = useCallback(async () => {
-    if (html5ScannerRef.current) {
-      try {
-        await html5ScannerRef.current.stop();
-        html5ScannerRef.current.clear();
-      } catch (e) {}
-      html5ScannerRef.current = null;
-    }
-    setIsScannerRunning(false);
-  }, []);
-
+  // 4. Iniciar Escáner de Cámara Automático
   useEffect(() => {
-    if (floatingItem || showManualModal || !selectedCampaignId) {
-      stopScanner();
+    // Si la modal está abierta, pausar el escaneo
+    if (floatingItem || showManualModal || showRegistrationsModal || !selectedCampaignId) {
       return;
     }
-    startScanner();
-    return () => stopScanner();
-  }, [floatingItem, showManualModal, selectedCampaignId, startScanner, stopScanner]);
 
-  const handleCameraChange = async (e) => {
-    const newId = e.target.value;
-    setSelectedCameraId(newId);
-    await startScanner(newId);
-  };
+    let scanner = null;
+    const scannerTimer = setTimeout(() => {
+      try {
+        const container = document.getElementById('logistics-live-scanner');
+        if (container) {
+          scanner = new Html5QrcodeScanner('logistics-live-scanner', {
+            fps: 15,
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+              const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+              return { width: Math.floor(minEdge * 0.72), height: Math.floor(minEdge * 0.72) };
+            },
+            rememberLastUsedCamera: true,
+            aspectRatio: 1.0
+          });
+
+          scanner.render((decodedText) => {
+            if (decodedText) {
+              handleProcessCode(decodedText);
+            }
+          }, (err) => {
+            // Ignorar errores comunes de búsqueda de frame
+          });
+
+          html5ScannerRef.current = scanner;
+          setIsScannerRunning(true);
+        }
+      } catch (e) {
+        console.warn('Error inicializando escáner:', e);
+      }
+    }, 200);
+
+    return () => {
+      clearTimeout(scannerTimer);
+      if (scanner) {
+        scanner.clear().catch(() => {});
+      }
+      setIsScannerRunning(false);
+    };
+  }, [floatingItem, showManualModal, showRegistrationsModal, selectedCampaignId]);
 
   // 5. Acción: Guardar Asignación Rápida
   const handleSaveRegistration = async (e) => {
@@ -468,38 +396,16 @@ const LogisticsStaff = () => {
 
       {/* ─── VISOR DE CÁMARA DIRECTA CON SENSOR Y LÁSER ────────────────────────── */}
       <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {cameras.length > 1 && (
-          <div style={{ maxWidth: '280px', margin: '0 auto 16px auto', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center', width: '100%' }}>
-            <label style={{ fontSize: '0.68rem', color: 'var(--accent)', fontWeight: 'bold' }}>📸 Cambiar Lente / Cámara</label>
-            <select 
-              value={selectedCameraId} 
-              onChange={handleCameraChange}
-              style={{ 
-                padding: '8px 12px', fontSize: '0.82rem', borderRadius: '12px', 
-                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', 
-                color: '#fff', cursor: 'pointer', textAlign: 'center', width: '100%'
-              }}
-            >
-              {cameras.map((cam) => (
-                <option key={cam.id} value={cam.id} style={{ background: '#111', color: '#fff' }}>
-                  {cam.label || `Cámara ${cam.id.slice(0,6)}...`}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        
         <div 
           className="glass-panel" 
           style={{ 
-            position: 'relative', borderRadius: '24px', overflow: 'hidden', 
-            background: '#000', border: '2px solid rgba(222,184,65,0.4)',
-            boxShadow: '0 0 50px rgba(222,184,65,0.18)',
-            width: '100%', maxWidth: '340px', aspectRatio: '1/1', margin: '0 auto', minHeight: 'auto'
+            position: 'relative', borderRadius: '22px', overflow: 'hidden', 
+            background: '#090a0f', border: '2px solid rgba(222,184,65,0.3)',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.6)', minHeight: '380px'
           }}
         >
           {/* Contenedor del Escáner HTML5 */}
-          <div id="logistics-live-scanner" style={{ width: '100%', height: '100%' }} />
+          <div id="logistics-live-scanner" style={{ width: '100%', minHeight: '380px' }} />
 
           {/* HUD & Mira Láser Holográfica */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
