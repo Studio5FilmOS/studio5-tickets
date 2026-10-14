@@ -1,48 +1,157 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate, useParams, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import Swal from 'sweetalert2';
 import { 
   Sparkles, Maximize, Minimize, ChevronLeft, 
   Play, Copy, ExternalLink, Layers, CheckCircle2,
-  Flower2, Moon, BarChart3
+  Flower2, Moon, BarChart3, PartyPopper
 } from 'lucide-react';
 
-// ─── COMPONENTE ESTRELLA DE 5 PUNTAS (SVG) ──────────────────────────────────
+// ─── AMBIENTE DE PARTÍCULAS / POLVO ESTELAR / LUCIÉRNAGAS FLOTANTES ─────────
+const AmbientParticles = ({ theme }) => {
+  const particles = Array.from({ length: 24 }, (_, i) => ({
+    id: i,
+    left: `${(i * 4.3 + (i % 4) * 2.8) % 96}%`,
+    duration: `${6 + (i % 5) * 2.2}s`,
+    delay: `${(i * 0.6) % 6}s`,
+    size: `${3 + (i % 3) * 2}px`,
+    opacity: 0.25 + (i % 4) * 0.15
+  }));
+
+  const particleColor = 
+    theme === 'belen' 
+      ? 'rgba(255, 215, 0, 0.75)' 
+      : theme === 'garden' 
+      ? 'rgba(251, 113, 133, 0.75)' 
+      : 'rgba(52, 211, 153, 0.75)';
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          style={{
+            position: 'absolute',
+            bottom: '-20px',
+            left: p.left,
+            width: p.size,
+            height: p.size,
+            borderRadius: '50%',
+            background: particleColor,
+            boxShadow: `0 0 10px ${particleColor}, 0 0 16px ${particleColor}`,
+            opacity: p.opacity,
+            animation: `particleDrift ${p.duration} linear infinite`,
+            animationDelay: p.delay
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+// ─── COMPONENTE ESTRELLA DE 5 PUNTAS CON CENTELLEO Y DESTELLO VIVO (SVG) ────
 const ClassicStar = ({ isLit, index, total }) => {
+  const pulseDelay = ((index * 0.37) % 3.2).toFixed(2);
+  const sparkleDelay = ((index * 0.63) % 4.8).toFixed(2);
+  const floatDelay = ((index * 0.45) % 4.0).toFixed(2);
+
   return (
     <div
+      className={`star-container ${isLit ? 'star-lit' : 'star-unlit'}`}
       style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '6px',
-        transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
-        transform: isLit ? 'scale(1.08)' : 'scale(0.92)',
-        filter: isLit ? 'drop-shadow(0 0 12px rgba(255, 215, 0, 0.95))' : 'none'
+        padding: '4px',
+        position: 'relative',
+        animation: isLit 
+          ? `starFloat 4s ease-in-out infinite` 
+          : `unlitBreath 3.5s ease-in-out infinite`,
+        animationDelay: `${floatDelay}s`
       }}
     >
-      <svg
-        viewBox="0 0 24 24"
-        style={{
-          width: '38px',
-          height: '38px',
-          fill: isLit ? '#FFD700' : 'rgba(255, 255, 255, 0.08)',
-          stroke: isLit ? '#FFF8DC' : 'rgba(255, 255, 255, 0.2)',
-          strokeWidth: '1.2',
-          transition: 'all 0.6s ease'
+      <div 
+        style={{ 
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}
       >
-        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
-      </svg>
+        {/* Halo resplandeciente pulsante detrás de estrellas encendidas */}
+        {isLit && (
+          <div
+            className="star-halo"
+            style={{
+              position: 'absolute',
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(255, 215, 0, 0.45) 0%, rgba(255, 180, 0, 0) 70%)',
+              animation: `starPulseHalo 3s ease-in-out infinite`,
+              animationDelay: `${pulseDelay}s`,
+              pointerEvents: 'none'
+            }}
+          />
+        )}
+
+        {/* Estrella SVG con gradiente y centelleo */}
+        <svg
+          viewBox="0 0 24 24"
+          className={isLit ? 'star-svg-lit' : 'star-svg-unlit'}
+          style={{
+            width: 'clamp(28px, 6vw, 40px)',
+            height: 'clamp(28px, 6vw, 40px)',
+            animation: isLit ? `starTwinkle 3.2s ease-in-out infinite` : 'none',
+            animationDelay: `${pulseDelay}s`
+          }}
+        >
+          <defs>
+            <linearGradient id={`starGrad-${index}`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#FFF7C2" />
+              <stop offset="50%" stopColor="#FFD700" />
+              <stop offset="100%" stopColor="#FF9800" />
+            </linearGradient>
+          </defs>
+          <polygon 
+            points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" 
+            fill={isLit ? `url(#starGrad-${index})` : 'rgba(255, 255, 255, 0.08)'}
+            stroke={isLit ? '#FFF8DC' : 'rgba(255, 255, 255, 0.2)'}
+            strokeWidth="1.2"
+          />
+        </svg>
+
+        {/* Destello de diamante brillante (✦) que aparece con rotación y fulgor */}
+        {isLit && (
+          <div
+            className="star-glint"
+            style={{
+              position: 'absolute',
+              top: '-6px',
+              right: '-6px',
+              fontSize: '12px',
+              color: '#FFF9C4',
+              textShadow: '0 0 8px #FFF, 0 0 15px #FFD700',
+              pointerEvents: 'none',
+              animation: `starGlint 4.2s ease-in-out infinite`,
+              animationDelay: `${sparkleDelay}s`
+            }}
+          >
+            ✦
+          </div>
+        )}
+      </div>
+
       <span
         style={{
-          fontSize: '0.65rem',
+          fontSize: 'clamp(0.58rem, 1.8vw, 0.65rem)',
           fontWeight: 700,
-          marginTop: '2px',
-          color: isLit ? '#FFE082' : 'rgba(255,255,255,0.25)',
-          fontVariantNumeric: 'tabular-nums'
+          marginTop: '3px',
+          color: isLit ? '#FFE082' : 'rgba(255,255,255,0.22)',
+          fontVariantNumeric: 'tabular-nums',
+          textShadow: isLit ? '0 0 8px rgba(255,215,0,0.5)' : 'none'
         }}
       >
         #{String(index + 1).padStart(2, '0')}
@@ -51,31 +160,94 @@ const ClassicStar = ({ isLit, index, total }) => {
   );
 };
 
-// ─── COMPONENTE ROSA FLORECIDA (SVG) ────────────────────────────────────────
+// ─── COMPONENTE ROSA FLORECIDA CON BALANCEO Y GOTAS DE BRILLO (VIVO) ────────
 const BloomingRose = ({ isLit, index }) => {
+  const swayDelay = ((index * 0.42) % 3.6).toFixed(2);
+  const glowDelay = ((index * 0.55) % 4.2).toFixed(2);
+  const sparkleDelay = ((index * 0.68) % 5.0).toFixed(2);
+
   return (
     <div
+      className={`rose-container ${isLit ? 'rose-lit' : 'rose-unlit'}`}
       style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '6px',
-        transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
-        transform: isLit ? 'scale(1.1)' : 'scale(0.9)',
-        filter: isLit ? 'drop-shadow(0 0 12px rgba(244, 63, 94, 0.9))' : 'none'
+        padding: '4px',
+        position: 'relative'
       }}
     >
-      <div style={{ fontSize: '34px', lineHeight: 1, filter: isLit ? 'none' : 'grayscale(1) opacity(0.25)' }}>
-        🌹
+      <div 
+        style={{ 
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        {/* Halo carmesí / rubí pulsante detrás de rosas florecidas */}
+        {isLit && (
+          <div
+            className="rose-halo"
+            style={{
+              position: 'absolute',
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(244, 63, 94, 0.4) 0%, rgba(244, 63, 94, 0) 70%)',
+              animation: `roseHaloPulse 3.5s ease-in-out infinite`,
+              animationDelay: `${glowDelay}s`,
+              pointerEvents: 'none'
+            }}
+          />
+        )}
+
+        {/* Emoji de Rosa con balanceo orgánico de brisa */}
+        <div
+          className={isLit ? 'rose-emoji-lit' : 'rose-emoji-unlit'}
+          style={{
+            fontSize: 'clamp(28px, 6vw, 36px)',
+            lineHeight: 1,
+            filter: isLit ? 'none' : 'grayscale(1) opacity(0.25)',
+            animation: isLit 
+              ? `roseSway 3.8s ease-in-out infinite` 
+              : `unlitBreath 4s ease-in-out infinite`,
+            animationDelay: `${swayDelay}s`
+          }}
+        >
+          🌹
+        </div>
+
+        {/* Destello de rocío brillante que centellea */}
+        {isLit && (
+          <div
+            className="rose-dewdrop"
+            style={{
+              position: 'absolute',
+              top: '-4px',
+              right: '-4px',
+              fontSize: '11px',
+              color: '#fda4af',
+              textShadow: '0 0 10px #f43f5e, 0 0 18px #fff',
+              pointerEvents: 'none',
+              animation: `dewdropGlint 4.5s ease-in-out infinite`,
+              animationDelay: `${sparkleDelay}s`
+            }}
+          >
+            ✨
+          </div>
+        )}
       </div>
+
       <span
         style={{
-          fontSize: '0.65rem',
+          fontSize: 'clamp(0.58rem, 1.8vw, 0.65rem)',
           fontWeight: 700,
-          marginTop: '2px',
-          color: isLit ? '#fda4af' : 'rgba(255,255,255,0.25)',
-          fontVariantNumeric: 'tabular-nums'
+          marginTop: '3px',
+          color: isLit ? '#fda4af' : 'rgba(255,255,255,0.22)',
+          fontVariantNumeric: 'tabular-nums',
+          textShadow: isLit ? '0 0 8px rgba(244,63,94,0.5)' : 'none'
         }}
       >
         #{String(index + 1).padStart(2, '0')}
@@ -104,6 +276,8 @@ const BelenDashboard = () => {
   const [receivedItems, setReceivedItems] = useState(0);
   const [campaignTitle, setCampaignTitle] = useState('');
   const [loading, setLoading] = useState(true);
+  const [newDeliveryAlert, setNewDeliveryAlert] = useState(false);
+  const prevReceivedRef = useRef(null);
 
   // 1. Cargar Campañas o Datos Públicos de la Campaña
   useEffect(() => {
@@ -171,7 +345,13 @@ const BelenDashboard = () => {
           const m = res.data.data;
           setTotalItems(m.TOTAL || m.TOTAL_ITEMS || 0);
           // Tomar unidades entregadas exactas (incluyendo parciales):
-          setReceivedItems(m.TOTAL_DELIVERED_UNITS ?? m.RECEIVED ?? 0);
+          const currentReceived = m.TOTAL_DELIVERED_UNITS ?? m.RECEIVED ?? 0;
+          if (prevReceivedRef.current !== null && currentReceived > prevReceivedRef.current) {
+            setNewDeliveryAlert(true);
+            setTimeout(() => setNewDeliveryAlert(false), 4500);
+          }
+          prevReceivedRef.current = currentReceived;
+          setReceivedItems(currentReceived);
         }
       } catch (err) {
         console.error('Error al obtener métricas en vivo:', err);
@@ -373,6 +553,7 @@ const BelenDashboard = () => {
   // ───────────────────────────────────────────────────────────────────────────
   return (
     <div
+      className="live-projection-root"
       style={{
         position: 'fixed',
         inset: 0,
@@ -391,83 +572,170 @@ const BelenDashboard = () => {
         fontFamily: 'system-ui, -apple-system, sans-serif'
       }}
     >
+      {/* Polvo estelar / luciérnagas flotantes de ambiente */}
+      <AmbientParticles theme={activeTheme} />
       
-      {/* ─── BARRA FLOTANTE MÍNIMA Y NO INVASIVA ──────────────────────────────── */}
+      {/* ─── BARRA SUPERIOR TOTALMENTE ADAPTATIVA A MÓVIL Y TV ───────────────── */}
       <header
+        className="live-header"
         style={{
           flexShrink: 0,
-          background: 'rgba(10, 12, 18, 0.75)',
+          background: 'rgba(10, 12, 18, 0.88)',
           backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
           borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          padding: '10px 20px',
+          padding: 'max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left))',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          zIndex: 100
+          gap: '8px',
+          width: '100%',
+          boxSizing: 'border-box',
+          zIndex: 100,
+          position: 'relative'
         }}
       >
-        {/* Botón discreto para regresar al panel */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        {/* Izquierda: Botón regresar y Título con truncado seguro */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexShrink: 1 }}>
           <button
             onClick={() => setIsLive(false)}
+            aria-label="Regresar al Panel"
+            title="Regresar al Panel"
             style={{
               background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.15)',
               borderRadius: '8px',
-              padding: '6px 12px',
+              padding: '6px 10px',
               color: '#fff',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              fontSize: '0.78rem',
+              gap: '4px',
+              fontSize: '0.75rem',
               fontWeight: 700,
-              transition: 'background 0.2s'
+              flexShrink: 0,
+              transition: 'all 0.2s ease'
             }}
-            title="Volver al panel"
           >
-            <ChevronLeft size={16} /> Regresar al Panel
+            <ChevronLeft size={16} />
+            <span className="live-btn-text">Panel</span>
           </button>
 
-          <div>
-            <span style={{ fontSize: '0.62rem', color: '#DEB841', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Sparkles size={11} /> Proyección Oficial
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <span style={{ 
+              fontSize: 'clamp(0.55rem, 1.6vw, 0.65rem)', 
+              color: '#DEB841', 
+              fontWeight: 800, 
+              textTransform: 'uppercase', 
+              letterSpacing: '1px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '4px',
+              whiteSpace: 'nowrap'
+            }}>
+              <Sparkles size={10} /> Proyección
             </span>
-            <h2 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, color: '#fff' }}>
+            <h2 
+              title={campaignTitle || 'Campaña en Vivo'}
+              style={{ 
+                fontSize: 'clamp(0.82rem, 2.4vw, 1.05rem)', 
+                fontWeight: 800, 
+                margin: 0, 
+                color: '#fff',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: 'clamp(110px, 30vw, 360px)'
+              }}
+            >
               {campaignTitle || 'Campaña en Vivo'}
             </h2>
           </div>
         </div>
 
-        {/* Métricas y Porcentaje */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
+        {/* Derecha: Métricas, Alerta de Entrega y Porcentaje */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(6px, 1.8vw, 14px)', flexShrink: 0 }}>
+          {/* Banner emergente cuando se registra una nueva entrega en vivo */}
+          {newDeliveryAlert && (
+            <div
+              className="celebration-badge"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                color: '#fff',
+                padding: '4px 8px',
+                borderRadius: '8px',
+                fontSize: '0.68rem',
+                fontWeight: 800,
+                boxShadow: '0 0 16px rgba(16,185,129,0.7)',
+                whiteSpace: 'nowrap',
+                animation: 'celebrationPop 0.5s ease-out'
+              }}
+            >
+              <PartyPopper size={13} />
+              <span className="live-badge-text">¡+1 Entregado!</span>
+            </div>
+          )}
+
+          {/* Contador Entregas */}
+          <div style={{ textAlign: 'right', minWidth: 'fit-content' }}>
+            <span style={{ 
+              fontSize: 'clamp(0.52rem, 1.4vw, 0.65rem)', 
+              color: 'rgba(255,255,255,0.5)', 
+              textTransform: 'uppercase', 
+              letterSpacing: '0.8px', 
+              fontWeight: 700,
+              display: 'block'
+            }}>
               Entregas
             </span>
-            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#DEB841', lineHeight: 1 }}>
-              {receivedItems} <span style={{ fontSize: '0.95rem', color: '#94a3b8' }}>/ {totalItems}</span>
+            <div style={{ 
+              fontSize: 'clamp(1rem, 3.2vw, 1.45rem)', 
+              fontWeight: 900, 
+              color: '#DEB841', 
+              lineHeight: 1,
+              whiteSpace: 'nowrap'
+            }}>
+              {receivedItems}
+              <span style={{ fontSize: 'clamp(0.72rem, 2.2vw, 0.95rem)', color: '#94a3b8', fontWeight: 600 }}>
+                /{totalItems}
+              </span>
             </div>
           </div>
 
+          {/* Badge de Porcentaje */}
           <div
             style={{
-              background: 'linear-gradient(135deg, rgba(222,184,65,0.2) 0%, rgba(222,184,65,0.05) 100%)',
+              background: 'linear-gradient(135deg, rgba(222,184,65,0.25) 0%, rgba(222,184,65,0.08) 100%)',
               border: '1px solid rgba(222,184,65,0.4)',
-              borderRadius: '12px',
-              padding: '4px 14px',
-              textAlign: 'center'
+              borderRadius: '10px',
+              padding: 'clamp(3px, 0.8vw, 5px) clamp(7px, 1.6vw, 12px)',
+              textAlign: 'center',
+              minWidth: 'clamp(46px, 11vw, 64px)'
             }}
           >
-            <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fff', lineHeight: 1 }}>
+            <div style={{ 
+              fontSize: 'clamp(0.95rem, 3vw, 1.35rem)', 
+              fontWeight: 900, 
+              color: '#fff', 
+              lineHeight: 1 
+            }}>
               {percentage}%
             </div>
-            <span style={{ fontSize: '0.58rem', color: '#DEB841', fontWeight: 800, textTransform: 'uppercase' }}>
+            <span style={{ 
+              fontSize: 'clamp(0.48rem, 1.3vw, 0.58rem)', 
+              color: '#DEB841', 
+              fontWeight: 800, 
+              textTransform: 'uppercase',
+              display: 'block'
+            }}>
               Meta
             </span>
           </div>
 
-          {/* Botón Fullscreen */}
+          {/* Botón Pantalla Completa */}
           <button
             onClick={toggleFullscreen}
             style={{
@@ -475,14 +743,16 @@ const BelenDashboard = () => {
               border: '1px solid rgba(255,255,255,0.12)',
               color: '#cbd5e1',
               borderRadius: '8px',
-              padding: '8px',
+              padding: '6px',
               cursor: 'pointer',
               display: 'flex',
-              alignItems: 'center'
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s'
             }}
             title="Pantalla Completa"
           >
-            {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+            {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
           </button>
         </div>
       </header>
@@ -492,47 +762,84 @@ const BelenDashboard = () => {
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '24px 32px',
+          padding: 'clamp(14px, 3vw, 28px) clamp(10px, 3vw, 32px)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: activeTheme === 'bar' ? 'center' : 'flex-start'
+          justifyContent: activeTheme === 'bar' ? 'center' : 'flex-start',
+          position: 'relative',
+          zIndex: 2
         }}
       >
         {activeTheme === 'bar' ? (
-          /* VISTA 1: BARRA DE PROGRESO */
-          <div style={{ width: '100%', maxWidth: '850px', textAlign: 'center' }}>
-            <h1 style={{ fontSize: '2.8rem', fontWeight: 900, marginBottom: '24px', color: '#fff', letterSpacing: '-0.5px' }}>
+          /* VISTA 1: BARRA DE PROGRESO VIVA CON EFECTO DE ONDA Y ORBE */
+          <div style={{ width: '100%', maxWidth: '850px', textAlign: 'center', padding: '0 10px' }}>
+            <h1 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.8rem)', fontWeight: 900, marginBottom: '24px', color: '#fff', letterSpacing: '-0.5px' }}>
               {campaignTitle}
             </h1>
             
-            <div style={{ width: '100%', height: '40px', background: 'rgba(255,255,255,0.08)', borderRadius: '20px', overflow: 'hidden', padding: '4px', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 0 50px rgba(0,0,0,0.6)' }}>
+            <div style={{ 
+              width: '100%', 
+              height: 'clamp(32px, 5vw, 46px)', 
+              background: 'rgba(255,255,255,0.08)', 
+              borderRadius: '24px', 
+              overflow: 'hidden', 
+              padding: '4px', 
+              border: '1px solid rgba(255,255,255,0.18)', 
+              boxShadow: '0 0 50px rgba(0,0,0,0.6)',
+              position: 'relative'
+            }}>
               <div
+                className="animated-progress-fill"
                 style={{
                   width: `${percentage}%`,
                   height: '100%',
-                  background: 'linear-gradient(90deg, #DEB841 0%, #10b981 100%)',
-                  borderRadius: '16px',
-                  boxShadow: '0 0 24px rgba(16,185,129,0.7)',
-                  transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)'
+                  background: 'linear-gradient(90deg, #DEB841 0%, #10b981 50%, #34d399 75%, #DEB841 100%)',
+                  backgroundSize: '200% 100%',
+                  borderRadius: '20px',
+                  boxShadow: '0 0 28px rgba(16,185,129,0.7)',
+                  transition: 'width 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  animation: 'barShimmerFlow 3.5s linear infinite',
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end'
                 }}
-              />
+              >
+                {/* Orbe de Luz brillante en la punta del avance */}
+                {parseFloat(percentage) > 0 && (
+                  <div
+                    className="progress-head-orb"
+                    style={{
+                      width: '14px',
+                      height: '14px',
+                      borderRadius: '50%',
+                      background: '#fff',
+                      marginRight: '2px',
+                      animation: 'headOrbPulse 2s ease-in-out infinite',
+                      flexShrink: 0
+                    }}
+                  />
+                )}
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '18px', color: '#94a3b8', fontSize: '1.2rem', fontWeight: 700 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '18px', color: '#94a3b8', fontSize: 'clamp(0.85rem, 2.2vw, 1.2rem)', fontWeight: 700 }}>
               <span>0 canastas</span>
-              <span style={{ color: '#fff', fontSize: '1.8rem', fontWeight: 900 }}>{receivedItems} Entregadas</span>
+              <span style={{ color: '#fff', fontSize: 'clamp(1.15rem, 3.2vw, 1.8rem)', fontWeight: 900 }}>
+                {receivedItems} Entregadas
+              </span>
               <span>{totalItems} Meta</span>
             </div>
           </div>
         ) : (
-          /* VISTA 2 O 3: MATRIZ DE ELEMENTOS (ESTRELLAS O ROSAS) */
+          /* VISTA 2 O 3: MATRIZ DE ELEMENTOS (ESTRELLAS O ROSAS VIVAS) */
           <div style={{ width: '100%', maxWidth: '1400px' }}>
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(75px, 1fr))',
-                gap: '12px',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(52px, 12vw, 76px), 1fr))',
+                gap: 'clamp(6px, 1.5vw, 12px)',
                 justifyContent: 'center',
                 alignItems: 'center'
               }}
@@ -549,6 +856,101 @@ const BelenDashboard = () => {
           </div>
         )}
       </main>
+
+      {/* ─── HOJA DE ESTILOS CSS CON MICRO-ANIMACIONES DE BRILLO, BALANCEO Y ONDAS ── */}
+      <style>{`
+        @keyframes starFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+
+        @keyframes starTwinkle {
+          0%, 100% { 
+            transform: scale(1); 
+            filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.6)); 
+          }
+          50% { 
+            transform: scale(1.08); 
+            filter: drop-shadow(0 0 16px rgba(255, 235, 59, 1)) drop-shadow(0 0 24px rgba(255, 215, 0, 0.8)); 
+          }
+        }
+
+        @keyframes starPulseHalo {
+          0%, 100% { transform: scale(0.9); opacity: 0.35; }
+          50% { transform: scale(1.3); opacity: 0.75; }
+        }
+
+        @keyframes starGlint {
+          0%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
+          40% { transform: scale(1.2) rotate(90deg); opacity: 1; }
+          60% { transform: scale(1.4) rotate(180deg); opacity: 1; }
+          80% { transform: scale(0.2) rotate(270deg); opacity: 0.2; }
+        }
+
+        @keyframes unlitBreath {
+          0%, 100% { opacity: 0.22; }
+          50% { opacity: 0.42; }
+        }
+
+        @keyframes roseSway {
+          0%, 100% { transform: rotate(0deg) translateY(0); }
+          25% { transform: rotate(-3.5deg) translateY(-2px); }
+          75% { transform: rotate(3.5deg) translateY(-1px); }
+        }
+
+        @keyframes roseHaloPulse {
+          0%, 100% { transform: scale(0.9); opacity: 0.3; }
+          50% { transform: scale(1.25); opacity: 0.75; }
+        }
+
+        @keyframes dewdropGlint {
+          0%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
+          35% { transform: scale(1.3) rotate(45deg); opacity: 1; }
+          70% { transform: scale(0) rotate(90deg); opacity: 0; }
+        }
+
+        @keyframes barShimmerFlow {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 200% 50%; }
+        }
+
+        @keyframes headOrbPulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 10px #fff, 0 0 20px #10b981, 0 0 30px #DEB841; }
+          50% { transform: scale(1.35); box-shadow: 0 0 16px #fff, 0 0 30px #34d399, 0 0 45px #DEB841; }
+        }
+
+        @keyframes particleDrift {
+          0% {
+            transform: translateY(0) translateX(0);
+            opacity: 0;
+          }
+          15% {
+            opacity: 0.7;
+          }
+          85% {
+            opacity: 0.7;
+          }
+          100% {
+            transform: translateY(-105vh) translateX(25px);
+            opacity: 0;
+          }
+        }
+
+        @keyframes celebrationPop {
+          0% { transform: scale(0.6); opacity: 0; }
+          60% { transform: scale(1.15); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+
+        @media (max-width: 520px) {
+          .live-btn-text {
+            display: none !important;
+          }
+          .live-badge-text {
+            display: none !important;
+          }
+        }
+      `}</style>
 
     </div>
   );
