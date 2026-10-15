@@ -5,7 +5,7 @@ import api from '../../services/api';
 import Swal from 'sweetalert2';
 import { 
   Palette, Users, Globe, Copy, Check, Plus, Trash2, 
-  ExternalLink, Sparkles, Shield, UserPlus, Image as ImageIcon,
+  ExternalLink, Sparkles, Shield, UserPlus, Edit, Image as ImageIcon,
   Key, Mail, Phone, User
 } from 'lucide-react';
 
@@ -25,15 +25,23 @@ const BrandSettings = () => {
   const [isSavingBrand, setIsSavingBrand] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  // Permisos de módulos que este usuario puede otorgar
+  const canGrantCartelera = user?.role === 'admin' || Boolean(user?.module_cartelera);
+  const canGrantLogistics = user?.role === 'admin' || Boolean(user?.module_logistics);
+
   // Estados de gestión de Staff
   const [staffList, setStaffList] = useState([]);
   const [loadingStaff, setLoadingStaff] = useState(true);
   const [showCreateStaffModal, setShowCreateStaffModal] = useState(false);
+  const [editingStaff, setEditingStaff] = useState(null);
+  const [isUpdatingStaff, setIsUpdatingStaff] = useState(false);
   const [newStaff, setNewStaff] = useState({
     name: '',
     email: '',
     phone: '',
-    password: ''
+    password: '',
+    module_cartelera: canGrantCartelera,
+    module_logistics: canGrantLogistics
   });
   const [isCreatingStaff, setIsCreatingStaff] = useState(false);
 
@@ -241,7 +249,12 @@ const BrandSettings = () => {
 
     setIsCreatingStaff(true);
     try {
-      const res = await api.post('/users/my-staff', newStaff);
+      const payload = {
+        ...newStaff,
+        module_cartelera: canGrantCartelera ? Boolean(newStaff.module_cartelera) : false,
+        module_logistics: canGrantLogistics ? Boolean(newStaff.module_logistics) : false
+      };
+      const res = await api.post('/users/my-staff', payload);
       if (res.data?.status === 'OK') {
         Swal.fire({
           icon: 'success',
@@ -252,13 +265,57 @@ const BrandSettings = () => {
           confirmButtonColor: primaryColor
         });
         setShowCreateStaffModal(false);
-        setNewStaff({ name: '', email: '', phone: '', password: '' });
+        setNewStaff({
+          name: '',
+          email: '',
+          phone: '',
+          password: '',
+          module_cartelera: canGrantCartelera,
+          module_logistics: canGrantLogistics
+        });
         fetchStaff();
       }
     } catch (err) {
       Swal.fire('Error', err?.response?.data?.message || 'Error al crear el staff.', 'error');
     } finally {
       setIsCreatingStaff(false);
+    }
+  };
+
+  // Actualizar Staff
+  const handleUpdateStaff = async (e) => {
+    e.preventDefault();
+    if (!editingStaff?.name) {
+      Swal.fire('Campos requeridos', 'Ingresa el nombre del staff.', 'warning');
+      return;
+    }
+
+    setIsUpdatingStaff(true);
+    try {
+      const payload = {
+        name: editingStaff.name,
+        phone: editingStaff.phone,
+        password: editingStaff.password ? editingStaff.password : undefined,
+        module_cartelera: canGrantCartelera ? Boolean(editingStaff.module_cartelera) : false,
+        module_logistics: canGrantLogistics ? Boolean(editingStaff.module_logistics) : false
+      };
+      const res = await api.put(`/users/my-staff/${editingStaff.id}`, payload);
+      if (res.data?.status === 'OK') {
+        Swal.fire({
+          icon: 'success',
+          title: '¡Staff Actualizado!',
+          text: `Los datos y permisos de ${editingStaff.name} han sido actualizados.`,
+          background: '#16171f',
+          color: '#fff',
+          confirmButtonColor: primaryColor
+        });
+        setEditingStaff(null);
+        fetchStaff();
+      }
+    } catch (err) {
+      Swal.fire('Error', err?.response?.data?.message || 'Error al actualizar el staff.', 'error');
+    } finally {
+      setIsUpdatingStaff(false);
     }
   };
 
@@ -730,18 +787,47 @@ const BrandSettings = () => {
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '2px' }}>
                         {st.email} {st.phone && `· ${st.phone}`}
                       </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                        {st.module_cartelera ? (
+                          <span style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: '4px', background: 'rgba(245,197,24,0.15)', color: '#f5c518', border: '1px solid rgba(245,197,24,0.3)', fontWeight: 600 }}>
+                            🎟️ Cartelera
+                          </span>
+                        ) : null}
+                        {st.module_logistics ? (
+                          <span style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: '4px', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.3)', fontWeight: 600 }}>
+                            📦 Logística
+                          </span>
+                        ) : null}
+                        {!st.module_cartelera && !st.module_logistics && (
+                          <span style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: '4px', background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)', fontWeight: 600 }}>
+                            ⚠️ Sin módulos asignados
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.72rem', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', padding: '4px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                        Staff
-                      </span>
+                      <button 
+                        onClick={() => setEditingStaff({
+                          id: st.id,
+                          name: st.name,
+                          email: st.email,
+                          phone: st.phone || '',
+                          password: '',
+                          module_cartelera: Boolean(st.module_cartelera),
+                          module_logistics: Boolean(st.module_logistics)
+                        })}
+                        style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)', color: '#60a5fa', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
+                        title="Editar permisos y clave"
+                      >
+                        <Edit size={14} /> Editar
+                      </button>
                       <button 
                         onClick={() => handleDeleteStaff(st)}
-                        style={{ background: 'rgba(239,68,68,0.1)', border: 'none', color: '#ef4444', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}
+                        style={{ background: 'rgba(239,68,68,0.1)', border: 'none', color: '#ef4444', padding: '7px 9px', borderRadius: '8px', cursor: 'pointer' }}
                         title="Eliminar usuario de staff"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={15} />
                       </button>
                     </div>
                   </div>
@@ -825,6 +911,45 @@ const BrandSettings = () => {
                 />
               </div>
 
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                  Módulos Autorizados para este Staff:
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(0,0,0,0.25)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: canGrantCartelera ? 'pointer' : 'not-allowed', opacity: canGrantCartelera ? 1 : 0.45 }}>
+                    <input 
+                      type="checkbox"
+                      disabled={!canGrantCartelera}
+                      checked={Boolean(newStaff.module_cartelera && canGrantCartelera)}
+                      onChange={e => setNewStaff({ ...newStaff, module_cartelera: e.target.checked })}
+                      style={{ width: '16px', height: '16px', accentColor: primaryColor }}
+                    />
+                    <div>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>🎟️ Cartelera de Eventos</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>
+                        {canGrantCartelera ? 'Escaneo de entradas QR y pistas' : 'No disponible (Tu organización no tiene contratado este módulo)'}
+                      </span>
+                    </div>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: canGrantLogistics ? 'pointer' : 'not-allowed', opacity: canGrantLogistics ? 1 : 0.45 }}>
+                    <input 
+                      type="checkbox"
+                      disabled={!canGrantLogistics}
+                      checked={Boolean(newStaff.module_logistics && canGrantLogistics)}
+                      onChange={e => setNewStaff({ ...newStaff, module_logistics: e.target.checked })}
+                      style={{ width: '16px', height: '16px', accentColor: primaryColor }}
+                    />
+                    <div>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>📦 Logística & Entregas</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>
+                        {canGrantLogistics ? 'Validación y canje de kits/lotes en campañas' : 'No disponible (Tu organización no tiene contratado este módulo)'}
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button 
                   type="button" 
@@ -841,6 +966,136 @@ const BrandSettings = () => {
                   style={{ flex: 1, padding: '12px', borderRadius: '10px', fontWeight: 700 }}
                 >
                   {isCreatingStaff ? 'Creando...' : 'Crear Usuario'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Editar Staff */}
+      {editingStaff && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 10000, padding: '20px'
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '24px' }}>
+            <h3 style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 800, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Edit size={20} color={primaryColor} /> Editar Personal de Staff
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: '18px' }}>
+              Modifica los permisos de acceso a módulos o actualiza su contraseña de acceso.
+            </p>
+
+            <form onSubmit={handleUpdateStaff} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Nombre y Apellido:
+                </label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={editingStaff.name} 
+                  onChange={e => setEditingStaff({ ...editingStaff, name: e.target.value })} 
+                  required 
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Correo Electrónico (No modificable):
+                </label>
+                <input 
+                  type="email" 
+                  className="input-field" 
+                  value={editingStaff.email} 
+                  disabled
+                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Teléfono / WhatsApp:
+                </label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={editingStaff.phone} 
+                  onChange={e => setEditingStaff({ ...editingStaff, phone: e.target.value })} 
+                  placeholder="0991234567" 
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Nueva Contraseña (dejar en blanco para no cambiar):
+                </label>
+                <input 
+                  type="password" 
+                  className="input-field" 
+                  value={editingStaff.password} 
+                  onChange={e => setEditingStaff({ ...editingStaff, password: e.target.value })} 
+                  placeholder="Nueva contraseña opcional" 
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                  Módulos Autorizados:
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(0,0,0,0.25)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: canGrantCartelera ? 'pointer' : 'not-allowed', opacity: canGrantCartelera ? 1 : 0.45 }}>
+                    <input 
+                      type="checkbox"
+                      disabled={!canGrantCartelera}
+                      checked={Boolean(editingStaff.module_cartelera && canGrantCartelera)}
+                      onChange={e => setEditingStaff({ ...editingStaff, module_cartelera: e.target.checked })}
+                      style={{ width: '16px', height: '16px', accentColor: primaryColor }}
+                    />
+                    <div>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>🎟️ Cartelera de Eventos</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>
+                        {canGrantCartelera ? 'Escaneo de entradas QR y pistas' : 'No disponible (Tu organización no tiene contratado este módulo)'}
+                      </span>
+                    </div>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: canGrantLogistics ? 'pointer' : 'not-allowed', opacity: canGrantLogistics ? 1 : 0.45 }}>
+                    <input 
+                      type="checkbox"
+                      disabled={!canGrantLogistics}
+                      checked={Boolean(editingStaff.module_logistics && canGrantLogistics)}
+                      onChange={e => setEditingStaff({ ...editingStaff, module_logistics: e.target.checked })}
+                      style={{ width: '16px', height: '16px', accentColor: primaryColor }}
+                    />
+                    <div>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>📦 Logística & Entregas</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>
+                        {canGrantLogistics ? 'Validación y canje de kits/lotes en campañas' : 'No disponible (Tu organización no tiene contratado este módulo)'}
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setEditingStaff(null)}
+                  className="btn-secondary" 
+                  style={{ flex: 1, padding: '12px', borderRadius: '10px' }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn-primary" 
+                  disabled={isUpdatingStaff}
+                  style={{ flex: 1, padding: '12px', borderRadius: '10px', fontWeight: 700 }}
+                >
+                  {isUpdatingStaff ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
               </div>
             </form>

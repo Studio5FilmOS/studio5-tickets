@@ -5,7 +5,13 @@ const { query } = require('../config/db');
 exports.getAllUsers = async (req, res) => {
   try {
     const result = await query(
-      "SELECT id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics, created_at FROM users WHERE role IN ('admin', 'staff', 'organizer') ORDER BY role, name ASC"
+      `SELECT u.id, u.name, u.email, u.phone, u.role, u.is_verified, u.token_tarjeta, u.debt_balance, 
+              u.module_cartelera, u.module_logistics, u.workgroup_organizer_id, u.created_at,
+              org.name as organizer_name
+       FROM users u
+       LEFT JOIN users org ON u.workgroup_organizer_id = org.id
+       WHERE u.role IN ('admin', 'staff', 'organizer') 
+       ORDER BY u.role, u.name ASC`
     );
     res.json({ status: 'OK', users: result.rows });
   } catch (err) {
@@ -15,7 +21,7 @@ exports.getAllUsers = async (req, res) => {
 
 // Crear nuevo usuario (Admin panel)
 exports.createUser = async (req, res) => {
-  const { name, email, phone, password, role, token_tarjeta, module_cartelera = true, module_logistics = false } = req.body;
+  const { name, email, phone, password, role, token_tarjeta, module_cartelera = true, module_logistics = false, workgroup_organizer_id } = req.body;
   if (!name || !email || !password || !role) {
     return res.status(400).json({ status: 'ERROR', message: 'Nombre, correo, contraseña y rol son obligatorios.' });
   }
@@ -29,8 +35,8 @@ exports.createUser = async (req, res) => {
     }
     const hash = await bcrypt.hash(password, 10);
     const result = await query(
-      'INSERT INTO users (name, email, phone, password_hash, role, is_verified, token_tarjeta, module_cartelera, module_logistics) VALUES ($1,$2,$3,$4,$5,TRUE,$6,$7,$8) RETURNING id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics, created_at',
-      [name, email.toLowerCase().trim(), phone || null, hash, role, token_tarjeta || null, module_cartelera, module_logistics]
+      'INSERT INTO users (name, email, phone, password_hash, role, is_verified, token_tarjeta, module_cartelera, module_logistics, workgroup_organizer_id) VALUES ($1,$2,$3,$4,$5,TRUE,$6,$7,$8,$9) RETURNING id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics, workgroup_organizer_id, created_at',
+      [name, email.toLowerCase().trim(), phone || null, hash, role, token_tarjeta || null, module_cartelera, module_logistics, workgroup_organizer_id || null]
     );
     res.status(201).json({ status: 'OK', message: 'Usuario creado exitosamente.', user: result.rows[0] });
   } catch (err) {
@@ -38,10 +44,10 @@ exports.createUser = async (req, res) => {
   }
 };
 
-// Actualizar usuario (nombre, teléfono, rol, contraseña, token_tarjeta)
+// Actualizar usuario (nombre, teléfono, rol, contraseña, token_tarjeta, módulos, organizador padre)
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
-  const { name, phone, role, password, token_tarjeta, module_cartelera, module_logistics } = req.body;
+  const { name, phone, role, password, token_tarjeta, module_cartelera, module_logistics, workgroup_organizer_id } = req.body;
 
   // Evitar que un admin se quite su propio rol
   if (req.user.id === id && role && role !== 'admin') {
@@ -52,16 +58,18 @@ exports.updateUser = async (req, res) => {
     const fields = [];
     const values = [];
     let i = 1;
-    if (name)  { fields.push(`name=$${i++}`);          values.push(name); }
-    if (phone) { fields.push(`phone=$${i++}`);         values.push(phone); }
+    if (name)  { fields.push(`name=$${i++}`);          values.push(name.trim()); }
+    if (phone !== undefined) { fields.push(`phone=$${i++}`); values.push(phone || null); }
     if (role && ['admin', 'staff', 'organizer'].includes(role)) {
                   fields.push(`role=$${i++}`);         values.push(role); }
     if (token_tarjeta !== undefined) {
                   fields.push(`token_tarjeta=$${i++}`); values.push(token_tarjeta); }
     if (module_cartelera !== undefined) {
-                  fields.push(`module_cartelera=$${i++}`); values.push(module_cartelera); }
+                  fields.push(`module_cartelera=$${i++}`); values.push(Boolean(module_cartelera)); }
     if (module_logistics !== undefined) {
-                  fields.push(`module_logistics=$${i++}`); values.push(module_logistics); }
+                  fields.push(`module_logistics=$${i++}`); values.push(Boolean(module_logistics)); }
+    if (workgroup_organizer_id !== undefined) {
+                  fields.push(`workgroup_organizer_id=$${i++}`); values.push(workgroup_organizer_id || null); }
     if (password && password.length >= 6) {
       const hash = await bcrypt.hash(password, 10);
                   fields.push(`password_hash=$${i++}`); values.push(hash);
@@ -71,7 +79,7 @@ exports.updateUser = async (req, res) => {
     }
     values.push(id);
     const result = await query(
-      `UPDATE users SET ${fields.join(', ')} WHERE id=$${i} RETURNING id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics`,
+      `UPDATE users SET ${fields.join(', ')} WHERE id=$${i} RETURNING id, name, email, phone, role, is_verified, token_tarjeta, debt_balance, module_cartelera, module_logistics, workgroup_organizer_id`,
       values
     );
     if (result.rows.length === 0) {
@@ -284,11 +292,16 @@ exports.getMyStaff = async (req, res) => {
     let result;
     if (req.user.role === 'admin') {
       result = await query(
-        "SELECT id, name, email, phone, role, created_at FROM users WHERE role = 'staff' ORDER BY name ASC"
+        `SELECT u.id, u.name, u.email, u.phone, u.role, u.module_cartelera, u.module_logistics, u.workgroup_organizer_id, u.created_at,
+                org.name as organizer_name
+         FROM users u
+         LEFT JOIN users org ON u.workgroup_organizer_id = org.id
+         WHERE u.role = 'staff' 
+         ORDER BY u.name ASC`
       );
     } else {
       result = await query(
-        "SELECT id, name, email, phone, role, created_at FROM users WHERE role = 'staff' AND workgroup_organizer_id = $1 ORDER BY name ASC",
+        "SELECT id, name, email, phone, role, module_cartelera, module_logistics, workgroup_organizer_id, created_at FROM users WHERE role = 'staff' AND workgroup_organizer_id = $1 ORDER BY name ASC",
         [organizerId]
       );
     }
@@ -302,7 +315,7 @@ exports.getMyStaff = async (req, res) => {
 exports.createMyStaff = async (req, res) => {
   try {
     const organizerId = req.user.id;
-    const { name, email, phone, password } = req.body;
+    const { name, email, phone, password, module_cartelera, module_logistics } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ status: 'ERROR', message: 'Nombre, correo y contraseña son obligatorios.' });
     }
@@ -311,14 +324,96 @@ exports.createMyStaff = async (req, res) => {
     if (exists.rows.length > 0) {
       return res.status(400).json({ status: 'ERROR', message: 'El correo electrónico ya está registrado en el sistema.' });
     }
+
+    // Consultar permisos del organizador para que el staff nunca exceda los permisos contratados
+    let assignedCartelera = true;
+    let assignedLogistics = false;
+
+    if (req.user.role === 'admin') {
+      assignedCartelera = module_cartelera !== undefined ? Boolean(module_cartelera) : true;
+      assignedLogistics = module_logistics !== undefined ? Boolean(module_logistics) : true;
+    } else {
+      const orgRes = await query('SELECT module_cartelera, module_logistics FROM users WHERE id = $1', [organizerId]);
+      const orgCartelera = orgRes.rows[0]?.module_cartelera ?? true;
+      const orgLogistics = orgRes.rows[0]?.module_logistics ?? false;
+
+      // Si el organizador NO tiene cartelera, el staff JAMÁS puede tener cartelera
+      assignedCartelera = orgCartelera && (module_cartelera !== undefined ? Boolean(module_cartelera) : true);
+      // Si el organizador tiene logística, staff puede tener logística si está activado
+      assignedLogistics = orgLogistics && (module_logistics !== undefined ? Boolean(module_logistics) : true);
+    }
+
     const hash = await bcrypt.hash(password, 10);
     const result = await query(
       `INSERT INTO users (name, email, phone, password_hash, role, is_verified, workgroup_organizer_id, module_logistics, module_cartelera)
-       VALUES ($1, $2, $3, $4, 'staff', TRUE, $5, TRUE, TRUE)
-       RETURNING id, name, email, phone, role, created_at`,
-      [name.trim(), cleanEmail, phone || null, hash, organizerId]
+       VALUES ($1, $2, $3, $4, 'staff', TRUE, $5, $6, $7)
+       RETURNING id, name, email, phone, role, module_cartelera, module_logistics, workgroup_organizer_id, created_at`,
+      [name.trim(), cleanEmail, phone || null, hash, organizerId, assignedLogistics, assignedCartelera]
     );
     res.status(201).json({ status: 'OK', message: 'Personal de Staff creado exitosamente.', staff: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', message: err.message });
+  }
+};
+
+// 10.1 Actualizar personal de Staff propio del Organizador (o Admin)
+exports.updateMyStaff = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const organizerId = req.user.id;
+    const { name, phone, password, module_cartelera, module_logistics } = req.body;
+
+    // Verificar que el usuario pertenezca al organizador (o admin)
+    const checkUser = req.user.role === 'admin'
+      ? await query("SELECT id, workgroup_organizer_id FROM users WHERE id = $1 AND role = 'staff'", [id])
+      : await query("SELECT id, workgroup_organizer_id FROM users WHERE id = $1 AND role = 'staff' AND workgroup_organizer_id = $2", [id, organizerId]);
+
+    if (checkUser.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Staff no encontrado o no pertenece a tu equipo.' });
+    }
+
+    const fields = [];
+    const values = [];
+    let i = 1;
+
+    if (name) { fields.push(`name=$${i++}`); values.push(name.trim()); }
+    if (phone !== undefined) { fields.push(`phone=$${i++}`); values.push(phone || null); }
+    if (password && password.length >= 6) {
+      const hash = await bcrypt.hash(password, 10);
+      fields.push(`password_hash=$${i++}`); values.push(hash);
+    }
+
+    if (req.user.role === 'admin') {
+      if (module_cartelera !== undefined) { fields.push(`module_cartelera=$${i++}`); values.push(Boolean(module_cartelera)); }
+      if (module_logistics !== undefined) { fields.push(`module_logistics=$${i++}`); values.push(Boolean(module_logistics)); }
+    } else {
+      // Si es organizador, restringir a los módulos del propio organizador
+      const orgRes = await query('SELECT module_cartelera, module_logistics FROM users WHERE id = $1', [organizerId]);
+      const orgCartelera = orgRes.rows[0]?.module_cartelera ?? true;
+      const orgLogistics = orgRes.rows[0]?.module_logistics ?? false;
+
+      if (module_cartelera !== undefined) {
+        fields.push(`module_cartelera=$${i++}`);
+        values.push(orgCartelera && Boolean(module_cartelera));
+      }
+      if (module_logistics !== undefined) {
+        fields.push(`module_logistics=$${i++}`);
+        values.push(orgLogistics && Boolean(module_logistics));
+      }
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ status: 'ERROR', message: 'Nada que actualizar.' });
+    }
+
+    values.push(id);
+    const result = await query(
+      `UPDATE users SET ${fields.join(', ')} WHERE id=$${i} 
+       RETURNING id, name, email, phone, role, module_cartelera, module_logistics, workgroup_organizer_id, created_at`,
+      values
+    );
+
+    res.json({ status: 'OK', message: 'Staff actualizado con éxito.', staff: result.rows[0] });
   } catch (err) {
     res.status(500).json({ status: 'ERROR', message: err.message });
   }

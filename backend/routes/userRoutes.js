@@ -16,6 +16,7 @@ router.post('/my-guarantee-card', authMiddleware, userController.updateMyGuarant
 // 4. Gestión de Staff propio del Organizador
 router.get('/my-staff', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.getMyStaff);
 router.post('/my-staff', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.createMyStaff);
+router.put('/my-staff/:id', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.updateMyStaff);
 router.delete('/my-staff/:id', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.deleteMyStaff);
 
 // 5. Gestión de Marca Blanca (Logo, Colores, Enlace Directo)

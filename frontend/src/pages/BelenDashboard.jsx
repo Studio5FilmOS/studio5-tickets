@@ -256,6 +256,19 @@ const BloomingRose = ({ isLit, index }) => {
   );
 };
 
+// Helper para procesar theme_config de forma segura (objeto o JSON string)
+const parseThemeConfig = (config) => {
+  if (!config) return {};
+  if (typeof config === 'string') {
+    try {
+      return JSON.parse(config);
+    } catch {
+      return {};
+    }
+  }
+  return config;
+};
+
 const BelenDashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -299,7 +312,8 @@ const BelenDashboard = () => {
             setSelectedCampaignId(chosen.id);
             setSelectedCampaign(chosen);
             setCampaignTitle(chosen.name);
-            setActiveTheme(chosen.theme_config?.theme || 'belen');
+            const tc = parseThemeConfig(chosen.theme_config);
+            setActiveTheme(tc?.theme || 'belen');
           }
         }
       } catch (authErr) {
@@ -312,7 +326,8 @@ const BelenDashboard = () => {
               setSelectedCampaignId(pubCamp.id);
               setSelectedCampaign(pubCamp);
               setCampaignTitle(pubCamp.name);
-              setActiveTheme(pubCamp.theme_config?.theme || 'belen');
+              const tc = parseThemeConfig(pubCamp.theme_config);
+              setActiveTheme(tc?.theme || 'belen');
             }
           } catch (pubErr) {
             console.error('Error cargando campaña pública:', pubErr);
@@ -335,8 +350,9 @@ const BelenDashboard = () => {
         const camp = campaigns.find(c => c.id === selectedCampaignId) || selectedCampaign;
         if (camp) {
           setCampaignTitle(camp.name);
-          if (camp.theme_config?.theme) {
-            setActiveTheme(camp.theme_config.theme);
+          const tc = parseThemeConfig(camp.theme_config);
+          if (tc?.theme) {
+            setActiveTheme(tc.theme);
           }
         }
 
@@ -437,6 +453,27 @@ const BelenDashboard = () => {
             Selecciona la campaña de entrega para lanzar la pantalla interactiva o copiar el enlace para proyector o Smart TV.
           </p>
 
+          {loading ? (
+            <div className="spinner" style={{ margin: '40px auto' }}></div>
+          ) : campaigns.length === 0 ? (
+            <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📦</div>
+              <h3 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '8px' }}>
+                No tienes campañas asignadas
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '20px' }}>
+                Aún no tienes campañas de entrega asociadas a tu cuenta. Solicita a tu organizador que te asigne a una campaña activa y te configure un lote.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="btn-secondary"
+                style={{ padding: '10px 20px', borderRadius: '10px', fontSize: '0.85rem' }}
+              >
+                🔄 Recargar
+              </button>
+            </div>
+          ) : (
+            <>
           {/* Selector de Campaña */}
           {campaigns.length > 0 && (
             <div style={{ textAlign: 'left', marginBottom: '18px' }}>
@@ -446,13 +483,15 @@ const BelenDashboard = () => {
               <select
                 value={selectedCampaignId}
                 onChange={(e) => {
-                  setSelectedCampaignId(e.target.value);
-                  setSearchParams({ cid: e.target.value });
-                  const c = campaigns.find(item => item.id === e.target.value);
+                  const newCid = e.target.value;
+                  setSelectedCampaignId(newCid);
+                  setSearchParams({ cid: newCid });
+                  const c = campaigns.find(item => item.id === newCid);
                   if (c) {
                     setSelectedCampaign(c);
                     setCampaignTitle(c.name);
-                    setActiveTheme(c.theme_config?.theme || 'belen');
+                    const tc = parseThemeConfig(c.theme_config);
+                    setActiveTheme(tc?.theme || 'belen');
                   }
                 }}
                 style={{
@@ -542,6 +581,8 @@ const BelenDashboard = () => {
               <Copy size={16} /> Copiar Enlace Público (TV / Proyector)
             </button>
           </div>
+            </>
+          )}
         </div>
       </div>
     );

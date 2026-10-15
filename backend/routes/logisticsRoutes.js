@@ -4,8 +4,8 @@ const logisticsController = require('../controllers/logisticsController');
 const authMiddleware = require('../middleware/authMiddleware');
 const roleMiddleware = require('../middleware/roleMiddleware');
 
-// Rutas de Campañas (Admin y Organizador)
-router.get('/campaigns', authMiddleware, roleMiddleware(['admin', 'organizer']), logisticsController.getCampaigns);
+// Rutas de Campañas (Admin, Organizador y Staff)
+router.get('/campaigns', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.getCampaigns);
 router.post('/campaigns', authMiddleware, roleMiddleware(['admin', 'organizer']), logisticsController.createCampaign);
 router.get('/campaigns/:id', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.getCampaignById);
 router.delete('/campaigns/:id', authMiddleware, roleMiddleware(['admin', 'organizer']), logisticsController.deleteCampaign);

@@ -3,7 +3,17 @@ import api from '../../services/api';
 
 const ROLES = ['admin', 'staff', 'organizer'];
 
-const INITIAL_FORM = { name: '', email: '', phone: '', password: '', role: 'staff', token_tarjeta: '', module_cartelera: true, module_logistics: false };
+const INITIAL_FORM = { 
+  name: '', 
+  email: '', 
+  phone: '', 
+  password: '', 
+  role: 'staff', 
+  token_tarjeta: '', 
+  module_cartelera: true, 
+  module_logistics: false,
+  workgroup_organizer_id: ''
+};
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -35,6 +45,8 @@ export default function AdminUsers() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
+  const organizers = users.filter(u => u.role === 'organizer');
+
   const openCreate = () => {
     setEditId(null);
     setForm(INITIAL_FORM);
@@ -43,7 +55,17 @@ export default function AdminUsers() {
 
   const openEdit = (u) => {
     setEditId(u.id);
-    setForm({ name: u.name, email: u.email, phone: u.phone || '', password: '', role: u.role, token_tarjeta: u.token_tarjeta || '', module_cartelera: u.module_cartelera ?? true, module_logistics: u.module_logistics ?? false });
+    setForm({ 
+      name: u.name, 
+      email: u.email, 
+      phone: u.phone || '', 
+      password: '', 
+      role: u.role, 
+      token_tarjeta: u.token_tarjeta || '', 
+      module_cartelera: Boolean(u.module_cartelera), 
+      module_logistics: Boolean(u.module_logistics),
+      workgroup_organizer_id: u.workgroup_organizer_id || ''
+    });
     setShowForm(true);
   };
 
@@ -52,7 +74,15 @@ export default function AdminUsers() {
     setSaving(true);
     try {
       if (editId) {
-        const payload = { name: form.name, phone: form.phone, role: form.role, token_tarjeta: form.token_tarjeta, module_cartelera: form.module_cartelera, module_logistics: form.module_logistics };
+        const payload = { 
+          name: form.name.trim(), 
+          phone: form.phone ? form.phone.trim() : null, 
+          role: form.role, 
+          token_tarjeta: form.token_tarjeta ? form.token_tarjeta.trim() : null, 
+          module_cartelera: form.module_cartelera, 
+          module_logistics: form.module_logistics,
+          workgroup_organizer_id: form.workgroup_organizer_id || null
+        };
         if (form.password.trim()) payload.password = form.password;
         await api.put(`/admin/users/${editId}`, payload);
         notify('ok', 'Usuario actualizado correctamente.');
@@ -97,7 +127,7 @@ export default function AdminUsers() {
     };
     return (
       <span style={{ ...(styles[role] || styles.staff), padding: '3px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        {role === 'organizer' ? '🏢 Organizador' : role}
+        {role === 'organizer' ? '🏢 Organizador' : role === 'staff' ? '🎭 Staff' : '🛡️ Admin'}
       </span>
     );
   };
@@ -107,8 +137,8 @@ export default function AdminUsers() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: '#fff' }}>Gestión de Usuarios</h2>
-          <p style={{ margin: '4px 0 0', color: '#888', fontSize: '0.85rem' }}>Administra los accesos del equipo de Studio 5</p>
+          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: '#fff' }}>Gestión de Usuarios & Permisos</h2>
+          <p style={{ margin: '4px 0 0', color: '#888', fontSize: '0.85rem' }}>Control maestro de credenciales, roles y módulos para organizadores y staff</p>
         </div>
         <button
           onClick={openCreate}
@@ -166,7 +196,7 @@ export default function AdminUsers() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9990, padding: 20 }}>
           <div style={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 32, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
             <h3 style={{ margin: '0 0 24px', color: '#fff', fontSize: '1.2rem', fontWeight: 700 }}>
-              {editId ? '✏️ Editar Usuario' : '➕ Nuevo Usuario'}
+              {editId ? '✏️ Editar Usuario & Permisos' : '➕ Nuevo Usuario'}
             </h3>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
@@ -222,42 +252,79 @@ export default function AdminUsers() {
                   <option value="organizer">🏢 Organizador</option>
                 </select>
               </div>
-              {form.role === 'organizer' && (
-                <>
-                  <div style={{ background: 'rgba(255,255,255,0.03)', padding: 16, borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <label style={{ display: 'block', color: 'var(--accent)', fontSize: '0.85rem', marginBottom: 12, fontWeight: 700 }}>MÓDULOS DE ACCESO</label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
-                      <input 
-                        type="checkbox" 
-                        checked={form.module_cartelera} 
-                        onChange={e => setForm({ ...form, module_cartelera: e.target.checked })}
-                        style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
-                      />
-                      <span style={{ color: '#fff', fontSize: '0.9rem' }}>Cartelera de Eventos (Boletaje)</span>
+
+              {/* Selector de Permisos de Módulos (Respaldo para Admin tanto en Staff como en Organizador) */}
+              {(form.role === 'organizer' || form.role === 'staff') && (
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <label style={{ color: 'var(--accent)', fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Módulos de Acceso
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={form.module_logistics} 
-                        onChange={e => setForm({ ...form, module_logistics: e.target.checked })}
-                        style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
-                      />
-                      <span style={{ color: '#fff', fontSize: '0.9rem' }}>Módulo de Logística (Campañas Belén)</span>
-                    </label>
+                    <span style={{ fontSize: '0.72rem', color: '#888' }}>Control de Respaldo Admin</span>
                   </div>
-                  <div>
-                    <label style={{ display: 'block', color: 'var(--accent)', fontSize: '0.8rem', marginBottom: 6, fontWeight: 600 }}>TOKEN TARJETA PAYPHONE (GARANTÍA)</label>
-                    <input
-                      type="text"
-                      value={form.token_tarjeta}
-                      onChange={e => setForm({ ...form, token_tarjeta: e.target.value })}
-                      placeholder="Ej: tok_payphone_live_..."
-                      style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--accent)', background: 'rgba(222,184,65,0.05)', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
+
+                  {form.role === 'staff' && (
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ display: 'block', color: '#ccc', fontSize: '0.78rem', marginBottom: 6, fontWeight: 600 }}>
+                        ORGANIZADOR ASIGNADO (EQUIPO DE TRABAJO):
+                      </label>
+                      <select
+                        value={form.workgroup_organizer_id || ''}
+                        onChange={e => setForm({ ...form, workgroup_organizer_id: e.target.value })}
+                        style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: '#12131c', color: '#fff', fontSize: '0.85rem' }}
+                      >
+                        <option value="">Sin Asignar (Staff Independiente)</option>
+                        {organizers.map(org => (
+                          <option key={org.id} value={org.id}>
+                            🏢 {org.name} ({org.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+                    <input 
+                      type="checkbox" 
+                      checked={form.module_cartelera} 
+                      onChange={e => setForm({ ...form, module_cartelera: e.target.checked })}
+                      style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
                     />
-                    <span style={{ fontSize: '0.72rem', color: '#888', marginTop: 4, display: 'block' }}>Requerido para cobrar comisiones en mora y permitir publicación de eventos.</span>
-                  </div>
-                </>
+                    <div>
+                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 600 }}>🎟️ Cartelera de Eventos (Boletaje)</span>
+                      <span style={{ display: 'block', color: '#888', fontSize: '0.72rem' }}>Habilita boleto QR, taquilla y escáner de sala.</span>
+                    </div>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={form.module_logistics} 
+                      onChange={e => setForm({ ...form, module_logistics: e.target.checked })}
+                      style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
+                    />
+                    <div>
+                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 600 }}>📦 Módulo de Logística (Campañas & Metas)</span>
+                      <span style={{ display: 'block', color: '#888', fontSize: '0.72rem' }}>Habilita escaneo de canastas y pantalla animada en vivo.</span>
+                    </div>
+                  </label>
+                </div>
               )}
+
+              {form.role === 'organizer' && (
+                <div>
+                  <label style={{ display: 'block', color: 'var(--accent)', fontSize: '0.8rem', marginBottom: 6, fontWeight: 600 }}>TOKEN TARJETA PAYPHONE (GARANTÍA)</label>
+                  <input
+                    type="text"
+                    value={form.token_tarjeta}
+                    onChange={e => setForm({ ...form, token_tarjeta: e.target.value })}
+                    placeholder="Ej: tok_payphone_live_..."
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--accent)', background: 'rgba(222,184,65,0.05)', color: '#fff', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                  />
+                  <span style={{ fontSize: '0.72rem', color: '#888', marginTop: 4, display: 'block' }}>Requerido para cobrar comisiones en mora y permitir publicación de eventos.</span>
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <button
                   type="button" onClick={() => setShowForm(false)}
@@ -287,7 +354,7 @@ export default function AdminUsers() {
           {users.map(u => (
             <div key={u.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
               {/* Avatar */}
-              <div style={{ width: 46, height: 46, borderRadius: '50%', background: u.role === 'admin' ? 'linear-gradient(135deg,#f5c518,#e6a800)' : 'linear-gradient(135deg,#60a5fa,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.2rem', color: '#000', flexShrink: 0 }}>
+              <div style={{ width: 46, height: 46, borderRadius: '50%', background: u.role === 'admin' ? 'linear-gradient(135deg,#f5c518,#e6a800)' : u.role === 'organizer' ? 'linear-gradient(135deg,#c084fc,#9333ea)' : 'linear-gradient(135deg,#60a5fa,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.2rem', color: '#000', flexShrink: 0 }}>
                 {u.name.charAt(0).toUpperCase()}
               </div>
               {/* Info */}
@@ -296,8 +363,38 @@ export default function AdminUsers() {
                   <span style={{ fontWeight: 700, color: '#fff', fontSize: '1rem' }}>{u.name}</span>
                   {roleBadge(u.role)}
                 </div>
-                <div style={{ color: '#888', fontSize: '0.82rem', marginTop: 3 }}>{u.email}</div>
-                {u.phone && <div style={{ color: '#666', fontSize: '0.78rem' }}>{u.phone}</div>}
+                <div style={{ color: '#888', fontSize: '0.82rem', marginTop: 3 }}>
+                  {u.email} {u.phone && `· 📱 ${u.phone}`}
+                </div>
+
+                {/* Badges de permisos y organizador asignado */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                  {u.organizer_name && (
+                    <span style={{ fontSize: '0.72rem', color: '#c084fc', background: 'rgba(168,85,247,0.12)', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(168,85,247,0.25)', fontWeight: 600 }}>
+                      🏢 Equipo: {u.organizer_name}
+                    </span>
+                  )}
+                  {u.role !== 'admin' && (
+                    <>
+                      <span style={{ 
+                        fontSize: '0.7rem', padding: '2px 7px', borderRadius: '6px', fontWeight: 700, 
+                        background: u.module_cartelera ? 'rgba(222,184,65,0.12)' : 'rgba(255,255,255,0.04)', 
+                        color: u.module_cartelera ? 'var(--accent)' : '#666', 
+                        border: `1px solid ${u.module_cartelera ? 'rgba(222,184,65,0.3)' : 'rgba(255,255,255,0.08)'}` 
+                      }}>
+                        {u.module_cartelera ? '🎟️ Cartelera' : '🎟️ Sin Cartelera'}
+                      </span>
+                      <span style={{ 
+                        fontSize: '0.7rem', padding: '2px 7px', borderRadius: '6px', fontWeight: 700, 
+                        background: u.module_logistics ? 'rgba(52,199,89,0.12)' : 'rgba(255,255,255,0.04)', 
+                        color: u.module_logistics ? '#34c759' : '#666', 
+                        border: `1px solid ${u.module_logistics ? 'rgba(52,199,89,0.3)' : 'rgba(255,255,255,0.08)'}` 
+                      }}>
+                        {u.module_logistics ? '📦 Logística' : '📦 Sin Logística'}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
               {/* Actions */}
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>

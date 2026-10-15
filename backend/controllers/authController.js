@@ -8,6 +8,32 @@ const generateOtpCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+// Helper para resolver los módulos y marca efectivos de un usuario
+// Si es Staff con workgroup_organizer_id, hereda tema y restringe módulos según el organizador padre
+const resolveEffectiveModules = async (user) => {
+  let tenant_slug = user.tenant_slug;
+  let theme_config = user.theme_config;
+  let module_cartelera = Boolean(user.module_cartelera);
+  let module_logistics = Boolean(user.module_logistics);
+
+  if (user.role === 'staff' && user.workgroup_organizer_id) {
+    const orgRes = await query(
+      'SELECT tenant_slug, theme_config, module_cartelera, module_logistics FROM users WHERE id = $1',
+      [user.workgroup_organizer_id]
+    );
+    if (orgRes.rows.length > 0) {
+      const org = orgRes.rows[0];
+      tenant_slug = org.tenant_slug;
+      theme_config = org.theme_config;
+      // El staff no puede acceder a módulos que el organizador padre no tenga contratados
+      module_cartelera = Boolean(user.module_cartelera && org.module_cartelera);
+      module_logistics = Boolean(user.module_logistics && org.module_logistics);
+    }
+  }
+
+  return { tenant_slug, theme_config, module_cartelera, module_logistics };
+};
+
 // 1. Registro de usuarios con envío de OTP
 exports.register = async (req, res) => {
   const { name, email, phone, password, role, workgroup_organizer_id } = req.body;
@@ -116,15 +142,7 @@ exports.verifyOtp = async (req, res) => {
 
     // Verificar si ya estaba verificado
     if (user.is_verified) {
-      let tenant_slug = user.tenant_slug;
-      let theme_config = user.theme_config;
-      if (user.role === 'staff' && user.workgroup_organizer_id) {
-        const orgRes = await query('SELECT tenant_slug, theme_config FROM users WHERE id = $1', [user.workgroup_organizer_id]);
-        if (orgRes.rows.length > 0) {
-          tenant_slug = orgRes.rows[0].tenant_slug;
-          theme_config = orgRes.rows[0].theme_config;
-        }
-      }
+      const resolved = await resolveEffectiveModules(user);
 
       const token = jwt.sign(
         { id: user.id, name: user.name, email: user.email, role: user.role, workgroup_organizer_id: user.workgroup_organizer_id },
@@ -143,10 +161,10 @@ exports.verifyOtp = async (req, res) => {
           role: user.role,
           token_tarjeta: user.token_tarjeta,
           debt_balance: user.debt_balance,
-          module_cartelera: user.module_cartelera,
-          module_logistics: user.module_logistics,
-          tenant_slug,
-          theme_config,
+          module_cartelera: resolved.module_cartelera,
+          module_logistics: resolved.module_logistics,
+          tenant_slug: resolved.tenant_slug,
+          theme_config: resolved.theme_config,
           workgroup_organizer_id: user.workgroup_organizer_id
         }
       });
@@ -175,15 +193,7 @@ exports.verifyOtp = async (req, res) => {
       [user.id]
     );
 
-    let tenant_slug = user.tenant_slug;
-    let theme_config = user.theme_config;
-    if (user.role === 'staff' && user.workgroup_organizer_id) {
-      const orgRes = await query('SELECT tenant_slug, theme_config FROM users WHERE id = $1', [user.workgroup_organizer_id]);
-      if (orgRes.rows.length > 0) {
-        tenant_slug = orgRes.rows[0].tenant_slug;
-        theme_config = orgRes.rows[0].theme_config;
-      }
-    }
+    const resolved = await resolveEffectiveModules(user);
 
     // Emitir Token JWT
     const token = jwt.sign(
@@ -204,10 +214,10 @@ exports.verifyOtp = async (req, res) => {
         role: user.role,
         token_tarjeta: user.token_tarjeta,
         debt_balance: user.debt_balance,
-        module_cartelera: user.module_cartelera,
-        module_logistics: user.module_logistics,
-        tenant_slug,
-        theme_config,
+        module_cartelera: resolved.module_cartelera,
+        module_logistics: resolved.module_logistics,
+        tenant_slug: resolved.tenant_slug,
+        theme_config: resolved.theme_config,
         workgroup_organizer_id: user.workgroup_organizer_id
       }
     });
@@ -349,15 +359,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    let tenant_slug = user.tenant_slug;
-    let theme_config = user.theme_config;
-    if (user.role === 'staff' && user.workgroup_organizer_id) {
-      const orgRes = await query('SELECT tenant_slug, theme_config FROM users WHERE id = $1', [user.workgroup_organizer_id]);
-      if (orgRes.rows.length > 0) {
-        tenant_slug = orgRes.rows[0].tenant_slug;
-        theme_config = orgRes.rows[0].theme_config;
-      }
-    }
+    const resolved = await resolveEffectiveModules(user);
 
     // Firmar JWT
     const token = jwt.sign(
@@ -378,10 +380,10 @@ exports.login = async (req, res) => {
         role: user.role,
         token_tarjeta: user.token_tarjeta,
         debt_balance: user.debt_balance,
-        module_cartelera: user.module_cartelera,
-        module_logistics: user.module_logistics,
-        tenant_slug,
-        theme_config,
+        module_cartelera: resolved.module_cartelera,
+        module_logistics: resolved.module_logistics,
+        tenant_slug: resolved.tenant_slug,
+        theme_config: resolved.theme_config,
         workgroup_organizer_id: user.workgroup_organizer_id
       }
     });
@@ -409,13 +411,11 @@ exports.getMe = async (req, res) => {
     }
 
     const userData = userRes.rows[0];
-    if (userData.role === 'staff' && userData.workgroup_organizer_id) {
-      const orgRes = await query('SELECT tenant_slug, theme_config FROM users WHERE id = $1', [userData.workgroup_organizer_id]);
-      if (orgRes.rows.length > 0) {
-        userData.tenant_slug = orgRes.rows[0].tenant_slug;
-        userData.theme_config = orgRes.rows[0].theme_config;
-      }
-    }
+    const resolved = await resolveEffectiveModules(userData);
+    userData.tenant_slug = resolved.tenant_slug;
+    userData.theme_config = resolved.theme_config;
+    userData.module_cartelera = resolved.module_cartelera;
+    userData.module_logistics = resolved.module_logistics;
 
     res.json({
       status: 'OK',

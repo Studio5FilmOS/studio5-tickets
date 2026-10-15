@@ -15,13 +15,19 @@ const WorkspaceSwitcher = () => {
   const tenantSlug = encodeURIComponent((theme.tenantName || 'studio5').toLowerCase().replace(/\s+/g, '-'));
 
   const handleSwitch = (workspace) => {
+    if (workspace === 'cartelera' && !hasCarteleraAccess) {
+      return;
+    }
+    if (workspace === 'logistica' && !hasLogisticsAccess) {
+      return;
+    }
     setActiveWorkspace(workspace);
     if (workspace === 'cartelera') {
-      if (location.pathname.includes('/logistica')) {
+      if (location.pathname.includes('/logistica') || location.pathname.includes('/metas')) {
         navigate('/');
       }
     } else if (workspace === 'logistica') {
-      if (!location.pathname.includes('/logistica')) {
+      if (!location.pathname.includes('/logistica') && !location.pathname.includes('/metas')) {
         if (user?.role === 'staff') {
           navigate(`/${tenantSlug}/logistica/staff`);
         } else {
@@ -48,13 +54,15 @@ const WorkspaceSwitcher = () => {
     }}>
       <button
         type="button"
+        disabled={!hasCarteleraAccess}
         onClick={() => handleSwitch('cartelera')}
+        title={!hasCarteleraAccess ? 'Tu cuenta no tiene habilitado el módulo de Cartelera' : 'Espacio Cartelera'}
         style={{
           flex: 1,
           padding: '8px 6px',
           borderRadius: '8px',
           border: 'none',
-          cursor: 'pointer',
+          cursor: !hasCarteleraAccess ? 'not-allowed' : 'pointer',
           background: activeWorkspace === 'cartelera' ? 'var(--accent)' : 'transparent',
           color: activeWorkspace === 'cartelera' ? '#000' : 'var(--text-muted)',
           fontWeight: 700,
@@ -64,6 +72,7 @@ const WorkspaceSwitcher = () => {
           justifyContent: 'center',
           gap: '6px',
           transition: 'all 0.2s ease',
+          opacity: !hasCarteleraAccess ? 0.4 : 1,
           boxShadow: activeWorkspace === 'cartelera' ? '0 2px 8px rgba(222,184,65,0.3)' : 'none'
         }}
       >
@@ -74,13 +83,15 @@ const WorkspaceSwitcher = () => {
 
       <button
         type="button"
+        disabled={!hasLogisticsAccess}
         onClick={() => handleSwitch('logistica')}
+        title={!hasLogisticsAccess ? 'Tu cuenta no tiene habilitado el módulo de Logística' : 'Espacio Logística'}
         style={{
           flex: 1,
           padding: '8px 6px',
           borderRadius: '8px',
           border: 'none',
-          cursor: 'pointer',
+          cursor: !hasLogisticsAccess ? 'not-allowed' : 'pointer',
           background: activeWorkspace === 'logistica' ? 'var(--accent)' : 'transparent',
           color: activeWorkspace === 'logistica' ? '#000' : 'var(--text-muted)',
           fontWeight: 700,
@@ -90,6 +101,7 @@ const WorkspaceSwitcher = () => {
           justifyContent: 'center',
           gap: '6px',
           transition: 'all 0.2s ease',
+          opacity: !hasLogisticsAccess ? 0.4 : 1,
           boxShadow: activeWorkspace === 'logistica' ? '0 2px 8px rgba(222,184,65,0.3)' : 'none'
         }}
       >

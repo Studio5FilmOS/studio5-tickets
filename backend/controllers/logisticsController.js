@@ -18,13 +18,21 @@ exports.getCampaigns = async (req, res) => {
     `;
     const params = [];
 
-    // Separación estricta por inquilino/organizador
-    if (user && user.role !== 'admin') {
-      const targetOrgId = user.role === 'staff' ? user.workgroup_organizer_id : user.id;
-      if (targetOrgId) {
-        sql += ' WHERE c.organizer_id = $1';
-        params.push(targetOrgId);
-      }
+    // Separación estricta por inquilino/organizador o asignación de staff
+    if (user && user.role === 'staff') {
+      const orgId = user.workgroup_organizer_id;
+      // Mostrar campañas asignadas específicamente al staff, o las campañas activas de su organizador si no tiene asignación restrictiva
+      sql += ` WHERE (
+        c.id IN (SELECT campaign_id FROM logistics_staff_assignments WHERE staff_id = $1)
+        OR (
+          NOT EXISTS (SELECT 1 FROM logistics_staff_assignments WHERE staff_id = $1)
+          AND c.organizer_id = $2
+        )
+      ) AND c.status = 'active'`;
+      params.push(user.id, orgId || user.id);
+    } else if (user && user.role === 'organizer') {
+      sql += ' WHERE c.organizer_id = $1';
+      params.push(user.id);
     }
 
     sql += ' GROUP BY c.id, u.name ORDER BY c.created_at DESC';
@@ -42,14 +50,23 @@ exports.getCampaignById = async (req, res) => {
   const user = req.user;
   try {
     const targetOrgId = user?.role === 'staff' ? user.workgroup_organizer_id : user?.id;
-    
-    const result = await query(
-      `SELECT c.*, u.name as organizer_name 
-       FROM logistics_campaigns c
-       LEFT JOIN users u ON c.organizer_id = u.id
-       WHERE c.id = $1 AND c.organizer_id = $2`,
-      [id, targetOrgId]
-    );
+    let sql = `SELECT c.*, u.name as organizer_name 
+               FROM logistics_campaigns c
+               LEFT JOIN users u ON c.organizer_id = u.id
+               WHERE c.id = $1`;
+    const params = [id];
+
+    if (user?.role !== 'admin') {
+      if (user?.role === 'staff') {
+        sql += ` AND (c.organizer_id = $2 OR c.id IN (SELECT campaign_id FROM logistics_staff_assignments WHERE staff_id = $3))`;
+        params.push(targetOrgId || user.id, user.id);
+      } else {
+        sql += ` AND c.organizer_id = $2`;
+        params.push(targetOrgId);
+      }
+    }
+
+    const result = await query(sql, params);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'ERROR', message: 'Campaña no encontrada.' });
@@ -349,7 +366,13 @@ exports.getStaffCampaigns = async (req, res) => {
         SELECT DISTINCT c.*, a.batch_start_code, a.batch_end_code, a.quantity_assigned 
         FROM logistics_campaigns c
         LEFT JOIN logistics_staff_assignments a ON c.id = a.campaign_id AND a.staff_id = $1
-        WHERE (a.staff_id = $1 OR c.organizer_id = $2) AND c.status = 'active'
+        WHERE (
+          a.staff_id = $1 
+          OR (
+            NOT EXISTS (SELECT 1 FROM logistics_staff_assignments WHERE staff_id = $1)
+            AND c.organizer_id = $2
+          )
+        ) AND c.status = 'active'
         ORDER BY c.created_at DESC
       `;
       params = [userId, orgId || userId];

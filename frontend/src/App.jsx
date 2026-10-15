@@ -110,7 +110,7 @@ const BottomNavigation = () => {
         </Link>
       )}
 
-      {isAuthenticated && (user?.role === 'staff' || isAdmin || isOrganizer) && (
+      {isAuthenticated && (isAdmin || (isOrganizer && user?.module_cartelera) || (user?.role === 'staff' && user?.module_cartelera)) && (
         <Link to="/staff/scan" className={`mobile-nav-item ${location.pathname === '/staff/scan' ? 'active' : ''}`}>
           <ScanLine size={20} />
           <span>Escáner</span>
@@ -240,6 +240,36 @@ const ModuleGuard = ({ children, requiredModule }) => {
       );
     }
   }
+
+  if (user?.role === 'staff') {
+    if (requiredModule === 'cartelera' && !user.module_cartelera) {
+      return (
+        <div className="glass-panel" style={{ margin: '50px auto', maxWidth: '450px', textAlign: 'center', padding: '36px 28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <Lock size={48} color="var(--accent)" opacity={0.8} />
+          </div>
+          <h3 style={{ color: 'var(--text-primary)', marginBottom: '12px', fontSize: '1.3rem' }}>Módulo de Cartelera No Asignado</h3>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6, fontSize: '0.9rem' }}>
+            Tu usuario de Staff no tiene acceso asignado al módulo de <strong>Cartelera de Eventos (Boletaje)</strong>. Consulta con tu organizador o administrador para habilitar tus credenciales.
+          </p>
+        </div>
+      );
+    }
+
+    if (requiredModule === 'logistics' && !user.module_logistics) {
+      return (
+        <div className="glass-panel" style={{ margin: '50px auto', maxWidth: '450px', textAlign: 'center', padding: '36px 28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <Lock size={48} color="var(--accent)" opacity={0.8} />
+          </div>
+          <h3 style={{ color: 'var(--text-primary)', marginBottom: '12px', fontSize: '1.3rem' }}>Módulo de Logística No Asignado</h3>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6, fontSize: '0.9rem' }}>
+            Tu usuario de Staff no tiene acceso asignado al módulo de <strong>Logística de Campañas y Canastas</strong>. Consulta con tu organizador o administrador para habilitar tus credenciales.
+          </p>
+        </div>
+      );
+    }
+  }
   
   return children;
 };
@@ -310,7 +340,7 @@ const Sidebar = () => {
                 </Link>
               )}
 
-              {isAuthenticated && (user?.role === 'staff' || isAdmin || isOrganizer) && (
+              {isAuthenticated && (isAdmin || (isOrganizer && user?.module_cartelera) || (user?.role === 'staff' && user?.module_cartelera)) && (
                 <>
                   <Link to="/staff/scan" className={`sidebar-item ${location.pathname === '/staff/scan' ? 'active' : ''}`}>
                     <ScanLine size={18} />
@@ -485,7 +515,9 @@ const AppContent = () => {
               path="/staff/scan" 
               element={
                 <PrivateRoute allowedRoles={['staff', 'admin', 'organizer']}>
-                  <ScannerDashboard />
+                  <ModuleGuard requiredModule="cartelera">
+                    <ScannerDashboard />
+                  </ModuleGuard>
                 </PrivateRoute>
               } 
             />
@@ -493,7 +525,9 @@ const AppContent = () => {
               path="/staff/pistas" 
               element={
                 <PrivateRoute allowedRoles={['staff', 'admin', 'organizer']}>
-                  <MomentoWow />
+                  <ModuleGuard requiredModule="cartelera">
+                    <MomentoWow />
+                  </ModuleGuard>
                 </PrivateRoute>
               } 
             />
@@ -503,7 +537,9 @@ const AppContent = () => {
               path="/:tenant/logistica/staff" 
               element={
                 <PrivateRoute allowedRoles={['staff', 'admin', 'organizer']}>
-                  <LogisticsStaff />
+                  <ModuleGuard requiredModule="logistics">
+                    <LogisticsStaff />
+                  </ModuleGuard>
                 </PrivateRoute>
               } 
             />

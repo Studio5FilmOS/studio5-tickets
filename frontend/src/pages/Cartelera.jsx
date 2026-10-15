@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { MapPin, Clock, ChevronRight, Ticket, Flame, Star, Sparkles, UserPlus, Lock, Phone } from 'lucide-react';
+import { MapPin, Clock, ChevronRight, Ticket, Flame, Star, Sparkles, UserPlus, Lock, Phone, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import VersionModal from '../components/VersionModal';
@@ -371,6 +371,31 @@ const Cartelera = () => {
         <a href={waUrl} target="_blank" rel="noreferrer" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none', width: '100%', padding: '14px', fontWeight: 700 }}>
           <Phone size={18} /> Contratar Módulo por WhatsApp
         </a>
+      </div>
+    );
+  }
+
+  // Si el usuario es Staff y NO tiene asignado el módulo de cartelera
+  if (user?.role === 'staff' && !user.module_cartelera) {
+    const tenantSlug = encodeURIComponent((theme.tenantName || 'studio5').toLowerCase().replace(/\s+/g, '-'));
+    return (
+      <div className="glass-panel fade-in" style={{ margin: '60px auto', maxWidth: '480px', textAlign: 'center', padding: '40px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+          <Lock size={48} color="var(--accent)" opacity={0.8} />
+        </div>
+        <h3 style={{ color: 'var(--text-primary)', marginBottom: '12px', fontSize: '1.3rem' }}>Módulo de Cartelera No Asignado</h3>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6, fontSize: '0.9rem' }}>
+          Tu perfil de Staff (<strong>{user.name}</strong>) no tiene asignado el módulo de <strong>Cartelera de Eventos (Boletaje)</strong>. Consulta con tu organizador o administrador de cuenta.
+        </p>
+        {user.module_logistics && (
+          <button
+            onClick={() => navigate(`/${tenantSlug}/logistica/staff`)}
+            className="btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', padding: '14px', fontWeight: 700 }}
+          >
+            <Package size={18} /> Ir a Escáner de Logística
+          </button>
+        )}
       </div>
     );
   }
