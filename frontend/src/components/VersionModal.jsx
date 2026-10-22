@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
-  Sparkles, X, Ticket, ShieldCheck, Layers, QrCode, 
-  ArrowRight, UserCheck, CheckCircle2, Zap, Palette 
+  Sparkles, X, Ticket, QrCode, Zap, ArrowRight, UserCheck
 } from 'lucide-react';
 
 const VersionModal = ({ forceOpen, onCloseCustom }) => {
@@ -11,7 +11,7 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const STORAGE_KEY = 'studio5_v2_1_pro_announcement_seen';
+  const STORAGE_KEY = 'studio5_v2_welcome_announcement_seen';
 
   useEffect(() => {
     if (forceOpen) {
@@ -21,13 +21,23 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
 
     const hasSeen = localStorage.getItem(STORAGE_KEY);
     if (!hasSeen) {
-      // Pequeño delay de 600ms para entrada suave tras cargar la cartelera
       const timer = setTimeout(() => {
         setIsOpen(true);
-      }, 600);
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, [forceOpen]);
+
+  // Bloquea el scroll del body en móviles mientras el modal esté visible
+  useEffect(() => {
+    if (isOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isOpen]);
 
   const handleClose = () => {
     localStorage.setItem(STORAGE_KEY, 'true');
@@ -37,52 +47,30 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
 
   if (!isOpen) return null;
 
-  return (
+  const modalContent = (
     <div 
-      style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: 'rgba(5, 6, 10, 0.88)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        zIndex: 99999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '16px',
-        animation: 'fadeIn 0.3s ease-out'
-      }}
+      className="version-modal-backdrop"
       onClick={handleClose}
+      role="dialog"
+      aria-modal="true"
     >
       <div 
-        style={{
-          position: 'relative',
-          width: '100%',
-          maxWidth: '560px',
-          maxHeight: '92vh',
-          overflowY: 'auto',
-          background: 'linear-gradient(145deg, rgba(26, 28, 38, 0.95), rgba(13, 14, 20, 0.98))',
-          border: '1px solid rgba(222, 184, 65, 0.35)',
-          borderRadius: '24px',
-          padding: '28px 24px',
-          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(222, 184, 65, 0.15)',
-          color: '#ffffff',
-          boxSizing: 'border-box'
-        }}
+        className="version-modal-card"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Botón Cerrar */}
         <button
           onClick={handleClose}
+          aria-label="Cerrar ventana"
           style={{
             position: 'absolute',
-            top: '16px',
-            right: '16px',
+            top: '14px',
+            right: '14px',
             background: 'rgba(255, 255, 255, 0.08)',
             border: 'none',
             borderRadius: '50%',
-            width: '34px',
-            height: '34px',
+            width: '32px',
+            height: '32px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -91,111 +79,143 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
             transition: 'all 0.2s',
             zIndex: 10
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.18)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = '#a1a1aa'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
         >
-          <X size={18} />
+          <X size={17} />
         </button>
 
-        {/* Encabezado del Anuncio */}
-        <div style={{ textAlign: 'center', marginBottom: '22px' }}>
+        {/* Encabezado: Bienvenida, Nombre de App y Versión */}
+        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            background: 'linear-gradient(135deg, rgba(222,184,65,0.2), rgba(176,141,43,0.1))',
+            background: 'linear-gradient(135deg, rgba(222,184,65,0.22), rgba(176,141,43,0.08))',
             border: '1px solid rgba(222,184,65,0.4)',
-            padding: '5px 14px',
+            padding: '4px 12px',
             borderRadius: '20px',
-            fontSize: '0.72rem',
+            fontSize: '0.7rem',
             fontWeight: 800,
             color: 'var(--accent)',
-            letterSpacing: '1px',
+            letterSpacing: '0.8px',
             textTransform: 'uppercase',
-            marginBottom: '12px'
+            marginBottom: '10px'
           }}>
-            <Sparkles size={13} color="var(--accent)" /> STUDIO 5 TICKETS PRO · v2.1.0
+            <Sparkles size={12} color="var(--accent)" /> STUDIO 5 TICKETS · v2.1
           </div>
 
           <h2 style={{
-            fontSize: '1.45rem',
+            fontSize: '1.35rem',
             fontWeight: 900,
             margin: '0 0 6px 0',
-            letterSpacing: '-0.5px',
-            background: 'linear-gradient(135deg, #ffffff, #e4e4e7)',
+            letterSpacing: '-0.3px',
+            background: 'linear-gradient(135deg, #ffffff 40%, #DEB841 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent'
           }}>
-            ¡Bienvenido a la Nueva Era Pro!
+            ¡Bienvenido a Studio 5 Tickets!
           </h2>
 
-          <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0, lineHeight: '1.4' }}>
-            Descubre las nuevas características profesionales diseñadas para elevar tu experiencia.
+          <p style={{ color: '#d1d5db', fontSize: '0.82rem', margin: '0 auto', lineHeight: '1.4', maxWidth: '400px' }}>
+            La boletería digital oficial de <strong>Studio 5 Film & Art</strong> para descubrir cartelera, reservar tus asientos y disfrutar las mejores obras y eventos.
           </p>
         </div>
 
-        {/* Cuadrícula de Nuevas Implementaciones */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '22px' }}>
-          <div style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(222, 184, 65, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Layers size={18} color="var(--accent)" />
+        {/* Funciones Principales (Brevidad y claridad sin saturar) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '10px 12px',
+            borderRadius: '12px',
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.06)'
+          }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(222, 184, 65, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Ticket size={18} color="var(--accent)" />
             </div>
-            <div>
-              <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block', marginBottom: '2px' }}>Módulo de Logística (Multi-Tenant)</strong>
-              <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: 0, lineHeight: '1.3' }}>Crea campañas ilimitadas con Marca Blanca (tu propio color y logo), gestiona lotes y genera plantillas A4 automáticas para impresión con líneas de corte.</p>
+            <div style={{ textAlign: 'left' }}>
+              <strong style={{ fontSize: '0.82rem', color: '#fff', display: 'block', marginBottom: '1px' }}>
+                Cartelera & Obras en Vivo
+              </strong>
+              <p style={{ color: '#9ca3af', fontSize: '0.72rem', margin: 0, lineHeight: '1.25' }}>
+                Funciones, fechas, butacas por zonas y promociones actualizadas al instante.
+              </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(52, 199, 89, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <QrCode size={18} color="#34c759" />
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '10px 12px',
+            borderRadius: '12px',
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.06)'
+          }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(0, 102, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <QrCode size={18} color="#3b82f6" />
             </div>
-            <div>
-              <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block', marginBottom: '2px' }}>Escáner Celular de Campo</strong>
-              <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: 0, lineHeight: '1.3' }}>Transforma el celular del Staff en un potente lector QR en vivo con extracción inteligente de códigos. Ideal para asignaciones rápidas.</p>
+            <div style={{ textAlign: 'left' }}>
+              <strong style={{ fontSize: '0.82rem', color: '#fff', display: 'block', marginBottom: '1px' }}>
+                Tus Boletos QR en el Celular
+              </strong>
+              <p style={{ color: '#9ca3af', fontSize: '0.72rem', margin: 0, lineHeight: '1.25' }}>
+                Entradas 100% digitales en tu billetera "Mis Tickets", sin necesidad de imprimir.
+              </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(0, 102, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Zap size={18} color="#0066FF" />
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '10px 12px',
+            borderRadius: '12px',
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.06)'
+          }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(52, 199, 89, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Zap size={18} color="#34c759" />
             </div>
-            <div>
-              <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block', marginBottom: '2px' }}>Dashboards "Motores de Metas" Animados</strong>
-              <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: 0, lineHeight: '1.3' }}>Impacta a tu audiencia con pantallas públicas en tiempo real. Configura temas visuales como 'Cielo Estrellado' o 'Jardín de Rosas' que reaccionan a cada donación validada.</p>
+            <div style={{ textAlign: 'left' }}>
+              <strong style={{ fontSize: '0.82rem', color: '#fff', display: 'block', marginBottom: '1px' }}>
+                Acceso Rápido & Seguro
+              </strong>
+              <p style={{ color: '#9ca3af', fontSize: '0.72rem', margin: 0, lineHeight: '1.25' }}>
+                Ingreso ágil en puerta con validación instantánea y comprobante de compra.
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Sección de Llamado a la Acción (CTA) */}
+        {/* Sección de Acción (CTA) */}
         {!isAuthenticated ? (
           <div style={{
-            background: 'linear-gradient(135deg, rgba(222,184,65,0.12), rgba(0,0,0,0.4))',
-            border: '1.5px dashed rgba(222,184,65,0.35)',
-            borderRadius: '16px',
-            padding: '16px',
-            textAlign: 'center',
-            marginBottom: '16px'
+            background: 'rgba(222, 184, 65, 0.06)',
+            border: '1px solid rgba(222, 184, 65, 0.22)',
+            borderRadius: '14px',
+            padding: '12px 14px',
+            marginBottom: '12px',
+            textAlign: 'center'
           }}>
-            <h4 style={{ color: 'var(--accent)', fontSize: '0.92rem', fontWeight: 800, margin: '0 0 4px 0' }}>
-              💡 ¿Aún no tienes cuenta?
-            </h4>
-            <p style={{ color: '#d1d5db', fontSize: '0.78rem', margin: '0 0 14px 0', lineHeight: '1.4' }}>
-              Regístrate gratis para guardar tus entradas, ver tus códigos QR al instante y recibir promociones exclusivas.
+            <p style={{ color: '#e5e7eb', fontSize: '0.76rem', margin: '0 0 10px 0', lineHeight: '1.3' }}>
+              💡 Crea tu cuenta gratis para tener tus boletos guardados y disfrutar una compra rápida:
             </p>
-
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={() => { handleClose(); navigate('/registro'); }}
                 className="btn-primary"
-                style={{ flex: 1.2, padding: '10px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                style={{ flex: 1.2, padding: '9px 12px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
               >
-                <Ticket size={15} /> Crear Cuenta Gratis
+                <Ticket size={14} /> Registrarme Gratis
               </button>
               <button
                 onClick={() => { handleClose(); navigate('/login'); }}
                 className="btn-outline"
-                style={{ flex: 0.9, padding: '10px', fontSize: '0.8rem' }}
+                style={{ flex: 0.9, padding: '9px 12px', fontSize: '0.78rem' }}
               >
                 Iniciar Sesión
               </button>
@@ -205,34 +225,36 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
           <div style={{
             background: 'rgba(52, 199, 89, 0.08)',
             border: '1px solid rgba(52, 199, 89, 0.25)',
-            borderRadius: '16px',
-            padding: '14px 16px',
+            borderRadius: '14px',
+            padding: '10px 14px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '16px',
-            flexWrap: 'wrap',
-            gap: '10px'
+            marginBottom: '12px',
+            gap: '8px'
           }}>
-            <div>
-              <span style={{ fontSize: '0.82rem', color: '#fff', fontWeight: 'bold', display: 'block' }}>
-                👋 ¡Hola, {user?.name}!
-              </span>
-              <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
-                Tu cuenta está activa y lista para usar la versión 2.1.
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <UserCheck size={18} color="#34c759" />
+              <div>
+                <span style={{ fontSize: '0.8rem', color: '#fff', fontWeight: 'bold', display: 'block' }}>
+                  ¡Hola, {user?.name || 'Cliente'}!
+                </span>
+                <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
+                  Sesión activa y lista para usar.
+                </span>
+              </div>
             </div>
             <button
               onClick={() => { handleClose(); navigate('/mis-tickets'); }}
               className="btn-primary"
-              style={{ width: 'auto', padding: '8px 14px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              style={{ width: 'auto', padding: '7px 12px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
-              <Ticket size={14} /> Mis Tickets
+              <Ticket size={13} /> Mis Tickets
             </button>
           </div>
         )}
 
-        {/* Botón de Cierre / Explorar */}
+        {/* Botón Sutil para Explorar la Cartelera */}
         <div style={{ textAlign: 'center' }}>
           <button
             onClick={handleClose}
@@ -240,20 +262,26 @@ const VersionModal = ({ forceOpen, onCloseCustom }) => {
               background: 'none',
               border: 'none',
               color: '#9ca3af',
-              fontSize: '0.78rem',
+              fontSize: '0.76rem',
               cursor: 'pointer',
-              textDecoration: 'underline',
-              padding: '6px 12px'
+              padding: '6px 12px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              transition: 'color 0.2s'
             }}
             onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
             onMouseLeave={(e) => e.currentTarget.style.color = '#9ca3af'}
           >
-            Continuar a la Cartelera de Obras →
+            <span>Explorar Cartelera de Obras</span>
+            <ArrowRight size={13} />
           </button>
         </div>
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };
 
 export default VersionModal;

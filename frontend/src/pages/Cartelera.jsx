@@ -504,9 +504,9 @@ const Cartelera = () => {
               onClick={() => setShowVersionModal(true)}
               className="btn-outline"
               style={{ padding: '8px 12px', fontSize: '0.76rem', width: 'auto' }}
-              title="Ver todas las novedades de la versión 2.1"
+              title="Conoce qué es Studio 5 Tickets y sus funciones"
             >
-              Novedades
+              Conoce la App
             </button>
           </div>
         </div>
@@ -556,9 +556,9 @@ const Cartelera = () => {
               transition: 'all 0.25s',
               boxShadow: '0 0 10px rgba(222,184,65,0.1)'
             }}
-            title="Ver novedades de Studio 5 Tickets Pro v2.1.0"
+            title="Conoce Studio 5 Tickets y sus funciones"
           >
-            <Sparkles size={13} color="var(--accent)" /> Novedades Pro 2.1
+            <Sparkles size={13} color="var(--accent)" /> Conoce la App
           </button>
         )}
       </div>

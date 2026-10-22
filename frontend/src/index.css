@@ -664,3 +664,63 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
+/* --- MODAL RESPONSIVO DE BIENVENIDA / NOVEDADES --- */
+.version-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(5, 7, 12, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 12px;
+  animation: modalFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.version-modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100dvh - 28px);
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
+  background: linear-gradient(155deg, rgba(24, 26, 36, 0.98), rgba(12, 13, 18, 0.98));
+  border: 1px solid rgba(222, 184, 65, 0.35);
+  border-radius: 20px;
+  padding: 22px 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 30px rgba(222, 184, 65, 0.12);
+  color: #ffffff;
+  box-sizing: border-box;
+}
+
+@media (min-width: 480px) {
+  .version-modal-card {
+    padding: 26px 24px;
+    border-radius: 22px;
+  }
+}
+
+.version-modal-card::-webkit-scrollbar {
+  width: 5px;
+}
+.version-modal-card::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+.version-modal-card::-webkit-scrollbar-thumb {
+  background: rgba(222, 184, 65, 0.35);
+  border-radius: 4px;
+}
+.version-modal-card::-webkit-scrollbar-thumb:hover {
+  background: rgba(222, 184, 65, 0.65);
+}
+
+
