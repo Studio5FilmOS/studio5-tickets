@@ -1,4 +1,6 @@
 const nodemailer = require('nodemailer');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 // Configurar transportador de correo
@@ -8,33 +10,29 @@ const transporter = nodemailer.createTransport({
   secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465' || !process.env.SMTP_PORT,
   auth: {
     user: process.env.SMTP_USER || 'ventas@studio5film.com',
-    pass: process.env.SMTP_PASS || '@Ventas12345'
+    pass: process.env.SMTP_PASS || '@Ventas2026'
   }
 });
 
-// Función para enviar e-ticket por correo
-exports.sendTicketEmail = async ({ email, customerName, orderNum, eventTitle, eventVenue, scheduleTime, ticketCount, ticketDesglose, tickets }) => {
+// Función para enviar e-ticket por correo (con imagen real adjunta y embebida)
+exports.sendTicketEmail = async ({
+  email,
+  customerName,
+  orderNum,
+  eventTitle,
+  eventVenue,
+  scheduleTime,
+  ticketCount,
+  ticketDesglose,
+  tickets = [],
+  ticketImages = []
+}) => {
   if (!email || !email.includes('@')) {
     console.log('Correo omitido o inválido:', email);
     return false;
   }
 
-  // Generar URLs de QR y bloques de HTML para cada ticket
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const fromName = process.env.SMTP_FROM_NAME || 'Studio 5 Film & Art';
-
-  const orderQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(orderNum)}&color=000000&bgcolor=ffffff`;
-  const orderUrl = `${frontendUrl}/orden/${orderNum}`;
-
-  let ticketsHtml = `
-    <div style="background-color: #1a1a1a; padding: 20px; border-radius: 16px; max-width: 400px; margin: 15px auto; border: 1px solid #333; color: white; font-family: sans-serif;">
-      <h4 style="color: #F1A51C; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">E-TICKET DE ACCESO</h4>
-      <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">Orden #${orderNum}</div>
-      <img src="${orderQrUrl}" style="width: 180px; height: 180px; margin: 10px 0; border: 8px solid white; border-radius: 8px;" alt="QR Code">
-      <div style="color: #F1A51C; font-weight: bold; font-size: 16px; letter-spacing: 1px; margin-bottom: 10px;">${ticketCount} Entrada(s)</div>
-      <a href="${orderUrl}" target="_blank" style="background-color: #F1A51C; color: black; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 14px;">VER BOLETOS Y ENTRAR AL EVENTO</a>
-    </div>
-  `;
 
   const formattedDate = new Date(scheduleTime).toLocaleString('es-EC', {
     timeZone: 'America/Guayaquil',
@@ -46,41 +44,76 @@ exports.sendTicketEmail = async ({ email, customerName, orderNum, eventTitle, ev
     minute: '2-digit'
   });
 
+  // Preparar adjuntos y CID para visualización inline directa
+  const attachments = [];
+  (ticketImages || []).forEach((t, idx) => {
+    if (t.filePath && fs.existsSync(t.filePath)) {
+      attachments.push({
+        filename: `Boleto_${t.ticket_code || (idx + 1)}.jpg`,
+        path: t.filePath,
+        cid: `ticket_image_${idx}`
+      });
+    }
+  });
+
+  // Bloque visual de boletos
+  let ticketsVisualHtml = '';
+  if (ticketImages && ticketImages.length > 0) {
+    ticketsVisualHtml = ticketImages.map((t, idx) => `
+      <div style="margin: 20px auto 35px auto; max-width: 340px; text-align: center; background: #000; padding: 16px; border-radius: 14px; border: 1px solid #333;">
+        <img src="cid:ticket_image_${idx}" alt="Boleto ${t.ticket_code}" style="width: 100%; max-width: 320px; height: auto; border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.8); display: block; margin: 0 auto;" />
+        <div style="margin-top: 12px; color: #F1A51C; font-weight: 800; font-size: 14px; letter-spacing: 1px; font-family: sans-serif;">
+          BOLETO: ${t.ticket_code}
+        </div>
+      </div>
+    `).join('');
+  } else {
+    const orderQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(orderNum)}&color=000000&bgcolor=ffffff`;
+    ticketsVisualHtml = `
+      <div style="background-color: #1a1a1a; padding: 20px; border-radius: 16px; max-width: 400px; margin: 15px auto; border: 1px solid #333; color: white; font-family: sans-serif;">
+        <h4 style="color: #F1A51C; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">ACCESO AL EVENTO</h4>
+        <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">Orden #${orderNum}</div>
+        <img src="${orderQrUrl}" style="width: 180px; height: 180px; margin: 10px 0; border: 8px solid white; border-radius: 8px;" alt="QR Code">
+        <div style="color: #F1A51C; font-weight: bold; font-size: 16px; letter-spacing: 1px; margin-bottom: 10px;">${ticketCount} Entrada(s)</div>
+      </div>
+    `;
+  }
+
   const htmlBody = `
-    <div style="background-color: #050505; padding: 40px 20px; text-align: center; font-family: sans-serif; color: white;">
-      <h2 style="color: #F1A51C; margin-bottom: 5px;">¡Aquí tienes tus entradas, ${customerName}!</h2>
-      <p style="color: #ccc; margin-top: 0; margin-bottom: 25px;">Gracias por tu compra. Tu orden es la <b>#${orderNum}</b></p>
+    <div style="background-color: #050505; padding: 40px 20px; text-align: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: white;">
+      <h2 style="color: #F1A51C; margin-bottom: 5px; font-size: 24px;">¡Aquí tienes tus entradas, ${customerName}!</h2>
+      <p style="color: #ccc; margin-top: 0; margin-bottom: 25px; font-size: 15px;">Gracias por tu compra en Studio 5. Tu orden confirmada es la <b>#${orderNum}</b></p>
       
       <div style="background-color: #111; padding: 20px; border-radius: 16px; max-width: 450px; margin: 0 auto 30px auto; border: 1px solid #222; text-align: left;">
-        <h3 style="color: #fff; margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 10px; text-transform: uppercase;">${eventTitle}</h3>
+        <h3 style="color: #fff; margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 10px; text-transform: uppercase; font-size: 18px;">${eventTitle}</h3>
         <p style="color: #aaa; font-size: 15px; margin: 10px 0;">📅 <b>Función:</b> ${formattedDate}</p>
         <p style="color: #aaa; font-size: 15px; margin: 10px 0;">📍 <b>Lugar:</b> ${eventVenue}</p>
         <p style="color: #aaa; font-size: 15px; margin: 10px 0;">🎟️ <b>Cantidad:</b> ${ticketCount} (${ticketDesglose})</p>
       </div>
 
-      <h3 style="color: #F1A51C; margin-bottom: 10px;">Tus códigos de acceso QR</h3>
-      <p style="color: #aaa; font-size: 14px; margin-bottom: 20px;">Muestra estos QRs en la entrada de la sala desde tu celular.</p>
+      <h3 style="color: #F1A51C; margin-bottom: 6px; font-size: 20px; text-transform: uppercase; letter-spacing: 1px;">Tus Boletos de Acceso</h3>
+      <p style="color: #aaa; font-size: 14px; margin-bottom: 25px; max-width: 450px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+        Presenta estos boletos con su código QR directamente en puerta desde tu celular. También los hemos adjuntado en este correo en formato JPG para que los guardes en tu galería.
+      </p>
       
-      ${ticketsHtml}
+      ${ticketsVisualHtml}
 
-      <div style="margin-top: 40px; color: #555; font-size: 12px; border-top: 1px solid #222; padding-top: 20px;">
-        Este es un correo automático. Por favor no respondas a este mensaje.<br>
-        &copy; 2026 ${fromName}
+      <div style="margin-top: 40px; color: #666; font-size: 12px; border-top: 1px solid #222; padding-top: 20px;">
+        Este es un correo automático de entrega de entradas.<br>
+        &copy; 2026 ${fromName} · Todos los derechos reservados.
       </div>
     </div>
   `;
 
   try {
     const smtpUser = process.env.SMTP_USER || 'ventas@studio5film.com';
-    const smtpPass = process.env.SMTP_PASS || '@Ventas12345';
+    const smtpPass = process.env.SMTP_PASS || '@Ventas2026';
 
-    // Si no están configuradas las credenciales SMTP ni las predeterminadas, simulamos el envío
     if (!smtpUser || !smtpPass) {
       console.log('----- EMAIL SIMULATION -----');
       console.log('To:', email);
       console.log('Subject:', `Tus entradas para ${eventTitle}`);
-      console.log('Content size:', htmlBody.length, 'bytes');
-      console.log('Tickets count:', tickets.length);
+      console.log('Attachments count:', attachments.length);
       console.log('----------------------------');
       return true;
     }
@@ -88,19 +121,20 @@ exports.sendTicketEmail = async ({ email, customerName, orderNum, eventTitle, ev
     await transporter.sendMail({
       from: `"${fromName}" <${smtpUser}>`,
       to: email,
-      subject: `Tus entradas para ${eventTitle} (Orden #${orderNum})`,
-      html: htmlBody
+      subject: `🎟️ Tus entradas para ${eventTitle} (Orden #${orderNum})`,
+      html: htmlBody,
+      attachments
     });
 
-    console.log(`Correo con tickets enviado con éxito a ${email}`);
+    console.log(`✅ Correo con boletos JPG adjuntos enviado con éxito a ${email}`);
     return true;
   } catch (err) {
-    console.error('Error al enviar el correo electrónico de los tickets:', err);
+    console.error('❌ Error al enviar el correo electrónico de los tickets:', err);
     return false;
   }
 };
 
-// Función para enviar correo de reserva pendiente de transferencia
+// Función para enviar correo de orden pendiente por transferencia bancaria
 exports.sendPendingTransferEmail = async ({ email, customerName, orderNum, eventTitle, eventVenue, scheduleTime, ticketCount, ticketDesglose, amountTotal }) => {
   if (!email || !email.includes('@')) {
     console.log('Correo omitido o inválido:', email);
@@ -177,7 +211,7 @@ exports.sendPendingTransferEmail = async ({ email, customerName, orderNum, event
 
   try {
     const smtpUser = process.env.SMTP_USER || 'ventas@studio5film.com';
-    const smtpPass = process.env.SMTP_PASS || '@Ventas12345';
+    const smtpPass = process.env.SMTP_PASS || '@Ventas2026';
 
     if (!smtpUser || !smtpPass) {
       console.log('----- EMAIL SIMULATION (PENDING) -----');
@@ -242,7 +276,7 @@ exports.sendVerificationOtpEmail = async ({ email, name, code }) => {
 
   try {
     const smtpUser = process.env.SMTP_USER || 'ventas@studio5film.com';
-    const smtpPass = process.env.SMTP_PASS || '@Ventas12345';
+    const smtpPass = process.env.SMTP_PASS || '@Ventas2026';
 
     if (!smtpUser || !smtpPass) {
       console.log('----- EMAIL SIMULATION (OTP CODE) -----');

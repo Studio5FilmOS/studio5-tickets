@@ -16,3 +16,7 @@ Thumbs.db
 
 # Ignorar subidas dinámicas de usuario en local
 backend/public/uploads/
+
+# Ignorar boletos generados dinamicamente
+backend/public/tickets/*
+!backend/public/tickets/.gitkeep

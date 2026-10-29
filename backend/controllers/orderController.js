@@ -2,6 +2,7 @@ const { query, pool } = require('../config/db');
 const { sendTicketEmail, sendPendingTransferEmail } = require('../services/emailService');
 const { sendPushToAdmins } = require('../services/pushService');
 const { sendWhatsAppTicketWebhook } = require('../services/whatsappService');
+const { generateTicketImage } = require('../services/ticketImageService');
 const { verifyTransaction: verifyPayphoneGateway } = require('../services/payphoneService');
 const fs = require('fs');
 const path = require('path');
@@ -390,6 +391,28 @@ exports.createOrder = async (req, res) => {
       ).catch(() => {});
 
     } else if (paymentStatus === 'Pagado') {
+      // 1. Generar imágenes gráficas idénticas al diseño oficial de BoletoView
+      const ticketImages = [];
+      for (const t of createdTickets) {
+        try {
+          const img = await generateTicketImage({
+            ticket_code: t.ticket_code,
+            customer_name: nombre,
+            event_title: event.title,
+            event_venue: event.venue,
+            schedule_time: schedule.schedule_time,
+            ticket_type: t.ticket_type,
+            seat_label: t.seat_label,
+            banner_url: event.banner_url,
+            operation_type: newOrder.operation_type || 'Venta'
+          });
+          ticketImages.push(img);
+        } catch (imgErr) {
+          console.error('Error generando imagen de boleto:', imgErr.message);
+        }
+      }
+
+      // 2. Entrega por correo: boletos reales embebidos y adjuntos como JPG
       if (email && email.includes('@')) {
         sendTicketEmail({
           email,
@@ -400,26 +423,48 @@ exports.createOrder = async (req, res) => {
           scheduleTime: schedule.schedule_time,
           ticketCount: totalQty,
           ticketDesglose: desglose,
-          tickets: createdTickets
+          tickets: createdTickets,
+          ticketImages
         }).catch(err => console.error('Error al enviar email:', err));
       }
 
-      // WhatsApp Webhook hacia n8n + Whapi
+      // 3. Entrega por WhatsApp vía n8n: imagen gráfica del boleto directamente
       if (cleanWhatsapp) {
+        const primaryImage = ticketImages[0]?.publicUrl || ticketUrl;
         sendWhatsAppTicketWebhook({
           numero_whatsapp_cliente: cleanWhatsapp,
           nombre_cliente: nombre,
           nombre_evento: event.title,
-          url_del_ticket_pdf_o_qr: ticketUrl,
+          lugar_evento: event.venue,
+          ticket_image_url: primaryImage,
           orden_numero: newOrder.order_num,
           total: finalAmount,
-          localidad: targetLocalidad?.nombre || 'General'
+          localidad: targetLocalidad?.nombre || (ticketImages[0]?.ticket_code ? `Boleto ${ticketImages[0].ticket_code}` : 'General')
         }).catch(err => console.error('Error en webhook de WhatsApp:', err));
+
+        // Si compró más de 1 boleto, despachar también las imágenes adicionales
+        if (ticketImages.length > 1) {
+          for (let i = 1; i < ticketImages.length; i++) {
+            const extraImg = ticketImages[i];
+            setTimeout(() => {
+              sendWhatsAppTicketWebhook({
+                numero_whatsapp_cliente: cleanWhatsapp,
+                nombre_cliente: nombre,
+                nombre_evento: event.title,
+                lugar_evento: event.venue,
+                ticket_image_url: extraImg.publicUrl,
+                orden_numero: newOrder.order_num,
+                total: finalAmount,
+                localidad: `Boleto ${extraImg.ticket_code}`
+              }).catch(() => {});
+            }, i * 2000);
+          }
+        }
       }
 
       sendPushToAdmins(
         '💳 Venta confirmada',
-        `${nombre} compró ${totalQty} entrada(s) para ${event.title} — $${finalAmount.toFixed(2)}`,
+        `${nombre} compró ${totalQty} entrada(s) para ${event.title} — ${finalAmount.toFixed(2)}`,
         { tag: 'new-sale', url: '/admin?tab=ventas' }
       ).catch(() => {});
     }
@@ -645,6 +690,28 @@ exports.updateOrderStatus = async (req, res) => {
         const seatLabels = tickets.map(t => t.seat_label).filter(Boolean);
         if (seatLabels.length > 0) desglose += ` [Asientos: ${seatLabels.join(', ')}]`;
 
+        // 1. Generar imágenes gráficas reales de cada boleto
+        const ticketImages = [];
+        for (const t of tickets) {
+          try {
+            const img = await generateTicketImage({
+              ticket_code: t.ticket_code,
+              customer_name: order.customer_name,
+              event_title: event.title,
+              event_venue: event.venue,
+              schedule_time: schedule.schedule_time,
+              ticket_type: t.ticket_type,
+              seat_label: t.seat_label,
+              banner_url: event.banner_url,
+              operation_type: order.operation_type || 'Venta'
+            });
+            ticketImages.push(img);
+          } catch (imgErr) {
+            console.error('Error generando imagen de boleto en updateOrder:', imgErr.message);
+          }
+        }
+
+        // 2. Envío por correo con imágenes adjuntas y embebidas
         if (order.customer_email) {
           sendTicketEmail({
             email: order.customer_email,
@@ -655,23 +722,43 @@ exports.updateOrderStatus = async (req, res) => {
             scheduleTime: schedule.schedule_time,
             ticketCount: totalQty,
             ticketDesglose: desglose,
-            tickets: tickets
+            tickets: tickets,
+            ticketImages
           }).catch(err => console.error('Error al enviar email al actualizar orden:', err));
         }
 
-        // WhatsApp Webhook a n8n
+        // 3. Envío por WhatsApp con imagen nativa del boleto
         if (order.customer_whatsapp) {
-          const hostUrl = process.env.FRONTEND_URL || 'https://studio5tickets.com';
-          const ticketUrl = `${hostUrl}/boleto/${tickets[0]?.ticket_code || order.order_num}`;
+          const hostUrl = process.env.FRONTEND_URL || 'https://ticket.studio5film.com';
+          const primaryImage = ticketImages[0]?.publicUrl || `${hostUrl}/boleto/${tickets[0]?.ticket_code || order.order_num}`;
           sendWhatsAppTicketWebhook({
             numero_whatsapp_cliente: order.customer_whatsapp,
             nombre_cliente: order.customer_name,
             nombre_evento: event.title,
-            url_del_ticket_pdf_o_qr: ticketUrl,
+            lugar_evento: event.venue,
+            ticket_image_url: primaryImage,
             orden_numero: order.order_num,
             total: order.amount_total,
-            localidad: order.localidad_breakdown?.nombre || 'General'
+            localidad: order.localidad_breakdown?.nombre || (ticketImages[0]?.ticket_code ? `Boleto ${ticketImages[0].ticket_code}` : 'General')
           }).catch(err => console.error('Error al enviar WhatsApp Webhook:', err));
+
+          if (ticketImages.length > 1) {
+            for (let i = 1; i < ticketImages.length; i++) {
+              const extraImg = ticketImages[i];
+              setTimeout(() => {
+                sendWhatsAppTicketWebhook({
+                  numero_whatsapp_cliente: order.customer_whatsapp,
+                  nombre_cliente: order.customer_name,
+                  nombre_evento: event.title,
+                  lugar_evento: event.venue,
+                  ticket_image_url: extraImg.publicUrl,
+                  orden_numero: order.order_num,
+                  total: order.amount_total,
+                  localidad: `Boleto ${extraImg.ticket_code}`
+                }).catch(() => {});
+              }, i * 2000);
+            }
+          }
         }
       }
     }

@@ -2,30 +2,21 @@ const https = require('https');
 const http = require('http');
 
 /**
- * Despacha un webhook asíncrono hacia n8n para la entrega del ticket por WhatsApp (Whapi.Cloud)
- * Este proceso es completamente no-bloqueante (fire & forget) para proteger los recursos del servidor.
+ * Despacha un webhook hacia n8n para la entrega del ticket por WhatsApp
  * 
  * @param {object} payload
  * @param {string} payload.numero_whatsapp_cliente - Número internacional (+593...)
  * @param {string} payload.nombre_cliente - Nombre completo del comprador
  * @param {string} payload.nombre_evento - Título del evento
- * @param {string} payload.url_del_ticket_pdf_o_qr - URL pública del boleto
+ * @param {string} [payload.lugar_evento] - Sala o teatro
+ * @param {string} payload.ticket_image_url - URL pública del boleto gráfico JPG
+ * @param {string} [payload.url_del_ticket_pdf_o_qr] - Fallback URL
  * @param {string} [payload.orden_numero] - Código de la orden
  * @param {number} [payload.total] - Total pagado
  * @param {string} [payload.localidad] - Nombre de la localidad o desglose
  */
 exports.sendWhatsAppTicketWebhook = (payload) => {
-  const webhookUrl = process.env.N8N_WHATSAPP_WEBHOOK_URL;
-
-  if (!webhookUrl) {
-    console.log('📱 [WhatsApp Webhook] N8N_WHATSAPP_WEBHOOK_URL no configurado. Simulación de envío:', {
-      numero: payload.numero_whatsapp_cliente,
-      cliente: payload.nombre_cliente,
-      evento: payload.nombre_evento,
-      ticketUrl: payload.url_del_ticket_pdf_o_qr
-    });
-    return Promise.resolve({ simulated: true });
-  }
+  const webhookUrl = process.env.N8N_WHATSAPP_WEBHOOK_URL || 'https://studio5-n8n.twoxnx.easypanel.host/webhook/ticket-dispatch';
 
   return new Promise((resolve) => {
     try {
@@ -37,7 +28,8 @@ exports.sendWhatsAppTicketWebhook = (payload) => {
         numero_whatsapp_cliente: payload.numero_whatsapp_cliente,
         nombre_cliente: payload.nombre_cliente,
         nombre_evento: payload.nombre_evento,
-        url_del_ticket_pdf_o_qr: payload.url_del_ticket_pdf_o_qr,
+        lugar_evento: payload.lugar_evento || 'La Bota',
+        ticket_image_url: payload.ticket_image_url || payload.url_del_ticket_pdf_o_qr,
         orden_numero: payload.orden_numero,
         total: payload.total,
         localidad: payload.localidad || 'General',
@@ -54,7 +46,7 @@ exports.sendWhatsAppTicketWebhook = (payload) => {
           'Content-Length': Buffer.byteLength(body),
           'User-Agent': 'Studio5-Tickets-V2-Webhook'
         },
-        timeout: 5000 // 5s timeout
+        timeout: 10000 // 10s timeout
       };
 
       const req = client.request(options, (res) => {
