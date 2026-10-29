@@ -391,28 +391,25 @@ exports.createOrder = async (req, res) => {
       ).catch(() => {});
 
     } else if (paymentStatus === 'Pagado') {
-      // 1. Generar imágenes gráficas idénticas al diseño oficial de BoletoView
-      const ticketImages = [];
-      for (const t of createdTickets) {
-        try {
-          const img = await generateTicketImage({
-            ticket_code: t.ticket_code,
-            customer_name: nombre,
-            event_title: event.title,
-            event_venue: event.venue,
-            schedule_time: schedule.schedule_time,
-            ticket_type: t.ticket_type,
-            seat_label: t.seat_label,
-            banner_url: event.banner_url,
-            operation_type: newOrder.operation_type || 'Venta'
-          });
-          ticketImages.push(img);
-        } catch (imgErr) {
-          console.error('Error generando imagen de boleto:', imgErr.message);
-        }
+      // 1. Generar UN SOLO boleto gráfico oficial con el QR que contiene todas las entradas de la compra
+      let ticketImage = null;
+      try {
+        ticketImage = await generateTicketImage({
+          ticket_code: newOrder.order_num,
+          customer_name: nombre,
+          event_title: event.title,
+          event_venue: event.venue,
+          schedule_time: schedule.schedule_time,
+          ticket_type: targetLocalidad?.nombre || 'General',
+          ticket_desglose: desglose,
+          banner_url: event.banner_url,
+          operation_type: newOrder.operation_type || 'Venta'
+        });
+      } catch (imgErr) {
+        console.error('Error generando imagen de boleto:', imgErr.message);
       }
 
-      // 2. Entrega por correo: boletos reales embebidos y adjuntos como JPG
+      // 2. Entrega por correo: UN SOLO boleto oficial adjunto y embebido en el HTML
       if (email && email.includes('@')) {
         sendTicketEmail({
           email,
@@ -424,13 +421,13 @@ exports.createOrder = async (req, res) => {
           ticketCount: totalQty,
           ticketDesglose: desglose,
           tickets: createdTickets,
-          ticketImages
+          ticketImages: ticketImage ? [ticketImage] : []
         }).catch(err => console.error('Error al enviar email:', err));
       }
 
-      // 3. Entrega por WhatsApp vía n8n: imagen gráfica del boleto directamente
+      // 3. Entrega por WhatsApp: UN SOLO boleto gráfico con el QR único que valida todas las entradas
       if (cleanWhatsapp) {
-        const primaryImage = ticketImages[0]?.publicUrl || ticketUrl;
+        const primaryImage = ticketImage?.publicUrl || ticketUrl;
         sendWhatsAppTicketWebhook({
           numero_whatsapp_cliente: cleanWhatsapp,
           nombre_cliente: nombre,
@@ -439,27 +436,8 @@ exports.createOrder = async (req, res) => {
           ticket_image_url: primaryImage,
           orden_numero: newOrder.order_num,
           total: finalAmount,
-          localidad: targetLocalidad?.nombre || (ticketImages[0]?.ticket_code ? `Boleto ${ticketImages[0].ticket_code}` : 'General')
+          localidad: desglose || targetLocalidad?.nombre || 'General'
         }).catch(err => console.error('Error en webhook de WhatsApp:', err));
-
-        // Si compró más de 1 boleto, despachar también las imágenes adicionales
-        if (ticketImages.length > 1) {
-          for (let i = 1; i < ticketImages.length; i++) {
-            const extraImg = ticketImages[i];
-            setTimeout(() => {
-              sendWhatsAppTicketWebhook({
-                numero_whatsapp_cliente: cleanWhatsapp,
-                nombre_cliente: nombre,
-                nombre_evento: event.title,
-                lugar_evento: event.venue,
-                ticket_image_url: extraImg.publicUrl,
-                orden_numero: newOrder.order_num,
-                total: finalAmount,
-                localidad: `Boleto ${extraImg.ticket_code}`
-              }).catch(() => {});
-            }, i * 2000);
-          }
-        }
       }
 
       sendPushToAdmins(
@@ -561,6 +539,186 @@ exports.getOrderById = async (req, res) => {
 
     const order = orderRes.rows[0];
     const ticketsRes = await query('SELECT * FROM tickets WHERE order_id = $1 ORDER BY id ASC', [id]);
+
+    res.json({
+      status: 'OK',
+      order,
+      tickets: ticketsRes.rows
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Error al obtener la orden',
+      error: err.message
+    });
+  }
+};
+
+// Obtener detalle de una orden por order_num (Público)
+exports.getOrderByNum = async (req, res) => {
+  const { orderNum } = req.params;
+
+  try {
+    const orderRes = await query(
+      `SELECT o.*, e.title as event_title, e.venue as event_venue, e.banner_url, e.ticket_template_url, es.schedule_time
+       FROM orders o
+       JOIN events e ON e.id = o.event_id
+       JOIN event_schedules es ON es.id = o.schedule_id
+       WHERE o.order_num = $1`,
+      [orderNum]
+    );
+
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Orden no encontrada.' });
+    }
+
+    const order = orderRes.rows[0];
+    const ticketsRes = await query('SELECT * FROM tickets WHERE order_id = $1 ORDER BY id ASC', [order.id]);
+
+    res.json({
+      status: 'OK',
+      order,
+      tickets: ticketsRes.rows
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Error al obtener la orden',
+      error: err.message
+    });
+  }
+};
+
+// Actualizar estado de pago/operación de la orden
+exports.updateOrderStatus = async (req, res) => {
+  const { id } = req.params;
+  const { payment_status } = req.body;
+
+  if (!payment_status || !['Pagado', 'Pendiente', 'Anulado'].includes(payment_status)) {
+    return res.status(400).json({ status: 'ERROR', message: 'Estado de pago inválido.' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const orderRes = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [id]);
+    if (orderRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(404).json({ status: 'ERROR', message: 'Orden no encontrada.' });
+    }
+    const order = orderRes.rows[0];
+
+    if (payment_status === 'Anulado') {
+      await client.query("UPDATE tickets SET status = 'Cancelled' WHERE order_id = $1", [id]);
+    } else if (order.payment_status === 'Anulado' && payment_status !== 'Anulado') {
+      await client.query("UPDATE tickets SET status = 'Active' WHERE order_id = $1", [id]);
+    }
+
+    const updateRes = await client.query(
+      "UPDATE orders SET payment_status = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+      [payment_status, id]
+    );
+    const updatedOrder = updateRes.rows[0];
+
+    const ticketsRes = await client.query('SELECT * FROM tickets WHERE order_id = $1', [id]);
+    const tickets = ticketsRes.rows;
+
+    // Si pasa a Pagado y el evento es de un organizador, sumar deuda de plataforma
+    if (payment_status === 'Pagado' && order.payment_status !== 'Pagado') {
+      const eventRes = await client.query('SELECT * FROM events WHERE id = $1', [order.event_id]);
+      const event = eventRes.rows[0];
+      if (event && event.organizer_id) {
+        let billableTickets = order.ticket_count_adult + order.ticket_count_child || tickets.length;
+        if (order.operation_type === 'Cortesia') {
+          const courtesyCountRes = await client.query(
+            `SELECT COALESCE(SUM(ticket_count_adult + ticket_count_child), 0)::integer as total_courtesies
+             FROM orders 
+             WHERE schedule_id = $1 AND operation_type = 'Cortesia' AND payment_status = 'Pagado' AND id != $2`,
+            [order.schedule_id, id]
+          );
+          const previousCourtesies = courtesyCountRes.rows[0].total_courtesies;
+          const FREE_COURTESY_LIMIT = 4;
+          const freeSpotsRemaining = Math.max(0, FREE_COURTESY_LIMIT - previousCourtesies);
+          billableTickets = Math.max(0, billableTickets - freeSpotsRemaining);
+        }
+        if (billableTickets > 0) {
+          const fee = billableTickets * PLATFORM_FEE_PER_TICKET;
+          await client.query('UPDATE users SET debt_balance = debt_balance + $1 WHERE id = $2', [fee, event.organizer_id]);
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+    client.release();
+
+    // Notificaciones al aprobar
+    if (payment_status === 'Pagado' && order.payment_status !== 'Pagado') {
+      const eventRes = await query('SELECT * FROM events WHERE id = $1', [order.event_id]);
+      const scheduleRes = await query('SELECT * FROM event_schedules WHERE id = $1', [order.schedule_id]);
+
+      if (eventRes.rows.length > 0 && scheduleRes.rows.length > 0) {
+        const event = eventRes.rows[0];
+        const schedule = scheduleRes.rows[0];
+        const totalQty = order.ticket_count_adult + order.ticket_count_child || tickets.length;
+        let desglose = event.is_single_rate ? `${totalQty} Entradas` : `${order.ticket_count_adult} Ad / ${order.ticket_count_child} Ni`;
+        
+        const seatLabels = tickets.map(t => t.seat_label).filter(Boolean);
+        if (seatLabels.length > 0) desglose += ` [Asientos: ${seatLabels.join(', ')}]`;
+
+        // 1. Generar UN SOLO boleto gráfico oficial con el QR que contiene todas las entradas de la compra
+        let ticketImage = null;
+        try {
+          ticketImage = await generateTicketImage({
+            ticket_code: order.order_num,
+            customer_name: order.customer_name,
+            event_title: event.title,
+            event_venue: event.venue,
+            schedule_time: schedule.schedule_time,
+            ticket_type: order.localidad_breakdown?.nombre || 'General',
+            ticket_desglose: desglose,
+            banner_url: event.banner_url,
+            operation_type: order.operation_type || 'Venta'
+          });
+        } catch (imgErr) {
+          console.error('Error generando imagen de boleto en updateOrder:', imgErr.message);
+        }
+
+        // 2. Envío por correo: UN SOLO boleto oficial adjunto y embebido
+        if (order.customer_email) {
+          sendTicketEmail({
+            email: order.customer_email,
+            customerName: order.customer_name,
+            orderNum: order.order_num,
+            eventTitle: event.title,
+            eventVenue: event.venue,
+            scheduleTime: schedule.schedule_time,
+            ticketCount: totalQty,
+            ticketDesglose: desglose,
+            tickets: tickets,
+            ticketImages: ticketImage ? [ticketImage] : []
+          }).catch(err => console.error('Error al enviar email al actualizar orden:', err));
+        }
+
+        // 3. Envío por WhatsApp: UN SOLO boleto gráfico con el QR único que valida todas las entradas
+        if (order.customer_whatsapp) {
+          const hostUrl = process.env.FRONTEND_URL || 'https://ticket.studio5film.com';
+          const primaryImage = ticketImage?.publicUrl || `${hostUrl}/boleto/${order.order_num}`;
+          sendWhatsAppTicketWebhook({
+            numero_whatsapp_cliente: order.customer_whatsapp,
+            nombre_cliente: order.customer_name,
+            nombre_evento: event.title,
+            lugar_evento: event.venue,
+            ticket_image_url: primaryImage,
+            orden_numero: order.order_num,
+            total: order.amount_total,
+            localidad: desglose || order.localidad_breakdown?.nombre || 'General'
+          }).catch(err => console.error('Error al enviar WhatsApp Webhook:', err));
+        }
+      }
+    }
 
     res.json({
       status: 'OK',

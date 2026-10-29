@@ -37,14 +37,10 @@ async function fetchRemoteBuffer(url) {
   });
 }
 
-/**
- * Obtiene el buffer del banner de forma ultra-rápida (disco local o remoto)
- */
 async function getBannerBuffer(bannerUrl) {
   if (!bannerUrl) return null;
 
   try {
-    // Si es ruta relativa dentro de uploads
     if (bannerUrl.startsWith('/uploads/') || bannerUrl.startsWith('uploads/')) {
       const cleanPath = bannerUrl.replace(/^\//, '');
       const localPath = path.join(__dirname, '..', 'public', cleanPath);
@@ -53,12 +49,10 @@ async function getBannerBuffer(bannerUrl) {
       }
     }
 
-    // Si es URL remota
     if (bannerUrl.startsWith('http://') || bannerUrl.startsWith('https://')) {
       return await fetchRemoteBuffer(bannerUrl);
     }
 
-    // Probar en public directamente
     const fallbackPath = path.join(__dirname, '..', 'public', bannerUrl);
     if (fs.existsSync(fallbackPath)) {
       return fs.readFileSync(fallbackPath);
@@ -71,7 +65,8 @@ async function getBannerBuffer(bannerUrl) {
 }
 
 /**
- * Renderiza el boleto gráfico idéntico a BoletoView.jsx en resolución retina 640x920
+ * Renderiza el boleto gráfico idéntico a BoletoView.jsx
+ * Un solo QR para la orden completa con todas sus entradas/butacas
  */
 async function generateTicketImage({
   ticket_code,
@@ -80,30 +75,31 @@ async function generateTicketImage({
   event_venue,
   schedule_time,
   ticket_type,
+  ticket_desglose,
   seat_label,
   banner_url,
   operation_type
 }) {
-  const safeCode = ticket_code || ('TK-' + Date.now().toString(36).toUpperCase());
+  const safeCode = ticket_code || ('ORD-' + Date.now().toString(36).toUpperCase());
   const safeName = (customer_name || 'Espectador').trim();
   const safeTitle = event_title || 'Evento Studio 5';
   const safeVenue = event_venue || 'Teatro';
 
-  // 1. Generar QR Code local en base64 (240x240 sin márgenes excesivos)
+  // 1. QR Code local (contiene el código de orden/ticket para validación completa en puerta)
   const qrDataUrl = await QRCode.toDataURL(safeCode, {
     width: 240,
     margin: 1,
     color: { dark: '#000000', light: '#ffffff' }
   });
 
-  // 2. Obtener Banner
+  // 2. Banner
   const bannerBuffer = await getBannerBuffer(banner_url);
   let bannerBase64 = '';
   if (bannerBuffer) {
     bannerBase64 = `data:image/jpeg;base64,${bannerBuffer.toString('base64')}`;
   }
 
-  // 3. Formatear Fecha (Español Ecuador)
+  // 3. Fecha Formateada (Ecuador)
   let dateFormatted = '';
   try {
     const d = new Date(schedule_time);
@@ -118,13 +114,19 @@ async function generateTicketImage({
     dateFormatted = String(schedule_time || '');
   }
 
-  // 4. Formatear etiqueta de entrada
-  const seatText = seat_label ? ` [Butaca: ${seat_label}]` : '';
-  const badgeText = `Entrada ${ticket_type || 'General'}${seatText}`;
-  const badgeWidth = Math.min(560, Math.max(260, badgeText.length * 13 + 30));
+  // 4. Formatear etiqueta de entrada / desglose de butacas
+  let badgeText = '';
+  if (ticket_desglose) {
+    badgeText = ticket_desglose;
+  } else {
+    const seatText = seat_label ? ` [Butaca: ${seat_label}]` : '';
+    badgeText = `Entrada ${ticket_type || 'General'}${seatText}`;
+  }
+
+  const badgeWidth = Math.min(590, Math.max(260, badgeText.length * 12 + 30));
   const badgeX = Math.round((640 - badgeWidth) / 2);
 
-  // 5. SVG idéntico al DOM de BoletoView.jsx (640x920)
+  // 5. SVG 640x920
   const svg = `
   <svg width="640" height="920" viewBox="0 0 640 920" xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -133,16 +135,16 @@ async function generateTicketImage({
       </clipPath>
     </defs>
 
-    <!-- Fondo de tarjeta blanco con borde suave -->
+    <!-- Tarjeta blanca con borde -->
     <rect width="640" height="920" fill="#ffffff" stroke="#dddddd" stroke-width="2" />
 
-    <!-- Sección Superior: Banner de la obra -->
+    <!-- Banner Superior -->
     ${bannerBase64 
       ? `<image href="${bannerBase64}" x="0" y="0" width="640" height="360" preserveAspectRatio="xMidYMid slice" clip-path="url(#banner-clip)" />` 
       : `<rect x="0" y="0" width="640" height="360" fill="#181824" clip-path="url(#banner-clip)" />`
     }
 
-    <!-- Píldora translúcida sobre el banner con título y sala -->
+    <!-- Píldora del Banner -->
     <rect x="20" y="270" width="600" height="74" rx="12" fill="rgba(0,0,0,0.68)" />
     <text x="36" y="306" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="24" font-weight="bold">${escapeXml(safeTitle)}</text>
     <text x="36" y="331" fill="#dddddd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="17">📍 ${escapeXml(safeVenue)}</text>
@@ -153,29 +155,29 @@ async function generateTicketImage({
       <text x="85" y="43" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="16" font-weight="900" letter-spacing="1">CORTESÍA</text>
     ` : ''}
 
-    <!-- Línea punteada perforada con muescas circulares negras -->
+    <!-- Línea perforada con muescas circulares -->
     <circle cx="0" cy="370" r="16" fill="#111111" />
     <circle cx="640" cy="370" r="16" fill="#111111" />
     <line x1="22" y1="370" x2="618" y2="370" stroke="#dddddd" stroke-width="4" stroke-dasharray="10,10" />
 
-    <!-- Sección Inferior: Espectador -->
+    <!-- Sección Espectador -->
     <text x="320" y="420" text-anchor="middle" fill="#888888" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="600" letter-spacing="2">ESPECTADOR</text>
     <text x="320" y="458" text-anchor="middle" fill="#111111" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="26" font-weight="900">${escapeXml(safeName).toUpperCase()}</text>
 
-    <!-- Código QR e Identificador de Boleto -->
+    <!-- QR Code y Código de Orden -->
     <image href="${qrDataUrl}" x="200" y="485" width="240" height="240" />
     <text x="320" y="755" text-anchor="middle" fill="#555555" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="17" font-weight="bold" letter-spacing="1">${escapeXml(safeCode)}</text>
 
     <!-- Fecha y Hora -->
     <text x="320" y="805" text-anchor="middle" fill="#555555" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="bold">${escapeXml(dateFormatted)}</text>
 
-    <!-- Píldora de Entrada y Butaca -->
+    <!-- Píldora de Entradas / Butacas -->
     <rect x="${badgeX}" y="835" width="${badgeWidth}" height="44" rx="10" fill="#ffebeb" />
-    <text x="320" y="863" text-anchor="middle" fill="#d32f2f" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="900">${escapeXml(badgeText)}</text>
+    <text x="320" y="863" text-anchor="middle" fill="#d32f2f" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="17" font-weight="900">${escapeXml(badgeText)}</text>
   </svg>
   `;
 
-  // 6. Renderizar con Sharp a JPG de alta calidad
+  // 6. Generar JPG
   const jpgBuffer = await sharp(Buffer.from(svg))
     .jpeg({ quality: 95 })
     .toBuffer();
