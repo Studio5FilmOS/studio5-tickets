@@ -1277,7 +1277,12 @@ const AdminDashboard = () => {
   });
 
   // Órdenes del evento seleccionado (para métricas estables)
-  const eventOrders = orders.filter(o => filterEventId === 'ALL' || o.event_id === filterEventId);
+  // Órdenes filtradas por evento y función/fecha seleccionados (para métricas precisas por función o global)
+  const eventOrders = orders.filter(o => {
+    const matchEvent = filterEventId === 'ALL' || o.event_id === filterEventId;
+    const matchSchedule = filterScheduleId === 'ALL' || o.schedule_id === filterScheduleId;
+    return matchEvent && matchSchedule;
+  });
 
   // Métricas transparentes y exactas calculadas sobre el evento seleccionado
   const metrics = eventOrders.reduce((acc, o) => {
@@ -1657,32 +1662,83 @@ const AdminDashboard = () => {
       {/* PESTAÑA: PANEL CONTABLE Y VENTAS */}
       {activeTab === 'ventas' && (
         <div className="fade-in">
-          {/* SELECTOR SUPERIOR DE EVENTO Y BOTÓN DE REPORTES */}
+          {/* SELECTOR SUPERIOR DE EVENTO, FUNCIÓN / FECHA Y BOTÓN DE REPORTES */}
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             flexWrap: 'wrap', gap: '12px', marginBottom: '16px',
             background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(222,184,65,0.22)',
             borderRadius: '16px', padding: '12px 18px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1 }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Film size={17} /> Obra / Evento:
-              </span>
-              <select
-                value={filterEventId}
-                onChange={(e) => {
-                  setFilterEventId(e.target.value);
-                  setFilterScheduleId('ALL');
-                  setCardFilter('ALL');
-                }}
-                className="custom-select"
-                style={{ minWidth: '220px', flex: '1', maxWidth: '380px' }}
-              >
-                <option value="ALL">🎬 Todos los eventos ({events.length})</option>
-                {events.map(e => (
-                  <option key={e.id} value={e.id}>{e.title}</option>
-                ))}
-              </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', flex: 1 }}>
+              {/* Selector de Obra / Evento */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '220px', flex: '1', maxWidth: '380px' }}>
+                <span style={{ fontSize: '0.84rem', fontWeight: '700', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                  <Film size={16} /> Obra / Evento:
+                </span>
+                <select
+                  value={filterEventId}
+                  onChange={(e) => {
+                    setFilterEventId(e.target.value);
+                    setFilterScheduleId('ALL');
+                    setCardFilter('ALL');
+                  }}
+                  className="custom-select"
+                  style={{ flex: 1, marginBottom: 0 }}
+                >
+                  <option value="ALL">🎬 Todos los eventos ({events.length})</option>
+                  {events.map(e => (
+                    <option key={e.id} value={e.id}>{e.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Selector de Función / Fecha */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '220px', flex: '1', maxWidth: '380px' }}>
+                <span style={{ fontSize: '0.84rem', fontWeight: '700', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                  <Calendar size={16} /> Función / Fecha:
+                </span>
+                <select
+                  value={filterScheduleId}
+                  onChange={(e) => {
+                    setFilterScheduleId(e.target.value);
+                    setCardFilter('ALL');
+                  }}
+                  className="custom-select"
+                  style={{ flex: 1, marginBottom: 0 }}
+                >
+                  {filterEventId === 'ALL' ? (
+                    <>
+                      <option value="ALL">🗓️ Todas las funciones y fechas</option>
+                      {events.flatMap(ev => (ev.schedules || []).map(sch => ({ ...sch, eventTitle: ev.title }))).map(sch => {
+                        const dateFormatted = new Date(sch.schedule_time).toLocaleString('es-EC', {
+                          weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                        });
+                        return (
+                          <option key={sch.id} value={sch.id}>
+                            📅 {sch.eventTitle}: {dateFormatted}
+                          </option>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <>
+                      <option value="ALL">
+                        🗓️ Todas las funciones ({events.find(e => e.id === filterEventId)?.schedules?.length || 0})
+                      </option>
+                      {events.find(e => e.id === filterEventId)?.schedules?.map(sch => {
+                        const dateFormatted = new Date(sch.schedule_time).toLocaleString('es-EC', {
+                          weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                        });
+                        return (
+                          <option key={sch.id} value={sch.id}>
+                            📅 {dateFormatted}
+                          </option>
+                        );
+                      })}
+                    </>
+                  )}
+                </select>
+              </div>
             </div>
 
             {/* Toggle para panel de reportes avanzados y Excel */}
@@ -1694,7 +1750,7 @@ const AdminDashboard = () => {
                 background: showReportsPanel ? 'rgba(52,199,89,0.18)' : 'rgba(255,255,255,0.06)',
                 color: showReportsPanel ? '#34c759' : 'var(--text-primary)',
                 border: `1px solid ${showReportsPanel ? 'rgba(52,199,89,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                fontWeight: '600', fontSize: '0.82rem', transition: 'all 0.2s'
+                fontWeight: '600', fontSize: '0.82rem', transition: 'all 0.2s', whiteSpace: 'nowrap'
               }}
               title="Abrir filtros de fecha y exportación a Excel"
             >
@@ -1926,22 +1982,48 @@ const AdminDashboard = () => {
 
           {/* BARRA DE BÚSQUEDA RÁPIDA Y AVISO DE FILTRO ACTIVO */}
           <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {cardFilter !== 'ALL' && (
+            {(cardFilter !== 'ALL' || filterScheduleId !== 'ALL' || filterEventId !== 'ALL') && (
               <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px',
                 padding: '10px 16px', borderRadius: '12px',
-                background: cardFilter === 'Pendiente' ? 'rgba(255,204,0,0.12)' : cardFilter === 'Pagado' ? 'rgba(52,199,89,0.12)' : 'rgba(168,85,247,0.12)',
-                border: `1px solid ${cardFilter === 'Pendiente' ? 'rgba(255,204,0,0.3)' : cardFilter === 'Pagado' ? 'rgba(52,199,89,0.3)' : 'rgba(168,85,247,0.3)'}`
+                background: cardFilter === 'Pendiente' ? 'rgba(255,204,0,0.12)' : cardFilter === 'Pagado' ? 'rgba(52,199,89,0.12)' : 'rgba(222,184,65,0.1)',
+                border: `1px solid ${cardFilter === 'Pendiente' ? 'rgba(255,204,0,0.3)' : cardFilter === 'Pagado' ? 'rgba(52,199,89,0.3)' : 'rgba(222,184,65,0.25)'}`
               }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: '700', color: cardFilter === 'Pendiente' ? '#ffcc00' : cardFilter === 'Pagado' ? '#34c759' : '#a855f7' }}>
-                  ⚡ Mostrando únicamente órdenes: <strong>{cardFilter.toUpperCase()}</strong> ({filteredOrders.length})
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: '700', color: cardFilter === 'Pendiente' ? '#ffcc00' : cardFilter === 'Pagado' ? '#34c759' : 'var(--accent)' }}>
+                    ⚡ Mostrando órdenes: ({filteredOrders.length})
+                  </span>
+                  {filterEventId !== 'ALL' && (
+                    <span style={{ fontSize: '0.72rem', background: 'rgba(255,255,255,0.08)', padding: '3px 8px', borderRadius: '6px', color: '#fff' }}>
+                      🎭 {events.find(e => e.id === filterEventId)?.title || 'Evento'}
+                    </span>
+                  )}
+                  {filterScheduleId !== 'ALL' && (
+                    <span style={{ fontSize: '0.72rem', background: 'rgba(222,184,65,0.2)', padding: '3px 8px', borderRadius: '6px', color: 'var(--accent)', fontWeight: 600 }}>
+                      📅 {(() => {
+                        const allSchedules = events.flatMap(e => e.schedules || []);
+                        const sch = allSchedules.find(s => s.id === filterScheduleId);
+                        return sch ? new Date(sch.schedule_time).toLocaleString('es-EC', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Función seleccionada';
+                      })()}
+                    </span>
+                  )}
+                  {cardFilter !== 'ALL' && (
+                    <span style={{ fontSize: '0.72rem', background: cardFilter === 'Pendiente' ? '#ffcc00' : cardFilter === 'Pagado' ? '#34c759' : '#a855f7', padding: '3px 8px', borderRadius: '6px', color: '#000', fontWeight: '800' }}>
+                      {cardFilter.toUpperCase()}
+                    </span>
+                  )}
+                </div>
                 <button
-                  onClick={() => setCardFilter('ALL')}
+                  onClick={() => {
+                    setFilterEventId('ALL');
+                    setFilterScheduleId('ALL');
+                    setCardFilter('ALL');
+                  }}
                   style={{
                     background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '8px',
                     padding: '5px 12px', color: '#fff', fontSize: '0.74rem', cursor: 'pointer', fontWeight: '700'
                   }}
+                  title="Restablecer todos los filtros"
                 >
                   ✕ Ver todas
                 </button>
