@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
+import WhatsAppManager from '../../components/WhatsAppManager';
 import { 
   Palette, Users, Globe, Copy, Check, Plus, Trash2, 
   ExternalLink, Sparkles, Shield, UserPlus, Edit, Image as ImageIcon,

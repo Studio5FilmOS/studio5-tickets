@@ -5,6 +5,7 @@ import Swal from 'sweetalert2';
 import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff, Palette, Layers, CreditCard, Landmark, Ticket } from 'lucide-react';
 import AdminUsers from './AdminUsers';
 import AdminSettings from './AdminSettings';
+import WhatsAppManager from '../../components/WhatsAppManager';
 import { subscribeToPush, unsubscribeFromPush, isPushSubscribed } from '../../services/pushService';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, getContrastTextColor } from '../../context/ThemeContext';
@@ -1436,7 +1437,8 @@ const AdminDashboard = () => {
           { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Crear Evento' },
           { id: 'eventos', icon: Edit2, label: 'Mis Eventos' },
           { id: 'crm', icon: Users, label: 'Mis Clientes' },
-          { id: 'theming', icon: Palette, label: 'Mi Marca Blanca' }
+          { id: 'theming', icon: Palette, label: 'Mi Marca Blanca' },
+          { id: 'whatsapp_api', icon: Phone, label: 'WhatsApp API & Plantillas' }
         ] : [
           { id: 'ventas', icon: LayoutGrid, label: 'Ventas Globales' },
           { id: 'comisiones', icon: DollarSign, label: '🏢 Comisiones & Organizadores' },
@@ -1448,7 +1450,8 @@ const AdminDashboard = () => {
           { id: 'transferencias', icon: Receipt, label: 'Transferencias' },
           { id: 'bancos', icon: Landmark, label: 'Cuentas' },
           { id: 'usuarios', icon: UserCog, label: 'Usuarios' },
-          { id: 'ajustes', icon: Phone, label: 'Contacto WhatsApp' }
+          { id: 'ajustes', icon: Phone, label: 'Contacto WhatsApp' },
+          { id: 'whatsapp_api', icon: ShieldCheck, label: 'WhatsApp Meta API' }
         ]).map(tab => (
           <button
             key={tab.id}
@@ -3071,6 +3074,10 @@ const AdminDashboard = () => {
       )}
 
       {/* PESTAÑA: AJUSTES DE CONTACTO Y WHATSAPP */}
+      {activeTab === 'whatsapp_api' && (
+        <WhatsAppManager />
+      )}
+
       {activeTab === 'ajustes' && (
         <div className="fade-in">
           <AdminSettings />

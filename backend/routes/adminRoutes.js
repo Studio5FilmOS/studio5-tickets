@@ -12,10 +12,13 @@ router.get('/settings/public', settingsController.getPublicSettings);
 router.get('/settings', authMiddleware, roleMiddleware(['admin', 'organizer']), settingsController.getSettings);
 router.put('/settings', authMiddleware, roleMiddleware(['admin']), settingsController.updateSettings);
 
+// Gestión WhatsApp Meta Cloud API (Admin y Organizadores)
+router.get('/whatsapp', authMiddleware, roleMiddleware(['admin', 'organizer']), settingsController.getWhatsAppConfig);
+router.put('/whatsapp', authMiddleware, roleMiddleware(['admin', 'organizer']), settingsController.updateWhatsAppConfig);
+router.get('/whatsapp/templates', authMiddleware, roleMiddleware(['admin', 'organizer']), settingsController.getLiveTemplates);
+router.post('/whatsapp/test-send', authMiddleware, roleMiddleware(['admin', 'organizer']), settingsController.testWhatsAppSend);
+
 // Reenviar todos los correos pendientes (solo admin)
-// GET  /api/admin/resend-emails?dry_run=true   → simulación sin enviar
-// GET  /api/admin/resend-emails                → reenvío real
 router.get('/resend-emails', authMiddleware, roleMiddleware(['admin']), adminEmailController.resendPendingEmails);
 
 module.exports = router;
-
