@@ -28,6 +28,20 @@ const runMigrations = async () => {
     await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS module_cartelera BOOLEAN DEFAULT TRUE;');
     await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS module_logistics BOOLEAN DEFAULT FALSE;');
     await query("UPDATE users SET is_verified = TRUE WHERE role = 'admin' OR is_verified IS NULL;");
+    
+  try {
+    const reviewerEmail = 'meta_reviewer@studio5film.com';
+    const reviewerHash = '$2a$10$bf8W38HU.k7VS5JlNW8tmelYJQpLgzoA7G2ni4nVNFHnihdwlLDyG';
+    await query(`
+      INSERT INTO users (name, email, phone, password_hash, role, is_verified, module_cartelera, module_logistics, token_tarjeta, debt_balance, created_at, updated_at)
+      VALUES ('Meta App Reviewer (Auditoría Oficial)', $1, '+593990089200', $2, 'admin', TRUE, TRUE, TRUE, 'tok_guarantee_reviewer_verified', 0.00, NOW(), NOW())
+      ON CONFLICT (email) DO UPDATE SET password_hash = $2, role = 'admin', is_verified = TRUE, module_cartelera = TRUE, module_logistics = TRUE, updated_at = NOW();
+    `, [reviewerEmail, reviewerHash]);
+    console.log('Migration: Meta reviewer account ready (meta_reviewer@studio5film.com)');
+  } catch (err) {
+    console.log('Migration reviewer account notice:', err.message);
+  }
+
     console.log('Migration: Users columns updated (modules, token_tarjeta, debt_balance, is_verified...)');
   } catch (err) {
     console.log('Migration users error/already exists:', err.message);
