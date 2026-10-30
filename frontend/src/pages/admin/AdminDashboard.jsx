@@ -1316,63 +1316,120 @@ const AdminDashboard = () => {
   });
 
   const handleExportToExcel = () => {
-    if (filteredOrders.length === 0) {
-      Swal.fire('Aviso', 'No hay datos filtrados para exportar.', 'warning');
-      return;
-    }
+    try {
+      const ordersToExport = (filteredOrders && filteredOrders.length > 0) ? filteredOrders : orders;
+      if (!ordersToExport || ordersToExport.length === 0) {
+        Swal.fire({
+          title: 'Sin datos',
+          text: 'No hay órdenes disponibles para exportar con los filtros actuales.',
+          icon: 'warning',
+          confirmButtonColor: '#DEB841'
+        });
+        return;
+      }
 
-    const headers = [
-      'Código Orden', 'Cliente', 'Email', 'WhatsApp', 'Evento', 'Función', 
-      'Adultos', 'Niños', 'Entradas Totales', 'Valor Total ($)', 
-      'Método Pago', 'Banco', 'Ref. Transacción', 'Estado Pago', 'Fecha Registro',
-      'Consumidor Final', 'Cédula/RUC', 'Nombre Facturación', 'Dirección Facturación', 'Email Facturación'
-    ];
-
-    const rows = filteredOrders.map(o => {
-      const dateFormatted = new Date(o.schedule_time).toLocaleString('es-EC', { timeZone: 'America/Guayaquil' });
-      const createdFormatted = new Date(o.created_at).toLocaleString('es-EC', { timeZone: 'America/Guayaquil' });
-      const totalT = parseInt(o.ticket_count_adult) + parseInt(o.ticket_count_child);
-
-      return [
-        o.order_num,
-        `"${o.customer_name.replace(/"/g, '""')}"`,
-        o.customer_email || 'N/A',
-        o.customer_whatsapp || 'N/A',
-        `"${o.event_title.replace(/"/g, '""')}"`,
-        `"${dateFormatted}"`,
-        o.ticket_count_adult,
-        o.ticket_count_child,
-        totalT,
-        parseFloat(o.amount_total).toFixed(2),
-        o.payment_method,
-        o.bank_name || 'N/A',
-        o.transaction_ref || 'N/A',
-        o.payment_status,
-        `"${createdFormatted}"`,
-        o.is_final_consumer ? 'Sí' : 'No',
-        o.billing_id_number || 'N/A',
-        `"${(o.billing_name || '').replace(/"/g, '""')}"`,
-        `"${(o.billing_address || '').replace(/"/g, '""')}"`,
-        o.billing_email || 'N/A'
+      const headers = [
+        'Código Orden', 'Cliente', 'Email', 'WhatsApp', 'Evento', 'Función / Horario', 
+        'Adultos', 'Niños', 'Entradas Totales', 'Valor Total ($)', 
+        'Método Pago', 'Banco', 'Ref. Transacción', 'Estado Pago', 'Fecha Registro',
+        'Consumidor Final', 'Cédula/RUC', 'Nombre Facturación', 'Dirección Facturación', 'Email Facturación'
       ];
-    });
 
-    const csvContent = [
-      headers.join(';'),
-      ...rows.map(row => row.join(';'))
-    ].join('\n');
+      const rows = ordersToExport.map(o => {
+        let dateFormatted = 'N/A';
+        try {
+          if (o.schedule_time) {
+            dateFormatted = new Date(o.schedule_time).toLocaleString('es-EC');
+          }
+        } catch (_) {
+          dateFormatted = String(o.schedule_time || 'N/A');
+        }
 
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `Reporte_Ventas_Studio5_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+        let createdFormatted = 'N/A';
+        try {
+          if (o.created_at) {
+            createdFormatted = new Date(o.created_at).toLocaleString('es-EC');
+          }
+        } catch (_) {
+          createdFormatted = String(o.created_at || 'N/A');
+        }
 
-    Swal.fire('Exportado', 'El archivo CSV/Excel se ha descargado correctamente.', 'success');
+        const totalT = (parseInt(o.ticket_count_adult) || 0) + (parseInt(o.ticket_count_child) || 0);
+        const amountTotal = parseFloat(o.amount_total || 0).toFixed(2);
+        const customerName = String(o.customer_name || 'N/A').replace(/"/g, '""');
+        const eventTitle = String(o.event_title || o.title || 'N/A').replace(/"/g, '""');
+        const billingName = String(o.billing_name || '').replace(/"/g, '""');
+        const billingAddress = String(o.billing_address || '').replace(/"/g, '""');
+
+        return [
+          `"${String(o.order_num || '').replace(/"/g, '""')}"`,
+          `"${customerName}"`,
+          `"${String(o.customer_email || 'N/A').replace(/"/g, '""')}"`,
+          `"${String(o.customer_whatsapp || 'N/A').replace(/"/g, '""')}"`,
+          `"${eventTitle}"`,
+          `"${dateFormatted}"`,
+          o.ticket_count_adult || 0,
+          o.ticket_count_child || 0,
+          totalT,
+          amountTotal,
+          `"${String(o.payment_method || 'N/A').replace(/"/g, '""')}"`,
+          `"${String(o.bank_name || 'N/A').replace(/"/g, '""')}"`,
+          `"${String(o.transaction_ref || 'N/A').replace(/"/g, '""')}"`,
+          `"${String(o.payment_status || 'N/A').replace(/"/g, '""')}"`,
+          `"${createdFormatted}"`,
+          o.is_final_consumer ? 'Sí' : 'No',
+          `"${String(o.billing_id_number || 'N/A').replace(/"/g, '""')}"`,
+          `"${billingName}"`,
+          `"${billingAddress}"`,
+          `"${String(o.billing_email || 'N/A').replace(/"/g, '""')}"`
+        ];
+      });
+
+      const csvContent = [
+        headers.join(';'),
+        ...rows.map(row => row.join(';'))
+      ].join('\r\n');
+
+      // Blob con BOM UTF-8 (﻿) para visualización correcta de tildes y caracteres especiales en Excel
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const fileName = `Reporte_Ventas_Studio5_${new Date().toISOString().slice(0,10)}.csv`;
+
+      if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+        window.navigator.msSaveOrOpenBlob(blob, fileName);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 300);
+      }
+
+      const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true
+      });
+      Toast.fire({
+        icon: 'success',
+        title: `Excel generado: ${ordersToExport.length} órdenes exportadas`
+      });
+    } catch (err) {
+      console.error('Error al exportar Excel:', err);
+      Swal.fire({
+        title: 'Error al exportar',
+        text: 'Ocurrió un error al generar el archivo: ' + (err.message || err),
+        icon: 'error',
+        confirmButtonColor: '#ff3b30'
+      });
+    }
   };
 
   return (
@@ -1741,22 +1798,41 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            {/* Toggle para panel de reportes avanzados y Excel */}
-            <button
-              onClick={() => setShowReportsPanel(prev => !prev)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '9px 16px', borderRadius: '12px', cursor: 'pointer',
-                background: showReportsPanel ? 'rgba(52,199,89,0.18)' : 'rgba(255,255,255,0.06)',
-                color: showReportsPanel ? '#34c759' : 'var(--text-primary)',
-                border: `1px solid ${showReportsPanel ? 'rgba(52,199,89,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                fontWeight: '600', fontSize: '0.82rem', transition: 'all 0.2s', whiteSpace: 'nowrap'
-              }}
-              title="Abrir filtros de fecha y exportación a Excel"
-            >
-              <FileSpreadsheet size={16} />
-              <span>{showReportsPanel ? '✕ Ocultar Reportes' : '📊 Reportes & Excel'}</span>
-            </button>
+            {/* Botón directo de Descargar Excel y Toggle de Fechas */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleExportToExcel}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '7px',
+                  padding: '9px 16px', borderRadius: '12px', cursor: 'pointer',
+                  background: 'linear-gradient(135deg, rgba(52,199,89,0.3), rgba(52,199,89,0.12))',
+                  color: '#34c759',
+                  border: '1px solid rgba(52,199,89,0.6)',
+                  fontWeight: '700', fontSize: '0.84rem', transition: 'all 0.2s', whiteSpace: 'nowrap',
+                  boxShadow: '0 4px 12px rgba(52,199,89,0.15)'
+                }}
+                title="Descargar listado actual directamente a Excel (CSV)"
+              >
+                <FileSpreadsheet size={16} />
+                <span>📥 Descargar Excel</span>
+              </button>
+
+              <button
+                onClick={() => setShowReportsPanel(prev => !prev)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '7px',
+                  padding: '9px 14px', borderRadius: '12px', cursor: 'pointer',
+                  background: showReportsPanel ? 'rgba(222,184,65,0.2)' : 'rgba(255,255,255,0.06)',
+                  color: showReportsPanel ? 'var(--accent)' : 'var(--text-primary)',
+                  border: `1px solid ${showReportsPanel ? 'rgba(222,184,65,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                  fontWeight: '600', fontSize: '0.82rem', transition: 'all 0.2s', whiteSpace: 'nowrap'
+                }}
+                title="Abrir rango de fechas para cuadre de caja"
+              >
+                <Calendar size={15} />
+                <span>{showReportsPanel ? '✕ Ocultar Fechas' : '📅 Filtro Fechas'}</span>
+              </button>
+            </div>
           </div>
 
           {/* TARJETAS INTELIGENTES INTERACTIVAS (Filtran con 1 toque) */}
