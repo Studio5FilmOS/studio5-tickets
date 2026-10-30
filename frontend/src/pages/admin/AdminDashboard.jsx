@@ -1492,67 +1492,167 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* Tabs Premium Diferenciados */}
-      <div style={{
-        display: 'flex', flexWrap: 'wrap', background: 'rgba(255,255,255,0.04)', borderRadius: '14px',
-        padding: '4px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.07)', gap: '2px'
-      }}>
-        {(isOrganizer ? [
-          { id: 'ventas', icon: LayoutGrid, label: 'Mis Ventas' },
-          { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Crear Evento' },
-          { id: 'eventos', icon: Edit2, label: 'Mis Eventos' },
-          { id: 'crm', icon: Users, label: 'Mis Clientes' },
-          { id: 'theming', icon: Palette, label: 'Mi Marca Blanca' },
-          { id: 'whatsapp_api', icon: Phone, label: 'WhatsApp API & Plantillas' }
+      {/* NAVEGACIÓN MODULAR ELEGANTE (Agrupada en 4 Módulos Claros) */}
+      {(() => {
+        const allModules = isOrganizer ? [
+          {
+            id: 'taquilla',
+            label: '🎟️ Taquilla & Ventas',
+            icon: LayoutGrid,
+            tabs: [
+              { id: 'ventas', icon: LayoutGrid, label: 'Mis Ventas' }
+            ]
+          },
+          {
+            id: 'eventos_mod',
+            label: '🎭 Cartelera & Obras',
+            icon: Film,
+            tabs: [
+              { id: 'eventos', icon: Edit2, label: 'Mis Eventos' },
+              { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Crear Evento' }
+            ]
+          },
+          {
+            id: 'marca_mod',
+            label: '🎨 Clientes & Marca',
+            icon: Palette,
+            tabs: [
+              { id: 'crm', icon: Users, label: 'Mis Clientes' },
+              { id: 'theming', icon: Palette, label: 'Mi Marca Blanca' },
+              { id: 'whatsapp_api', icon: Phone, label: 'WhatsApp API' }
+            ]
+          }
         ] : [
-          { id: 'ventas', icon: LayoutGrid, label: 'Ventas Globales' },
-          { id: 'comisiones', icon: DollarSign, label: '🏢 Comisiones & Organizadores' },
-          { id: 'eventos', icon: Edit2, label: 'Catálogo Global' },
-          { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Nuevo Evento' },
-          { id: 'crm', icon: Users, label: 'Base de Datos' },
-          { id: 'theming', icon: Palette, label: 'Marca Blanca' },
-          { id: 'banners', icon: Image, label: 'Banners' },
-          { id: 'transferencias', icon: Receipt, label: 'Transferencias' },
-          { id: 'bancos', icon: Landmark, label: 'Cuentas' },
-          { id: 'usuarios', icon: UserCog, label: 'Usuarios' },
-          { id: 'ajustes', icon: Phone, label: 'Contacto WhatsApp' },
-          { id: 'whatsapp_api', icon: ShieldCheck, label: 'WhatsApp Meta API' }
-        ]).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => {
-              if (tab.id === 'crear' && isOrganizer && !user?.token_tarjeta) {
-                Swal.fire({
-                  title: '⚠️ Tarjeta de Garantía Requerida',
-                  text: 'Como organizador de marca blanca, es obligatorio registrar tu tarjeta de garantía Payphone antes de poder crear eventos.',
-                  icon: 'warning',
-                  showCancelButton: true,
-                  confirmButtonText: '💳 Registrar Tarjeta Ahora',
-                  cancelButtonText: 'Cerrar',
-                  confirmButtonColor: '#DEB841'
-                }).then((r) => {
-                  if (r.isConfirmed) handleRegisterGuaranteeCard();
-                });
-                return;
-              }
-              if (tab.id !== 'crear') setEditingEvent(null);
-              setActiveTab(tab.id);
-            }}
-            style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-              padding: '11px 14px', borderRadius: '11px', border: 'none', cursor: 'pointer',
-              fontWeight: '600', fontSize: '0.85rem', transition: 'all 0.25s',
-              background: activeTab === tab.id
-                ? 'linear-gradient(135deg, var(--accent), var(--accent-secondary))'
-                : 'transparent',
-              color: activeTab === tab.id ? '#000' : 'var(--text-muted)',
-              boxShadow: activeTab === tab.id ? '0 4px 12px var(--accent-glow)' : 'none'
-            }}
-          >
-            <tab.icon size={16} /> {tab.label}
-          </button>
-        ))}
-      </div>
+          {
+            id: 'taquilla',
+            label: '🎟️ Taquilla & Ventas',
+            icon: LayoutGrid,
+            tabs: [
+              { id: 'ventas', icon: LayoutGrid, label: 'Ventas Globales' },
+              { id: 'transferencias', icon: Receipt, label: 'Transferencias Bancarias' }
+            ]
+          },
+          {
+            id: 'eventos_mod',
+            label: '🎭 Cartelera & Obras',
+            icon: Film,
+            tabs: [
+              { id: 'eventos', icon: Edit2, label: 'Catálogo Global' },
+              { id: 'crear', icon: PlusCircle, label: editingEvent ? '✏️ Editando' : 'Nuevo Evento' },
+              { id: 'banners', icon: Image, label: 'Banners Web' }
+            ]
+          },
+          {
+            id: 'equipo_mod',
+            label: '👥 Clientes & Equipo',
+            icon: Users,
+            tabs: [
+              { id: 'crm', icon: Users, label: 'Base de Datos' },
+              { id: 'comisiones', icon: DollarSign, label: '🏢 Comisiones & Productores' },
+              { id: 'usuarios', icon: UserCog, label: 'Usuarios del Sistema' }
+            ]
+          },
+          {
+            id: 'config_mod',
+            label: '⚙️ Configuración',
+            icon: Sliders,
+            tabs: [
+              { id: 'theming', icon: Palette, label: 'Marca Blanca' },
+              { id: 'bancos', icon: Landmark, label: 'Cuentas' },
+              { id: 'ajustes', icon: Phone, label: 'Contacto WhatsApp' },
+              { id: 'whatsapp_api', icon: ShieldCheck, label: 'WhatsApp Meta API' }
+            ]
+          }
+        ];
+
+        const activeModule = allModules.find(m => m.tabs.some(t => t.id === activeTab)) || allModules[0];
+
+        return (
+          <div style={{ marginBottom: '22px' }}>
+            {/* Nivel 1: Módulos Principales */}
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: '6px',
+              background: 'rgba(255,255,255,0.03)', padding: '5px',
+              borderRadius: '16px', border: '1px solid rgba(255,255,255,0.07)',
+              marginBottom: '8px'
+            }}>
+              {allModules.map(mod => {
+                const isSelected = activeModule.id === mod.id;
+                return (
+                  <button
+                    key={mod.id}
+                    onClick={() => {
+                      if (!isSelected) {
+                        const first = mod.tabs[0];
+                        if (first.id !== 'crear') setEditingEvent(null);
+                        setActiveTab(first.id);
+                      }
+                    }}
+                    style={{
+                      flex: 1, minWidth: '130px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      padding: '10px 14px', borderRadius: '12px', border: isSelected ? '1px solid rgba(222,184,65,0.45)' : '1px solid transparent', cursor: 'pointer',
+                      fontWeight: '700', fontSize: '0.84rem', transition: 'all 0.2s ease',
+                      background: isSelected
+                        ? 'linear-gradient(135deg, rgba(222,184,65,0.22), rgba(222,184,65,0.06))'
+                        : 'transparent',
+                      color: isSelected ? 'var(--accent)' : 'var(--text-muted)',
+                      boxShadow: isSelected ? '0 4px 14px rgba(222,184,65,0.14)' : 'none'
+                    }}
+                  >
+                    <mod.icon size={16} /> {mod.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Nivel 2: Sub-pestañas del Módulo */}
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: '6px',
+              background: 'rgba(0,0,0,0.35)', padding: '4px',
+              borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)'
+            }}>
+              {activeModule.tabs.map(tab => {
+                const isTabActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      if (tab.id === 'crear' && isOrganizer && !user?.token_tarjeta) {
+                        Swal.fire({
+                          title: '⚠️ Tarjeta de Garantía Requerida',
+                          text: 'Como organizador de marca blanca, es obligatorio registrar tu tarjeta de garantía Payphone antes de poder crear eventos.',
+                          icon: 'warning',
+                          showCancelButton: true,
+                          confirmButtonText: '💳 Registrar Tarjeta Ahora',
+                          cancelButtonText: 'Cerrar',
+                          confirmButtonColor: '#DEB841'
+                        }).then((r) => {
+                          if (r.isConfirmed) handleRegisterGuaranteeCard();
+                        });
+                        return;
+                      }
+                      if (tab.id !== 'crear') setEditingEvent(null);
+                      setActiveTab(tab.id);
+                    }}
+                    style={{
+                      flex: 1, minWidth: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                      padding: '8px 12px', borderRadius: '9px', border: 'none', cursor: 'pointer',
+                      fontWeight: '600', fontSize: '0.8rem', transition: 'all 0.2s',
+                      background: isTabActive
+                        ? 'linear-gradient(135deg, var(--accent), var(--accent-secondary))'
+                        : 'transparent',
+                      color: isTabActive ? '#000' : 'var(--text-muted)',
+                      boxShadow: isTabActive ? '0 3px 10px var(--accent-glow)' : 'none'
+                    }}
+                  >
+                    <tab.icon size={15} /> {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* PESTAÑA: PANEL CONTABLE Y VENTAS */}
       {activeTab === 'ventas' && (
