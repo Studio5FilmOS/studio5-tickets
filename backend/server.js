@@ -83,7 +83,11 @@ const runMigrations = async () => {
     await query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_email VARCHAR(255);');
     await query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS amount_net NUMERIC(10, 2) NOT NULL DEFAULT 0.00;');
     await query('UPDATE orders SET amount_net = amount_total WHERE amount_net = 0.00 AND amount_total > 0.00;');
-    console.log('Migration: Tickets and Orders V2 fields updated');
+    await query("UPDATE orders SET payment_status = 'Pendiente' WHERE LOWER(TRIM(payment_status)) IN ('pending', 'reserva');");
+    await query("UPDATE orders SET payment_status = 'Pagado' WHERE LOWER(TRIM(payment_status)) IN ('paid', 'approved', 'completado');");
+    await query("UPDATE orders SET payment_status = 'Anulado' WHERE LOWER(TRIM(payment_status)) IN ('cancelled', 'canceled', 'anulada');");
+    await query("UPDATE orders SET payment_status = 'Cortesía' WHERE LOWER(TRIM(payment_status)) IN ('cortesia', 'courtesy');");
+    console.log('Migration: Tickets and Orders V2 fields and normalized payment statuses updated');
   } catch (err) {
     console.log('Migration tickets/orders error/already exists:', err.message);
   }

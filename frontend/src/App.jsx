@@ -103,7 +103,7 @@ const BottomNavigation = () => {
         <span>Cartelera</span>
       </Link>
 
-      {isAuthenticated && (
+      {isAuthenticated && !isAdmin && !isOrganizer && user?.role !== 'staff' && (
         <Link to="/mis-tickets" className={`mobile-nav-item ${location.pathname === '/mis-tickets' ? 'active' : ''}`}>
           <Ticket size={20} />
           <span>Tickets</span>
@@ -333,7 +333,7 @@ const Sidebar = () => {
                 <span>Cartelera</span>
               </Link>
 
-              {isAuthenticated && (
+              {isAuthenticated && !isAdmin && !isOrganizer && user?.role !== 'staff' && (
                 <Link to="/mis-tickets" className={`sidebar-item ${location.pathname === '/mis-tickets' ? 'active' : ''}`}>
                   <Ticket size={18} />
                   <span>Mis Tickets</span>

@@ -2,13 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
-import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff, Palette, Layers, CreditCard, Landmark, Ticket } from 'lucide-react';
+import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff, Palette, Layers, CreditCard, Landmark, Ticket, Clock } from 'lucide-react';
 import AdminUsers from './AdminUsers';
 import AdminSettings from './AdminSettings';
 import WhatsAppManager from '../../components/WhatsAppManager';
 import { subscribeToPush, unsubscribeFromPush, isPushSubscribed } from '../../services/pushService';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, getContrastTextColor } from '../../context/ThemeContext';
+
+
+// Helper para unificar estados de pago (inglés/español)
+const getNormalizedStatus = (status) => {
+  if (!status) return 'Pendiente';
+  const s = String(status).trim().toLowerCase();
+  if (s === 'pagado' || s === 'paid' || s === 'approved' || s === 'completado') return 'Pagado';
+  if (s === 'pendiente' || s === 'pending' || s === 'reserva') return 'Pendiente';
+  if (s === 'anulado' || s === 'cancelled' || s === 'canceled') return 'Anulado';
+  if (s === 'cortesía' || s === 'cortesia' || s === 'courtesy') return 'Cortesía';
+  return status;
+};
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -1198,7 +1210,8 @@ const AdminDashboard = () => {
   const filteredOrders = orders.filter(o => {
     const matchEvent = filterEventId === 'ALL' || o.event_id === filterEventId;
     const matchSchedule = filterScheduleId === 'ALL' || o.schedule_id === filterScheduleId;
-    const matchStatus = filterPaymentStatus === 'ALL' || o.payment_status === filterPaymentStatus;
+    const normStatus = getNormalizedStatus(o.payment_status);
+    const matchStatus = filterPaymentStatus === 'ALL' || normStatus === filterPaymentStatus;
 
     const normalizedQuery = searchQuery.toLowerCase().trim();
     const matchQuery = !normalizedQuery || 
@@ -1210,9 +1223,9 @@ const AdminDashboard = () => {
     return matchEvent && matchSchedule && matchStatus && matchQuery;
   });
 
-  // Filtrado de transferencias pendientes
+  // Filtrado de transferencias pendientes (reconoce Pendiente, Pending, reserva)
   const filteredPendingTransfers = orders.filter(o => {
-    if (o.payment_status !== 'Pendiente') return false;
+    if (getNormalizedStatus(o.payment_status) !== 'Pendiente') return false;
     
     const normalizedQuery = searchQuery.toLowerCase().trim();
     return !normalizedQuery || 
@@ -1222,26 +1235,40 @@ const AdminDashboard = () => {
       (o.customer_email && o.customer_email.toLowerCase().includes(normalizedQuery));
   });
 
-  // Métricas
+  // Métricas transparentes y exactas
   const metrics = filteredOrders.reduce((acc, o) => {
     const netVal = parseFloat(o.amount_net) > 0 ? parseFloat(o.amount_net) : (parseFloat(o.amount_total) || 0);
-    if (o.payment_status === 'Pagado') {
+    const totalT = (parseInt(o.ticket_count_adult) + parseInt(o.ticket_count_child)) || 0;
+    const norm = getNormalizedStatus(o.payment_status);
+
+    if (norm === 'Pagado') {
       acc.revenuePaid += netVal;
-    } else if (o.payment_status === 'Pendiente') {
+      acc.ticketsPaid += totalT;
+    } else if (norm === 'Pendiente') {
       acc.revenuePending += netVal;
-    } else if (o.payment_status === 'Cortesía') {
-      acc.cortesiasCount += (parseInt(o.ticket_count_adult) + parseInt(o.ticket_count_child)) || 0;
+      acc.ticketsPending += totalT;
+    } else if (norm === 'Cortesía') {
+      acc.cortesiasCount += totalT;
+      acc.cortesiasOrders += 1;
+    } else if (norm === 'Anulado') {
+      acc.anuladasCount += totalT;
+      acc.anuladasOrders += 1;
     }
 
-    if (o.payment_status !== 'Anulado') {
-      acc.totalTicketsSold += (parseInt(o.ticket_count_adult) + parseInt(o.ticket_count_child)) || 0;
+    if (norm === 'Pagado' || norm === 'Cortesía') {
+      acc.totalTicketsSold += totalT;
     }
 
     return acc;
   }, {
     revenuePaid: 0,
+    ticketsPaid: 0,
     revenuePending: 0,
+    ticketsPending: 0,
     cortesiasCount: 0,
+    cortesiasOrders: 0,
+    anuladasCount: 0,
+    anuladasOrders: 0,
     totalTicketsSold: 0
   });
 
@@ -1495,21 +1522,24 @@ const AdminDashboard = () => {
           {/* Métricas */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '22px' }}>
             {[
-              { label: 'Cobrado', value: `$${metrics.revenuePaid.toFixed(2)}`, icon: TrendingUp, color: '#34c759', bg: 'rgba(52,199,89,0.08)', border: 'rgba(52,199,89,0.2)' },
-              { label: 'Pendiente', value: `$${metrics.revenuePending.toFixed(2)}`, icon: DollarSign, color: '#ffcc00', bg: 'rgba(255,204,0,0.08)', border: 'rgba(255,204,0,0.2)' },
-              { label: 'Vendidas', value: metrics.totalTicketsSold, icon: Users, color: '#DEB841', bg: 'rgba(222,184,65,0.08)', border: 'rgba(222,184,65,0.2)' },
-              { label: 'Cortesías', value: metrics.cortesiasCount, icon: Sparkles, color: '#888', bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.1)' },
+              { label: 'Cobrado', value: `${metrics.revenuePaid.toFixed(2)}`, sub: `${metrics.ticketsPaid} boletos pagados`, icon: TrendingUp, color: '#34c759', bg: 'rgba(52,199,89,0.08)', border: 'rgba(52,199,89,0.2)' },
+              { label: 'Pendiente', value: `${metrics.revenuePending.toFixed(2)}`, sub: `${metrics.ticketsPending} boletos por cobrar`, icon: DollarSign, color: '#ffcc00', bg: 'rgba(255,204,0,0.08)', border: 'rgba(255,204,0,0.2)' },
+              { label: 'Vendidas', value: metrics.ticketsPaid, sub: `${metrics.revenuePaid.toFixed(2)} confirmado`, icon: Users, color: '#DEB841', bg: 'rgba(222,184,65,0.08)', border: 'rgba(222,184,65,0.2)' },
+              { label: 'Cortesías', value: metrics.cortesiasCount, sub: `${metrics.cortesiasOrders} órdenes cortesía`, icon: Sparkles, color: '#a855f7', bg: 'rgba(168,85,247,0.08)', border: 'rgba(168,85,247,0.2)' },
             ].map((m, i) => (
               <div key={i} style={{
                 background: m.bg, border: `1px solid ${m.border}`,
                 borderRadius: '16px', padding: '14px 16px',
-                display: 'flex', flexDirection: 'column', gap: '6px'
+                display: 'flex', flexDirection: 'column', gap: '4px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '600' }}>{m.label}</span>
                   <m.icon size={15} color={m.color} />
                 </div>
                 <strong style={{ fontSize: '1.3rem', color: m.color, fontWeight: 800, letterSpacing: '-0.5px' }}>{m.value}</strong>
+                {m.sub && (
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: '500' }}>{m.sub}</span>
+                )}
               </div>
             ))}
           </div>
@@ -1562,6 +1592,8 @@ const AdminDashboard = () => {
                     <option value="ALL">Todos los estados</option>
                     <option value="Pagado">Pagado</option>
                     <option value="Pendiente">Reserva (Pendiente)</option>
+                    <option value="Cortesía">Cortesía</option>
+                    <option value="Anulado">Anulado</option>
                     <option value="Cortesía">Cortesía</option>
                     <option value="Anulado">Anulado</option>
                   </select>
@@ -1691,8 +1723,14 @@ const AdminDashboard = () => {
                     ? new Date(o.schedule_time).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
                     : 'Sin fecha';
                   const totalT = parseInt(o.ticket_count_adult || 0) + parseInt(o.ticket_count_child || 0);
-                  const statusColor = o.payment_status === 'Pagado' ? '#34c759' : o.payment_status === 'Anulado' ? '#ff3b30' : '#ffcc00';
-                  const statusBg = o.payment_status === 'Pagado' ? 'rgba(52,199,89,0.1)' : o.payment_status === 'Anulado' ? 'rgba(255,59,48,0.1)' : 'rgba(255,204,0,0.1)';
+                  const normStatus = getNormalizedStatus(o.payment_status);
+                  const isPaid = normStatus === 'Pagado';
+                  const isPending = normStatus === 'Pendiente';
+                  const isAnulado = normStatus === 'Anulado';
+                  const isCortesia = normStatus === 'Cortesía';
+
+                  const statusColor = isPaid ? '#34c759' : isAnulado ? '#ff3b30' : isCortesia ? '#a855f7' : '#ffcc00';
+                  const statusBg = isPaid ? 'rgba(52,199,89,0.12)' : isAnulado ? 'rgba(255,59,48,0.12)' : isCortesia ? 'rgba(168,85,247,0.12)' : 'rgba(255,204,0,0.12)';
 
                   return (
                     <div key={o.id} style={{
@@ -1706,12 +1744,12 @@ const AdminDashboard = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--accent)', letterSpacing: '0.5px' }}>#{o.order_num}</span>
                         <span style={{
-                          fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px',
+                          fontSize: '0.68rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px',
                           padding: '3px 9px', borderRadius: '6px',
                           background: statusBg, color: statusColor,
-                          border: `1px solid ${statusColor}33`
+                          border: `1px solid ${statusColor}44`
                         }}>
-                          {o.payment_status}
+                          {normStatus}
                         </span>
 
                         {/* Badge de Asistencia / Ingreso en Sala */}
@@ -1761,7 +1799,7 @@ const AdminDashboard = () => {
                             <Receipt size={13} /> Ver Comprobante
                           </button>
                         ) : (
-                          o.payment_status === 'Pendiente' && (
+                          isPending && (
                             <button
                               onClick={() => setUploadingReceiptOrder(o)}
                               style={{
@@ -1774,6 +1812,54 @@ const AdminDashboard = () => {
                             </button>
                           )
                         )}
+
+                        {/* Botón Ver y Descargar Ticket para Admin / Staff */}
+                        <a
+                          href={`/orden/${o.order_num}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            flex: 1, minWidth: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                            padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(0,229,255,0.35)', cursor: 'pointer',
+                            background: 'rgba(0,229,255,0.1)', color: '#00E5FF', fontWeight: '700', fontSize: '0.78rem',
+                            textDecoration: 'none'
+                          }}
+                          title="Abrir y descargar boletos con QR digital de esta orden"
+                        >
+                          <Ticket size={13} /> Ver / Descargar Ticket
+                        </a>
+
+                        {/* Botón Aprobar Pago si está Pendiente */}
+                        {isPending && (
+                          <button
+                            onClick={() => handleUpdateStatus(o.id, o.payment_status, 'Pagado')}
+                            style={{
+                              flex: 1, minWidth: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                              padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(52,199,89,0.3)', cursor: 'pointer',
+                              background: 'rgba(52,199,89,0.18)', color: '#34c759', fontWeight: '700', fontSize: '0.78rem'
+                            }}
+                            title="Aprobar pago y generar códigos QR"
+                          >
+                            <Check size={13} /> Aprobar / Pagado
+                          </button>
+                        )}
+
+                        {/* Botón Revertir a Pendiente si ya estaba Pagado */}
+                        {isPaid && (
+                          <button
+                            onClick={() => handleUpdateStatus(o.id, o.payment_status, 'Pendiente')}
+                            style={{
+                              flex: 1, minWidth: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                              padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(255,204,0,0.25)', cursor: 'pointer',
+                              background: 'rgba(255,204,0,0.1)', color: '#ffcc00', fontWeight: '700', fontSize: '0.78rem'
+                            }}
+                            title="Regresar a estado pendiente de pago"
+                          >
+                            <Clock size={13} /> Marcar Pendiente
+                          </button>
+                        )}
+
+                        {/* Editar Datos */}
                         <button
                           onClick={() => {
                             setEditingOrder(o);
@@ -1790,30 +1876,20 @@ const AdminDashboard = () => {
                           }}
                           style={{
                             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                            padding: '8px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer',
+                            padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer',
                             background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', fontWeight: '700', fontSize: '0.78rem'
                           }}
                         >
                           <Edit2 size={13} /> Editar
                         </button>
-                        {o.payment_status === 'Pendiente' && (
-                          <button
-                            onClick={() => handleUpdateStatus(o.id, o.payment_status, 'Pagado')}
-                            style={{
-                              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                              padding: '8px', borderRadius: '10px', border: '1px solid rgba(52,199,89,0.25)', cursor: 'pointer',
-                              background: 'rgba(52,199,89,0.15)', color: '#34c759', fontWeight: '700', fontSize: '0.78rem'
-                            }}
-                          >
-                            <Check size={13} /> Confirmar Pago
-                          </button>
-                        )}
-                        {o.payment_status !== 'Anulado' && (
+
+                        {/* Anular si no está anulado */}
+                        {!isAnulado && (
                           <button
                             onClick={() => handleUpdateStatus(o.id, o.payment_status, 'Anulado')}
                             style={{
                               flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                              padding: '8px', borderRadius: '10px', border: '1px solid rgba(255,59,48,0.2)', cursor: 'pointer',
+                              padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(255,59,48,0.2)', cursor: 'pointer',
                               background: 'rgba(255,59,48,0.08)', color: '#ff3b30', fontWeight: '700', fontSize: '0.78rem'
                             }}
                           >

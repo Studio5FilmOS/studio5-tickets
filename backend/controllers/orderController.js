@@ -273,7 +273,7 @@ exports.createOrder = async (req, res) => {
       }
     }
 
-    let paymentStatus = 'Pending';
+    let paymentStatus = 'Pendiente';
     const userRole = req.user ? req.user.role : null;
     
     if (operation === 'Cortesia') {
@@ -499,7 +499,15 @@ exports.getAllOrders = async (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const ordersRes = await query(
-      `SELECT o.*, e.title as event_title, es.schedule_time,
+      `SELECT o.*,
+       CASE 
+         WHEN LOWER(TRIM(o.payment_status)) IN ('pagado', 'paid', 'approved', 'completado') THEN 'Pagado'
+         WHEN LOWER(TRIM(o.payment_status)) IN ('pendiente', 'pending', 'reserva') THEN 'Pendiente'
+         WHEN LOWER(TRIM(o.payment_status)) IN ('anulado', 'cancelled', 'canceled') THEN 'Anulado'
+         WHEN LOWER(TRIM(o.payment_status)) IN ('cortesía', 'cortesia', 'courtesy') THEN 'Cortesía'
+         ELSE o.payment_status
+       END as payment_status,
+       e.title as event_title, es.schedule_time,
        (SELECT COUNT(*)::integer FROM tickets t WHERE t.order_id = o.id AND t.status = 'Used') as checked_in_count
        FROM orders o
        JOIN events e ON e.id = o.event_id
@@ -592,7 +600,14 @@ exports.getOrderByNum = async (req, res) => {
 // Actualizar estado de pago/operación de la orden
 exports.updateOrderStatus = async (req, res) => {
   const { id } = req.params;
-  const { payment_status } = req.body;
+  let { payment_status } = req.body;
+
+  if (payment_status) {
+    const s = String(payment_status).trim().toLowerCase();
+    if (s === 'pagado' || s === 'paid' || s === 'approved' || s === 'completado') payment_status = 'Pagado';
+    else if (s === 'pendiente' || s === 'pending' || s === 'reserva') payment_status = 'Pendiente';
+    else if (s === 'anulado' || s === 'cancelled' || s === 'canceled') payment_status = 'Anulado';
+  }
 
   if (!payment_status || !['Pagado', 'Pendiente', 'Anulado'].includes(payment_status)) {
     return res.status(400).json({ status: 'ERROR', message: 'Estado de pago inválido.' });
@@ -772,7 +787,14 @@ exports.getOrderByNum = async (req, res) => {
 // Actualizar estado de pago/operación de la orden
 exports.updateOrderStatus = async (req, res) => {
   const { id } = req.params;
-  const { payment_status } = req.body;
+  let { payment_status } = req.body;
+
+  if (payment_status) {
+    const s = String(payment_status).trim().toLowerCase();
+    if (s === 'pagado' || s === 'paid' || s === 'approved' || s === 'completado') payment_status = 'Pagado';
+    else if (s === 'pendiente' || s === 'pending' || s === 'reserva') payment_status = 'Pendiente';
+    else if (s === 'anulado' || s === 'cancelled' || s === 'canceled') payment_status = 'Anulado';
+  }
 
   if (!payment_status || !['Pagado', 'Pendiente', 'Anulado'].includes(payment_status)) {
     return res.status(400).json({ status: 'ERROR', message: 'Estado de pago inválido.' });
