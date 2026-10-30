@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
-import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff, Palette, Layers, CreditCard, Landmark, Ticket, Clock } from 'lucide-react';
+import { RefreshCw, Save, Check, X, Info, FileSpreadsheet, DollarSign, Calendar, Search, Users, Sparkles, Upload, Trash2, Plus, ShieldCheck, TrendingUp, LayoutGrid, PlusCircle, ChevronDown, ChevronUp, Phone, Mail, Armchair, Edit2, Image, ToggleLeft, ToggleRight, ExternalLink, Receipt, UserCog, Bell, BellOff, Palette, Layers, CreditCard, Landmark, Ticket, Clock, Film, Sliders, Filter } from 'lucide-react';
 import AdminUsers from './AdminUsers';
 import AdminSettings from './AdminSettings';
 import WhatsAppManager from '../../components/WhatsAppManager';
@@ -33,6 +33,8 @@ const AdminDashboard = () => {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
+  const [cardFilter, setCardFilter] = useState('ALL'); // 'ALL', 'Pagado', 'Pendiente', 'Cortesía'
+  const [showReportsPanel, setShowReportsPanel] = useState(false);
   
   // Estado para gestión de localidades en eventos
   const [localidadesList, setLocalidadesList] = useState([]);
@@ -930,34 +932,67 @@ const AdminDashboard = () => {
     );
   };
 
-  // Actualizar estado de pago
+  // Actualizar estado de pago (con preservación de scroll y actualización optimista)
   const handleUpdateStatus = async (orderId, currentStatus, newStatus) => {
     if (currentStatus === newStatus) return;
 
     const confirmRes = await Swal.fire({
       title: `¿Cambiar estado a ${newStatus}?`,
-      text: newStatus === 'Anulado' ? 'Esto cancelará el acceso de todos los tickets asociados.' : 'Se activará el acceso y se enviarán los correos correspondientes.',
+      text: newStatus === 'Anulado' ? 'Esto cancelará el acceso de todos los tickets asociados.' : 'Se activará el acceso y se enviarán los comprobantes correspondientes.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: newStatus === 'Anulado' ? '#ff3b30' : '#DEB841',
-      cancelButtonColor: '#333'
+      cancelButtonColor: '#333',
+      confirmButtonText: 'Sí, cambiar',
+      cancelButtonText: 'Cancelar',
+      heightAuto: false,
+      returnFocus: false
     });
 
-    if (confirmRes.isConfirmed) {
-      try {
-        const res = await api.patch(`/orders/${orderId}/status`, { payment_status: newStatus });
-        if (res.data.status === 'OK') {
-          Swal.fire('Actualizado', `Orden marcada como ${newStatus}`, 'success');
-          fetchData();
-        }
-      } catch (err) {
-        console.error(err);
-        Swal.fire('Error', 'No se pudo cambiar el estado de la orden.', 'error');
+    if (!confirmRes.isConfirmed) return;
+
+    // Guardar posición de scroll exacta
+    const currentScroll = window.scrollY;
+
+    // Optimistic update inmediato en memoria (evita parpadeo o colapso del DOM)
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, payment_status: newStatus } : o));
+
+    try {
+      const res = await api.patch(`/orders/${orderId}/status`, { payment_status: newStatus });
+      if (res.data.status === 'OK') {
+        const Toast = Swal.mixin({
+          toast: true,
+          position: 'top-end',
+          showConfirmButton: false,
+          timer: 2200,
+          timerProgressBar: true
+        });
+        Toast.fire({
+          icon: 'success',
+          title: `Orden actualizada a ${newStatus}`
+        });
+
+        // Actualización silenciosa (silent = true no activa el spinner ni resetea el scroll)
+        await fetchData(true);
+
+        // Restaurar posición exacta de scroll
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: currentScroll, behavior: 'instant' });
+        });
       }
+    } catch (err) {
+      console.error(err);
+      // Revertir optimistic update en caso de error
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, payment_status: currentStatus } : o));
+      Swal.fire({
+        title: 'Error',
+        text: 'No se pudo cambiar el estado de la orden.',
+        icon: 'error',
+        heightAuto: false
+      });
     }
   };
 
-  // Helper: eliminar o archivar evento
   const handleDeleteEvent = async (eventId, eventTitle) => {
     const confirmRes = await Swal.fire({
       title: `¿Archivar "${eventTitle}"?`,
@@ -1206,12 +1241,18 @@ const AdminDashboard = () => {
     }
   };
 
-  // Filtrado de órdenes
+  // Filtrado de órdenes (reconoce el selector de eventos, tarjetas inteligentes y búsqueda)
   const filteredOrders = orders.filter(o => {
     const matchEvent = filterEventId === 'ALL' || o.event_id === filterEventId;
     const matchSchedule = filterScheduleId === 'ALL' || o.schedule_id === filterScheduleId;
     const normStatus = getNormalizedStatus(o.payment_status);
-    const matchStatus = filterPaymentStatus === 'ALL' || normStatus === filterPaymentStatus;
+    
+    let matchStatus = true;
+    if (cardFilter !== 'ALL') {
+      matchStatus = normStatus === cardFilter;
+    } else if (filterPaymentStatus !== 'ALL') {
+      matchStatus = normStatus === filterPaymentStatus;
+    }
 
     const normalizedQuery = searchQuery.toLowerCase().trim();
     const matchQuery = !normalizedQuery || 
@@ -1223,7 +1264,7 @@ const AdminDashboard = () => {
     return matchEvent && matchSchedule && matchStatus && matchQuery;
   });
 
-  // Filtrado de transferencias pendientes (reconoce Pendiente, Pending, reserva)
+  // Filtrado de transferencias pendientes
   const filteredPendingTransfers = orders.filter(o => {
     if (getNormalizedStatus(o.payment_status) !== 'Pendiente') return false;
     
@@ -1235,8 +1276,11 @@ const AdminDashboard = () => {
       (o.customer_email && o.customer_email.toLowerCase().includes(normalizedQuery));
   });
 
-  // Métricas transparentes y exactas
-  const metrics = filteredOrders.reduce((acc, o) => {
+  // Órdenes del evento seleccionado (para métricas estables)
+  const eventOrders = orders.filter(o => filterEventId === 'ALL' || o.event_id === filterEventId);
+
+  // Métricas transparentes y exactas calculadas sobre el evento seleccionado
+  const metrics = eventOrders.reduce((acc, o) => {
     const netVal = parseFloat(o.amount_net) > 0 ? parseFloat(o.amount_net) : (parseFloat(o.amount_total) || 0);
     const totalT = (parseInt(o.ticket_count_adult) + parseInt(o.ticket_count_child)) || 0;
     const norm = getNormalizedStatus(o.payment_status);
@@ -1254,11 +1298,6 @@ const AdminDashboard = () => {
       acc.anuladasCount += totalT;
       acc.anuladasOrders += 1;
     }
-
-    if (norm === 'Pagado' || norm === 'Cortesía') {
-      acc.totalTicketsSold += totalT;
-    }
-
     return acc;
   }, {
     revenuePaid: 0,
@@ -1268,8 +1307,7 @@ const AdminDashboard = () => {
     cortesiasCount: 0,
     cortesiasOrders: 0,
     anuladasCount: 0,
-    anuladasOrders: 0,
-    totalTicketsSold: 0
+    anuladasOrders: 0
   });
 
   const handleExportToExcel = () => {
@@ -1519,171 +1557,314 @@ const AdminDashboard = () => {
       {/* PESTAÑA: PANEL CONTABLE Y VENTAS */}
       {activeTab === 'ventas' && (
         <div className="fade-in">
-          {/* Métricas */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '22px' }}>
+          {/* SELECTOR SUPERIOR DE EVENTO Y BOTÓN DE REPORTES */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            flexWrap: 'wrap', gap: '12px', marginBottom: '16px',
+            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(222,184,65,0.22)',
+            borderRadius: '16px', padding: '12px 18px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1 }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Film size={17} /> Obra / Evento:
+              </span>
+              <select
+                value={filterEventId}
+                onChange={(e) => {
+                  setFilterEventId(e.target.value);
+                  setFilterScheduleId('ALL');
+                  setCardFilter('ALL');
+                }}
+                className="custom-select"
+                style={{ minWidth: '220px', flex: '1', maxWidth: '380px' }}
+              >
+                <option value="ALL">🎬 Todos los eventos ({events.length})</option>
+                {events.map(e => (
+                  <option key={e.id} value={e.id}>{e.title}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Toggle para panel de reportes avanzados y Excel */}
+            <button
+              onClick={() => setShowReportsPanel(prev => !prev)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '9px 16px', borderRadius: '12px', cursor: 'pointer',
+                background: showReportsPanel ? 'rgba(52,199,89,0.18)' : 'rgba(255,255,255,0.06)',
+                color: showReportsPanel ? '#34c759' : 'var(--text-primary)',
+                border: `1px solid ${showReportsPanel ? 'rgba(52,199,89,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                fontWeight: '600', fontSize: '0.82rem', transition: 'all 0.2s'
+              }}
+              title="Abrir filtros de fecha y exportación a Excel"
+            >
+              <FileSpreadsheet size={16} />
+              <span>{showReportsPanel ? '✕ Ocultar Reportes' : '📊 Reportes & Excel'}</span>
+            </button>
+          </div>
+
+          {/* TARJETAS INTELIGENTES INTERACTIVAS (Filtran con 1 toque) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
             {[
-              { label: 'Cobrado', value: `${metrics.revenuePaid.toFixed(2)}`, sub: `${metrics.ticketsPaid} boletos pagados`, icon: TrendingUp, color: '#34c759', bg: 'rgba(52,199,89,0.08)', border: 'rgba(52,199,89,0.2)' },
-              { label: 'Pendiente', value: `${metrics.revenuePending.toFixed(2)}`, sub: `${metrics.ticketsPending} boletos por cobrar`, icon: DollarSign, color: '#ffcc00', bg: 'rgba(255,204,0,0.08)', border: 'rgba(255,204,0,0.2)' },
-              { label: 'Vendidas', value: metrics.ticketsPaid, sub: `${metrics.revenuePaid.toFixed(2)} confirmado`, icon: Users, color: '#DEB841', bg: 'rgba(222,184,65,0.08)', border: 'rgba(222,184,65,0.2)' },
-              { label: 'Cortesías', value: metrics.cortesiasCount, sub: `${metrics.cortesiasOrders} órdenes cortesía`, icon: Sparkles, color: '#a855f7', bg: 'rgba(168,85,247,0.08)', border: 'rgba(168,85,247,0.2)' },
+              {
+                id: 'Pagado',
+                label: 'Cobrado',
+                value: `${metrics.revenuePaid.toFixed(2)}`,
+                sub: `${metrics.ticketsPaid} boletos pagados`,
+                icon: TrendingUp,
+                color: '#34c759',
+                bg: cardFilter === 'Pagado' ? 'rgba(52,199,89,0.22)' : 'rgba(52,199,89,0.08)',
+                border: cardFilter === 'Pagado' ? '#34c759' : 'rgba(52,199,89,0.25)',
+                isActive: cardFilter === 'Pagado',
+                onClick: () => setCardFilter(prev => prev === 'Pagado' ? 'ALL' : 'Pagado')
+              },
+              {
+                id: 'Pendiente',
+                label: 'Pendiente',
+                value: `${metrics.revenuePending.toFixed(2)}`,
+                sub: `${metrics.ticketsPending} boletos por cobrar`,
+                icon: DollarSign,
+                color: '#ffcc00',
+                bg: cardFilter === 'Pendiente' ? 'rgba(255,204,0,0.22)' : 'rgba(255,204,0,0.08)',
+                border: cardFilter === 'Pendiente' ? '#ffcc00' : 'rgba(255,204,0,0.25)',
+                isActive: cardFilter === 'Pendiente',
+                onClick: () => setCardFilter(prev => prev === 'Pendiente' ? 'ALL' : 'Pendiente')
+              },
+              {
+                id: 'ALL',
+                label: 'Vendidas',
+                value: metrics.ticketsPaid,
+                sub: `${metrics.revenuePaid.toFixed(2)} confirmado`,
+                icon: Users,
+                color: '#DEB841',
+                bg: cardFilter === 'ALL' ? 'rgba(222,184,65,0.18)' : 'rgba(222,184,65,0.06)',
+                border: cardFilter === 'ALL' ? 'rgba(222,184,65,0.6)' : 'rgba(222,184,65,0.2)',
+                isActive: cardFilter === 'ALL',
+                onClick: () => setCardFilter('ALL')
+              },
+              {
+                id: 'Cortesía',
+                label: 'Cortesías',
+                value: metrics.cortesiasCount,
+                sub: `${metrics.cortesiasOrders} órdenes cortesía`,
+                icon: Sparkles,
+                color: '#a855f7',
+                bg: cardFilter === 'Cortesía' ? 'rgba(168,85,247,0.22)' : 'rgba(168,85,247,0.08)',
+                border: cardFilter === 'Cortesía' ? '#a855f7' : 'rgba(168,85,247,0.25)',
+                isActive: cardFilter === 'Cortesía',
+                onClick: () => setCardFilter(prev => prev === 'Cortesía' ? 'ALL' : 'Cortesía')
+              }
             ].map((m, i) => (
-              <div key={i} style={{
-                background: m.bg, border: `1px solid ${m.border}`,
-                borderRadius: '16px', padding: '14px 16px',
-                display: 'flex', flexDirection: 'column', gap: '4px'
-              }}>
+              <div
+                key={i}
+                className="smart-metric-card"
+                onClick={m.onClick}
+                style={{
+                  background: m.bg, border: `1.5px solid ${m.border}`,
+                  borderRadius: '16px', padding: '14px 16px',
+                  display: 'flex', flexDirection: 'column', gap: '4px',
+                  cursor: 'pointer', position: 'relative',
+                  boxShadow: m.isActive ? `0 0 15px ${m.border}` : 'none'
+                }}
+                title={`Toca para filtrar órdenes ${m.label}`}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '600' }}>{m.label}</span>
-                  <m.icon size={15} color={m.color} />
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '700' }}>{m.label}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {m.isActive && (
+                      <span style={{ fontSize: '0.6rem', padding: '2px 6px', borderRadius: '6px', background: m.color, color: '#000', fontWeight: '800' }}>
+                        ACTIVO
+                      </span>
+                    )}
+                    <m.icon size={15} color={m.color} />
+                  </div>
                 </div>
-                <strong style={{ fontSize: '1.3rem', color: m.color, fontWeight: 800, letterSpacing: '-0.5px' }}>{m.value}</strong>
+                <strong style={{ fontSize: '1.35rem', color: m.color, fontWeight: 900, letterSpacing: '-0.5px' }}>{m.value}</strong>
                 {m.sub && (
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: '500' }}>{m.sub}</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '500' }}>{m.sub}</span>
                 )}
+                <div style={{ fontSize: '0.62rem', color: m.color, opacity: 0.8, marginTop: '2px', fontWeight: 600 }}>
+                  👉 Toca para filtrar
+                </div>
               </div>
             ))}
           </div>
 
-          {/* Filtros */}
-          <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '20px' }}>
-            <h4 style={{ fontSize: '0.8rem', color: 'var(--accent)', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '1px' }}>Filtros y Reportes</h4>
-            
-            <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem' }}>Evento</label>
-                  <select 
-                    value={filterEventId} 
-                    onChange={(e) => { setFilterEventId(e.target.value); setFilterScheduleId('ALL'); }}
-                    style={{ marginBottom: '0', padding: '10px' }}
-                  >
-                    <option value="ALL">Todos los eventos</option>
-                    {events.map(e => (
-                      <option key={e.id} value={e.id}>{e.title}</option>
-                    ))}
-                  </select>
-                </div>
+          {/* PANEL COLAPSABLE: FILTROS Y REPORTES (EXCEL) */}
+          {showReportsPanel && (
+            <div className="glass-panel fade-in" style={{ padding: '1.25rem', marginBottom: '20px', border: '1px solid rgba(52,199,89,0.3)', borderRadius: '18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ fontSize: '0.85rem', color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '7px', margin: 0 }}>
+                  <FileSpreadsheet size={16} /> Generador de Reportes & Exportar Excel
+                </h4>
+                <button
+                  onClick={() => setShowReportsPanel(false)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}
+                >
+                  ✕ Cerrar
+                </button>
+              </div>
 
-                {filterEventId !== 'ALL' && (
-                  <div style={{ flex: '1' }}>
-                    <label style={{ fontSize: '0.65rem' }}>Función (Horario)</label>
+              <div style={{ display: 'flex', gap: '12px', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {filterEventId !== 'ALL' && (
+                    <div style={{ flex: '1', minWidth: '180px' }}>
+                      <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Función (Horario)</label>
+                      <select 
+                        value={filterScheduleId} 
+                        onChange={(e) => setFilterScheduleId(e.target.value)}
+                        className="custom-select"
+                        style={{ marginBottom: '0' }}
+                      >
+                        <option value="ALL">Todas las funciones</option>
+                        {events.find(e => e.id === filterEventId)?.schedules?.map(sch => (
+                          <option key={sch.id} value={sch.id}>
+                            {new Date(sch.schedule_time).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div style={{ flex: '1', minWidth: '180px' }}>
+                    <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Estado para Reporte</label>
                     <select 
-                      value={filterScheduleId} 
-                      onChange={(e) => setFilterScheduleId(e.target.value)}
-                      style={{ marginBottom: '0', padding: '10px' }}
+                      value={filterPaymentStatus} 
+                      onChange={(e) => {
+                        setFilterPaymentStatus(e.target.value);
+                        setCardFilter('ALL');
+                      }}
+                      className="custom-select"
+                      style={{ marginBottom: '0' }}
                     >
-                      <option value="ALL">Todas las funciones</option>
-                      {events.find(e => e.id === filterEventId)?.schedules?.map(sch => (
-                        <option key={sch.id} value={sch.id}>
-                          {new Date(sch.schedule_time).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })}
-                        </option>
-                      ))}
+                      <option value="ALL">Todos los estados</option>
+                      <option value="Pagado">Pagado</option>
+                      <option value="Pendiente">Reserva (Pendiente)</option>
+                      <option value="Cortesía">Cortesía</option>
+                      <option value="Anulado">Anulado</option>
                     </select>
                   </div>
-                )}
+                </div>
 
-                <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem' }}>Estado de Pago</label>
-                  <select 
-                    value={filterPaymentStatus} 
-                    onChange={(e) => setFilterPaymentStatus(e.target.value)}
-                    style={{ marginBottom: '0', padding: '10px' }}
+                {/* Filtros de Fecha para Cuadre de Caja */}
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1', minWidth: '160px' }}>
+                    <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📅 Ventas Desde</label>
+                    <div style={{ position: 'relative' }}>
+                      <Calendar size={15} color="var(--accent)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1 }} />
+                      <input
+                        type="date"
+                        value={filterDateFrom}
+                        onChange={(e) => setFilterDateFrom(e.target.value)}
+                        style={{
+                          marginBottom: '0',
+                          padding: '11px 12px 11px 36px',
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid var(--glass-border)',
+                          borderRadius: '10px',
+                          color: 'var(--text-primary)',
+                          fontSize: '0.9rem',
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          colorScheme: 'dark'
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ flex: '1', minWidth: '160px' }}>
+                    <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📅 Ventas Hasta</label>
+                    <div style={{ position: 'relative' }}>
+                      <Calendar size={15} color="var(--accent)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1 }} />
+                      <input
+                        type="date"
+                        value={filterDateTo}
+                        onChange={(e) => setFilterDateTo(e.target.value)}
+                        style={{
+                          marginBottom: '0',
+                          padding: '11px 12px 11px 36px',
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid var(--glass-border)',
+                          borderRadius: '10px',
+                          color: 'var(--text-primary)',
+                          fontSize: '0.9rem',
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          colorScheme: 'dark'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => fetchData()}
+                    className="btn-primary"
+                    style={{ flex: '1', minWidth: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
                   >
-                    <option value="ALL">Todos los estados</option>
-                    <option value="Pagado">Pagado</option>
-                    <option value="Pendiente">Reserva (Pendiente)</option>
-                    <option value="Cortesía">Cortesía</option>
-                    <option value="Anulado">Anulado</option>
-                    <option value="Cortesía">Cortesía</option>
-                    <option value="Anulado">Anulado</option>
-                  </select>
+                    <Search size={16} /> Aplicar Filtros de Fecha
+                  </button>
+                  <button
+                    onClick={() => { setFilterEventId('ALL'); setFilterScheduleId('ALL'); setFilterDateFrom(''); setFilterDateTo(''); setFilterPaymentStatus('ALL'); setCardFilter('ALL'); setTimeout(() => fetchData(), 50); }}
+                    className="btn-secondary"
+                    style={{ padding: '10px 14px' }}
+                    title="Limpiar filtros"
+                  >
+                    <RefreshCw size={15} /> Limpiar
+                  </button>
+                  <button 
+                    onClick={handleExportToExcel}
+                    className="btn-outline" 
+                    style={{ flex: '1', minWidth: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', background: 'rgba(52, 199, 89, 0.15)', borderColor: 'var(--success)', color: 'var(--success)', fontWeight: '700' }}
+                  >
+                    <FileSpreadsheet size={18} /> Exportar Listado a Excel (CSV)
+                  </button>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Filtros de Fecha para Cuadre de Caja */}
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📅 Ventas Desde</label>
-                  <div style={{ position: 'relative' }}>
-                    <Calendar size={15} color="var(--accent)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1 }} />
-                    <input
-                      type="date"
-                      value={filterDateFrom}
-                      onChange={(e) => setFilterDateFrom(e.target.value)}
-                      style={{
-                        marginBottom: '0',
-                        padding: '11px 12px 11px 36px',
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid var(--glass-border)',
-                        borderRadius: '10px',
-                        color: 'var(--text-primary)',
-                        fontSize: '0.9rem',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        colorScheme: 'dark'
-                      }}
-                    />
-                  </div>
-                </div>
-                <div style={{ flex: '1' }}>
-                  <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📅 Ventas Hasta</label>
-                  <div style={{ position: 'relative' }}>
-                    <Calendar size={15} color="var(--accent)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1 }} />
-                    <input
-                      type="date"
-                      value={filterDateTo}
-                      onChange={(e) => setFilterDateTo(e.target.value)}
-                      style={{
-                        marginBottom: '0',
-                        padding: '11px 12px 11px 36px',
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid var(--glass-border)',
-                        borderRadius: '10px',
-                        color: 'var(--text-primary)',
-                        fontSize: '0.9rem',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        colorScheme: 'dark'
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
+          {/* BARRA DE BÚSQUEDA RÁPIDA Y AVISO DE FILTRO ACTIVO */}
+          <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {cardFilter !== 'ALL' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 16px', borderRadius: '12px',
+                background: cardFilter === 'Pendiente' ? 'rgba(255,204,0,0.12)' : cardFilter === 'Pagado' ? 'rgba(52,199,89,0.12)' : 'rgba(168,85,247,0.12)',
+                border: `1px solid ${cardFilter === 'Pendiente' ? 'rgba(255,204,0,0.3)' : cardFilter === 'Pagado' ? 'rgba(52,199,89,0.3)' : 'rgba(168,85,247,0.3)'}`
+              }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: '700', color: cardFilter === 'Pendiente' ? '#ffcc00' : cardFilter === 'Pagado' ? '#34c759' : '#a855f7' }}>
+                  ⚡ Mostrando únicamente órdenes: <strong>{cardFilter.toUpperCase()}</strong> ({filteredOrders.length})
+                </span>
                 <button
-                  onClick={fetchData}
-                  className="btn-primary"
-                  style={{ flex: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
+                  onClick={() => setCardFilter('ALL')}
+                  style={{
+                    background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '8px',
+                    padding: '5px 12px', color: '#fff', fontSize: '0.74rem', cursor: 'pointer', fontWeight: '700'
+                  }}
                 >
-                  <Search size={16} /> Aplicar Filtros
-                </button>
-                <button
-                  onClick={() => { setFilterEventId('ALL'); setFilterScheduleId('ALL'); setFilterDateFrom(''); setFilterDateTo(''); setFilterPaymentStatus('ALL'); setTimeout(fetchData, 50); }}
-                  className="btn-secondary"
-                  style={{ padding: '10px 14px' }}
-                >
-                  <RefreshCw size={15} />
+                  ✕ Ver todas
                 </button>
               </div>
+            )}
 
-              <div style={{ position: 'relative' }}>
-                <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '12px' }} />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
                 <input 
                   type="text" 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Buscar por cliente, QR o whatsapp..." 
-                  style={{ paddingLeft: '38px', marginBottom: '0', padding: '10px 10px 10px 38px' }}
+                  style={{ paddingLeft: '38px', marginBottom: '0', padding: '11px 12px 11px 38px', borderRadius: '12px' }}
                 />
               </div>
-
-              <button 
-                onClick={handleExportToExcel}
-                className="btn-outline" 
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', background: 'rgba(52, 199, 89, 0.1)', borderColor: 'var(--success)', color: 'var(--success)' }}
-              >
-                <FileSpreadsheet size={18} /> Exportar Listado a Excel (CSV)
+              <button onClick={() => fetchData(true)} style={{
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '12px', padding: '0 14px', cursor: 'pointer', color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem'
+              }} title="Actualizar lista">
+                <RefreshCw size={14} /> Actualizar
               </button>
             </div>
           </div>
