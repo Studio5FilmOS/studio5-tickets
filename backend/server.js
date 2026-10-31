@@ -259,6 +259,45 @@ app.use('/api/push', pushRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/logistics', logisticsRoutes);
 
+// Endpoint para hospedar audios temporales para Alexa Skill (Voz de KAI en ElevenLabs)
+app.post('/api/alexa/audio', (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const audioDir = path.join(__dirname, 'public', 'alexa-audio');
+    if (!fs.existsSync(audioDir)) {
+      fs.mkdirSync(audioDir, { recursive: true });
+    }
+
+    // Auto-limpieza de audios con más de 15 minutos para optimizar espacio
+    try {
+      const now = Date.now();
+      fs.readdirSync(audioDir).forEach(f => {
+        const fp = path.join(audioDir, f);
+        const stats = fs.statSync(fp);
+        if (now - stats.mtimeMs > 15 * 60 * 1000) {
+          fs.unlinkSync(fp);
+        }
+      });
+    } catch (_) {}
+
+    const { audioBase64 } = req.body || {};
+    if (!audioBase64) {
+      return res.status(400).json({ error: 'Falta parámetro audioBase64' });
+    }
+
+    const buffer = Buffer.from(audioBase64, 'base64');
+    const filename = `kai_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`;
+    fs.writeFileSync(path.join(audioDir, filename), buffer);
+
+    const publicUrl = `https://ticket.studio5film.com/alexa-audio/${filename}`;
+    res.json({ success: true, url: publicUrl });
+  } catch (err) {
+    console.error('Error guardando audio para Alexa:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Servir archivos estáticos del Frontend compilado
 const path = require('path');
 app.use(express.static(path.join(__dirname, 'public')));
