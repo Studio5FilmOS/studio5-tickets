@@ -22,6 +22,30 @@ const getNormalizedStatus = (status) => {
   return status;
 };
 
+// Configuración de columnas disponibles para exportación personalizada
+const EXCEL_COLUMNS = [
+  { id: 'order_num', label: 'Código de Orden (#ORD)', category: 'Orden' },
+  { id: 'customer_name', label: 'Nombre del Cliente', category: 'Cliente' },
+  { id: 'customer_whatsapp', label: 'Teléfono / WhatsApp', category: 'Cliente' },
+  { id: 'customer_email', label: 'Email del Cliente', category: 'Cliente' },
+  { id: 'event_title', label: 'Obra / Evento', category: 'Función' },
+  { id: 'schedule_time', label: 'Función / Horario', category: 'Función' },
+  { id: 'ticket_count_adult', label: 'Boletos Adultos', category: 'Boletos' },
+  { id: 'ticket_count_child', label: 'Boletos Niños', category: 'Boletos' },
+  { id: 'total_tickets', label: 'Total de Boletos', category: 'Boletos' },
+  { id: 'amount_total', label: 'Valor Total ($)', category: 'Pago' },
+  { id: 'payment_method', label: 'Método de Pago', category: 'Pago' },
+  { id: 'bank_name', label: 'Banco', category: 'Pago' },
+  { id: 'transaction_ref', label: 'Ref. Transacción', category: 'Pago' },
+  { id: 'payment_status', label: 'Estado de Pago', category: 'Pago' },
+  { id: 'created_at', label: 'Fecha de Registro', category: 'Orden' },
+  { id: 'is_final_consumer', label: 'Consumidor Final (Sí/No)', category: 'Facturación' },
+  { id: 'billing_id_number', label: 'Cédula / RUC Facturación', category: 'Facturación' },
+  { id: 'billing_name', label: 'Razón Social / Nombre Fact.', category: 'Facturación' },
+  { id: 'billing_address', label: 'Dirección Facturación', category: 'Facturación' },
+  { id: 'billing_email', label: 'Email Facturación', category: 'Facturación' }
+];
+
 const AdminDashboard = () => {
   const { user } = useAuth();
   const { theme, updateTheme } = useTheme();
@@ -35,6 +59,12 @@ const AdminDashboard = () => {
   const [pushLoading, setPushLoading] = useState(false);
   const [cardFilter, setCardFilter] = useState('ALL'); // 'ALL', 'Pagado', 'Pendiente', 'Cortesía'
   const [showReportsPanel, setShowReportsPanel] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedColumns, setSelectedColumns] = useState([
+    'order_num', 'customer_name', 'customer_whatsapp', 'customer_email',
+    'event_title', 'schedule_time', 'total_tickets', 'amount_total',
+    'payment_method', 'payment_status', 'created_at'
+  ]);
   
   // Estado para gestión de localidades en eventos
   const [localidadesList, setLocalidadesList] = useState([]);
@@ -120,7 +150,7 @@ const AdminDashboard = () => {
 
   // Bloquear scroll de fondo cuando hay modales abiertos
   useEffect(() => {
-    if (editingOrder || uploadingReceiptOrder || selectedReceiptUrl) {
+    if (editingOrder || uploadingReceiptOrder || selectedReceiptUrl || showExportModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
@@ -128,7 +158,7 @@ const AdminDashboard = () => {
     return () => {
       document.body.style.overflow = 'auto';
     };
-  }, [editingOrder, uploadingReceiptOrder, selectedReceiptUrl]);
+  }, [editingOrder, uploadingReceiptOrder, selectedReceiptUrl, showExportModal]);
 
   // Estados nuevos para el selector dinámico de fechas
   const [schedulesList, setSchedulesList] = useState([]);
@@ -4060,6 +4090,182 @@ const AdminDashboard = () => {
             />
 
             <button type="button" onClick={() => setUploadingReceiptOrder(null)} className="btn-outline" style={{ width: '100%', marginTop: '20px' }}>Cancelar</button>
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* Modal Personalizar Columnas de Exportación a Excel */}
+      {showExportModal && createPortal(
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          zIndex: 10000, padding: '16px'
+        }} className="fade-in">
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '660px', maxHeight: '90vh',
+            display: 'flex', flexDirection: 'column',
+            borderRadius: '20px', border: '1px solid rgba(222,184,65,0.35)',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.9), 0 0 30px rgba(222,184,65,0.15)',
+            background: 'linear-gradient(155deg, rgba(20,22,30,0.98), rgba(10,11,16,0.98))',
+            overflow: 'hidden'
+          }}>
+            {/* Header del Modal */}
+            <div style={{
+              padding: '18px 22px', borderBottom: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#fff', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <FileSpreadsheet size={20} color="#34c759" /> Personalizar Columnas de Excel
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Marca o desmarca las casillas para exportar únicamente las columnas deseadas ({filteredOrders.length > 0 ? filteredOrders.length : orders.length} órdenes)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExportModal(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '10px',
+                  width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Accesos Rápidos de Selección */}
+            <div style={{
+              padding: '12px 22px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)',
+              display: 'flex', gap: '8px', flexWrap: 'wrap'
+            }}>
+              <button
+                type="button"
+                onClick={() => setSelectedColumns(EXCEL_COLUMNS.map(c => c.id))}
+                style={{
+                  background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#fff', padding: '5px 12px', borderRadius: '8px', fontSize: '0.74rem',
+                  fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                ✓ Seleccionar Todas ({EXCEL_COLUMNS.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedColumns([])}
+                style={{
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                  color: 'var(--text-muted)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.74rem',
+                  fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                ✕ Deseleccionar Todas
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedColumns(['order_num', 'customer_name', 'customer_whatsapp', 'event_title', 'schedule_time', 'total_tickets', 'amount_total', 'payment_status'])}
+                style={{
+                  background: 'rgba(222,184,65,0.12)', border: '1px solid rgba(222,184,65,0.3)',
+                  color: 'var(--accent)', padding: '5px 12px', borderRadius: '8px', fontSize: '0.74rem',
+                  fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                ⚡ Modo Rápido Taquilla
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedColumns(['order_num', 'customer_name', 'amount_total', 'payment_method', 'is_final_consumer', 'billing_id_number', 'billing_name', 'billing_address', 'billing_email'])}
+                style={{
+                  background: 'rgba(52,199,89,0.12)', border: '1px solid rgba(52,199,89,0.3)',
+                  color: '#34c759', padding: '5px 12px', borderRadius: '8px', fontSize: '0.74rem',
+                  fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                🧾 Modo Facturación
+              </button>
+            </div>
+
+            {/* Listado de Casillas con Scroll */}
+            <div style={{ padding: '18px 22px', overflowY: 'auto', flex: 1 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '10px' }}>
+                {EXCEL_COLUMNS.map(col => {
+                  const isChecked = selectedColumns.includes(col.id);
+                  return (
+                    <label
+                      key={col.id}
+                      onClick={() => {
+                        setSelectedColumns(prev => 
+                          prev.includes(col.id) ? prev.filter(id => id !== col.id) : [...prev, col.id]
+                        );
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        padding: '10px 14px', borderRadius: '12px', cursor: 'pointer',
+                        background: isChecked ? 'rgba(222,184,65,0.12)' : 'rgba(255,255,255,0.03)',
+                        border: isChecked ? '1px solid rgba(222,184,65,0.45)' : '1px solid rgba(255,255,255,0.06)',
+                        transition: 'all 0.15s ease', userSelect: 'none'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {}}
+                        style={{
+                          width: '18px', height: '18px', accentColor: '#DEB841',
+                          margin: 0, cursor: 'pointer'
+                        }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: isChecked ? '700' : '500', color: isChecked ? '#fff' : 'var(--text-muted)', display: 'block' }}>
+                          {col.label}
+                        </span>
+                        <span style={{ fontSize: '0.65rem', color: isChecked ? 'var(--accent)' : 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          {col.category}
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer con Botón de Descarga */}
+            <div style={{
+              padding: '14px 22px', borderTop: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
+              background: 'rgba(0,0,0,0.3)', flexWrap: 'wrap'
+            }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Columnas seleccionadas: <strong style={{ color: 'var(--accent)' }}>{selectedColumns.length}</strong> de {EXCEL_COLUMNS.length}
+              </span>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowExportModal(false)}
+                  className="btn-outline"
+                  style={{ padding: '9px 18px', fontSize: '0.82rem' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteExportExcel}
+                  disabled={selectedColumns.length === 0}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '9px 22px', borderRadius: '12px', border: 'none', cursor: selectedColumns.length === 0 ? 'not-allowed' : 'pointer',
+                    background: selectedColumns.length === 0 ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #34c759, #28a745)',
+                    color: '#fff', fontWeight: 800, fontSize: '0.86rem',
+                    boxShadow: selectedColumns.length === 0 ? 'none' : '0 4px 15px rgba(52,199,89,0.3)',
+                    opacity: selectedColumns.length === 0 ? 0.5 : 1
+                  }}
+                >
+                  <FileSpreadsheet size={17} /> Descargar Archivo ({selectedColumns.length} cols)
+                </button>
+              </div>
+            </div>
           </div>
         </div>,
         document.body
