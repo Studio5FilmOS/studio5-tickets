@@ -1346,6 +1346,21 @@ const AdminDashboard = () => {
   });
 
   const handleExportToExcel = () => {
+    const ordersToExport = (filteredOrders && filteredOrders.length > 0) ? filteredOrders : orders;
+    if (!ordersToExport || ordersToExport.length === 0) {
+      Swal.fire({
+        title: 'Sin datos',
+        text: 'No hay órdenes disponibles para exportar con los filtros actuales.',
+        icon: 'warning',
+        confirmButtonColor: '#DEB841'
+      });
+      return;
+    }
+    setShowExportModal(true);
+  };
+
+  // Ejecuta la descarga en Excel (CSV) con las columnas seleccionadas por el usuario
+  const handleExecuteExportExcel = () => {
     try {
       const ordersToExport = (filteredOrders && filteredOrders.length > 0) ? filteredOrders : orders;
       if (!ordersToExport || ordersToExport.length === 0) {
@@ -1358,12 +1373,18 @@ const AdminDashboard = () => {
         return;
       }
 
-      const headers = [
-        'Código Orden', 'Cliente', 'Email', 'WhatsApp', 'Evento', 'Función / Horario', 
-        'Adultos', 'Niños', 'Entradas Totales', 'Valor Total ($)', 
-        'Método Pago', 'Banco', 'Ref. Transacción', 'Estado Pago', 'Fecha Registro',
-        'Consumidor Final', 'Cédula/RUC', 'Nombre Facturación', 'Dirección Facturación', 'Email Facturación'
-      ];
+      if (!selectedColumns || selectedColumns.length === 0) {
+        Swal.fire({
+          title: 'Selecciona columnas',
+          text: 'Debes seleccionar al menos una columna para exportar.',
+          icon: 'info',
+          confirmButtonColor: '#DEB841'
+        });
+        return;
+      }
+
+      const activeCols = EXCEL_COLUMNS.filter(c => selectedColumns.includes(c.id));
+      const headers = activeCols.map(c => '"' + c.label.replace(/"/g, '""') + '"');
 
       const rows = ordersToExport.map(o => {
         let dateFormatted = 'N/A';
@@ -1386,43 +1407,44 @@ const AdminDashboard = () => {
 
         const totalT = (parseInt(o.ticket_count_adult) || 0) + (parseInt(o.ticket_count_child) || 0);
         const amountTotal = parseFloat(o.amount_total || 0).toFixed(2);
-        const customerName = String(o.customer_name || 'N/A').replace(/"/g, '""');
-        const eventTitle = String(o.event_title || o.title || 'N/A').replace(/"/g, '""');
-        const billingName = String(o.billing_name || '').replace(/"/g, '""');
-        const billingAddress = String(o.billing_address || '').replace(/"/g, '""');
+        const customerName = String(o.customer_name || 'N/A');
+        const eventTitle = String(o.event_title || o.title || 'N/A');
+        const billingName = String(o.billing_name || '');
+        const billingAddress = String(o.billing_address || '');
 
-        return [
-          `"${String(o.order_num || '').replace(/"/g, '""')}"`,
-          `"${customerName}"`,
-          `"${String(o.customer_email || 'N/A').replace(/"/g, '""')}"`,
-          `"${String(o.customer_whatsapp || 'N/A').replace(/"/g, '""')}"`,
-          `"${eventTitle}"`,
-          `"${dateFormatted}"`,
-          o.ticket_count_adult || 0,
-          o.ticket_count_child || 0,
-          totalT,
-          amountTotal,
-          `"${String(o.payment_method || 'N/A').replace(/"/g, '""')}"`,
-          `"${String(o.bank_name || 'N/A').replace(/"/g, '""')}"`,
-          `"${String(o.transaction_ref || 'N/A').replace(/"/g, '""')}"`,
-          `"${String(o.payment_status || 'N/A').replace(/"/g, '""')}"`,
-          `"${createdFormatted}"`,
-          o.is_final_consumer ? 'Sí' : 'No',
-          `"${String(o.billing_id_number || 'N/A').replace(/"/g, '""')}"`,
-          `"${billingName}"`,
-          `"${billingAddress}"`,
-          `"${String(o.billing_email || 'N/A').replace(/"/g, '""')}"`
-        ];
+        const colMap = {
+          order_num: String(o.order_num || ''),
+          customer_name: customerName,
+          customer_whatsapp: String(o.customer_whatsapp || 'N/A'),
+          customer_email: String(o.customer_email || 'N/A'),
+          event_title: eventTitle,
+          schedule_time: dateFormatted,
+          ticket_count_adult: String(o.ticket_count_adult || 0),
+          ticket_count_child: String(o.ticket_count_child || 0),
+          total_tickets: String(totalT),
+          amount_total: amountTotal,
+          payment_method: String(o.payment_method || 'N/A'),
+          bank_name: String(o.bank_name || 'N/A'),
+          transaction_ref: String(o.transaction_ref || 'N/A'),
+          payment_status: String(o.payment_status || 'N/A'),
+          created_at: createdFormatted,
+          is_final_consumer: o.is_final_consumer ? 'Sí' : 'No',
+          billing_id_number: String(o.billing_id_number || 'N/A'),
+          billing_name: billingName,
+          billing_address: billingAddress,
+          billing_email: String(o.billing_email || 'N/A')
+        };
+
+        return activeCols.map(c => '"' + String(colMap[c.id] !== undefined ? colMap[c.id] : '').replace(/"/g, '""') + '"').join(';');
       });
 
       const csvContent = [
         headers.join(';'),
-        ...rows.map(row => row.join(';'))
+        ...rows
       ].join('\r\n');
 
-      // Blob con BOM UTF-8 (﻿) para visualización correcta de tildes y caracteres especiales en Excel
       const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const fileName = `Reporte_Ventas_Studio5_${new Date().toISOString().slice(0,10)}.csv`;
+      const fileName = `Reporte_Ventas_Studio5_${new Date().toISOString().slice(0, 10)}.csv`;
 
       if (window.navigator && window.navigator.msSaveOrOpenBlob) {
         window.navigator.msSaveOrOpenBlob(blob, fileName);
@@ -1440,6 +1462,8 @@ const AdminDashboard = () => {
         }, 300);
       }
 
+      setShowExportModal(false);
+
       const Toast = Swal.mixin({
         toast: true,
         position: 'top-end',
@@ -1449,7 +1473,7 @@ const AdminDashboard = () => {
       });
       Toast.fire({
         icon: 'success',
-        title: `Excel generado: ${ordersToExport.length} órdenes exportadas`
+        title: `Excel generado con ${activeCols.length} columnas (${ordersToExport.length} órdenes)`
       });
     } catch (err) {
       console.error('Error al exportar Excel:', err);
