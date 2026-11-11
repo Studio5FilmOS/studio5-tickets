@@ -111,6 +111,28 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Iniciar Sesión con Proveedor Social (Google / Facebook)
+  const loginWithSocial = async (socialData) => {
+    try {
+      const res = await api.post('/auth/social-login', socialData);
+      if (res.data.status === 'OK') {
+        const { token, user: loggedUser } = res.data;
+        localStorage.setItem('studio5_token', token);
+        localStorage.setItem('studio5_user', JSON.stringify(loggedUser));
+        if (loggedUser?.theme_config) {
+          const tc = typeof loggedUser.theme_config === 'string' ? loggedUser.theme_config : JSON.stringify(loggedUser.theme_config);
+          localStorage.setItem('studio5_theme_config', tc);
+        }
+        setUser(loggedUser);
+        return { success: true, user: loggedUser };
+      }
+      return { success: false, message: res.data.message || 'Error al iniciar sesión' };
+    } catch (err) {
+      const errMsg = err.response?.data?.message || 'Error al conectar con el proveedor social.';
+      return { success: false, message: errMsg };
+    }
+  };
+
   // Cerrar Sesión
   const logout = () => {
     localStorage.removeItem('studio5_token');
@@ -122,6 +144,7 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     login,
+    loginWithSocial,
     register,
     verifyOtp,
     resendOtp,

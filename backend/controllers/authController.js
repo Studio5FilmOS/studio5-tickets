@@ -429,3 +429,97 @@ exports.getMe = async (req, res) => {
     });
   }
 };
+
+// 6. Inicio de Sesión Social (Google y Facebook)
+exports.socialLogin = async (req, res) => {
+  const { provider, email, name, avatar, providerId } = req.body;
+
+  if (!email && !providerId) {
+    return res.status(400).json({
+      status: 'ERROR',
+      message: 'No se recibieron datos de autenticación del proveedor.'
+    });
+  }
+
+  // Si Facebook no entrega email (privacidad de usuario), generamos fallback seguro
+  const cleanEmail = (email || `${providerId}@${provider || 'social'}.com`).trim().toLowerCase();
+  const cleanName = (name || cleanEmail.split('@')[0] || 'Usuario').trim();
+  const ADMIN_EMAILS = [
+    'ventas@studio5film.com',
+    'jesseanazco@gmail.com',
+    'productorastudio5@gmail.com'
+  ];
+
+  try {
+    let userRes = await query('SELECT * FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+    let user;
+
+    if (userRes.rows.length > 0) {
+      user = userRes.rows[0];
+
+      // Si existe, aseguramos que esté verificado (Google/FB validan la identidad)
+      const shouldBeAdmin = ADMIN_EMAILS.includes(cleanEmail);
+      const targetRole = shouldBeAdmin ? 'admin' : user.role;
+
+      const updateRes = await query(
+        `UPDATE users 
+         SET is_verified = TRUE,
+             name = COALESCE(NULLIF(name, ''), $1),
+             role = $2,
+             updated_at = NOW()
+         WHERE id = $3
+         RETURNING *`,
+        [cleanName, targetRole, user.id]
+      );
+      user = updateRes.rows[0];
+    } else {
+      // Registro automático para nuevos usuarios mediante Google o Facebook
+      const initialRole = ADMIN_EMAILS.includes(cleanEmail) ? 'admin' : 'buyer';
+      const insertRes = await query(
+        `INSERT INTO users 
+         (name, email, role, is_verified)
+         VALUES ($1, $2, $3, TRUE)
+         RETURNING *`,
+        [cleanName, cleanEmail, initialRole]
+      );
+      user = insertRes.rows[0];
+    }
+
+    const resolved = await resolveEffectiveModules(user);
+
+    // Firmar JWT (30 días de vigencia)
+    const token = jwt.sign(
+      { id: user.id, name: user.name, email: user.email, role: user.role, workgroup_organizer_id: user.workgroup_organizer_id },
+      process.env.JWT_SECRET || 'super_secreto_studio5_2026',
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      status: 'OK',
+      message: 'Sesión iniciada con éxito',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        avatar: avatar || null,
+        token_tarjeta: user.token_tarjeta,
+        debt_balance: user.debt_balance,
+        module_cartelera: resolved.module_cartelera,
+        module_logistics: resolved.module_logistics,
+        tenant_slug: resolved.tenant_slug,
+        theme_config: resolved.theme_config,
+        workgroup_organizer_id: user.workgroup_organizer_id
+      }
+    });
+  } catch (err) {
+    console.error('Error en socialLogin:', err);
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Error al procesar el inicio de sesión con redes sociales.',
+      error: err.message
+    });
+  }
+};
