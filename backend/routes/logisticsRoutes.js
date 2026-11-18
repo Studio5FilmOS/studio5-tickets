@@ -10,8 +10,10 @@ router.post('/campaigns', authMiddleware, roleMiddleware(['admin', 'organizer'])
 router.get('/campaigns/:id', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.getCampaignById);
 router.delete('/campaigns/:id', authMiddleware, roleMiddleware(['admin', 'organizer']), logisticsController.deleteCampaign);
 
-// Items para impresión de stickers / exportación
+// Items para impresión de stickers / exportación / edición y anulación de registros
 router.get('/campaigns/:campaign_id/items', authMiddleware, roleMiddleware(['admin', 'organizer', 'staff']), logisticsController.getCampaignItems);
+router.put('/items/:id', authMiddleware, roleMiddleware(['admin', 'organizer']), logisticsController.updateItemRecord);
+router.delete('/items/:id', authMiddleware, roleMiddleware(['admin', 'organizer']), logisticsController.deleteItemRecord);
 
 // Asignación de Staff a campañas
 router.post('/campaigns/:campaign_id/assign-staff', authMiddleware, roleMiddleware(['admin', 'organizer']), logisticsController.assignStaff);

@@ -7,7 +7,7 @@ import WhatsAppManager from '../../components/WhatsAppManager';
 import { 
   Palette, Users, Globe, Copy, Check, Plus, Trash2, 
   ExternalLink, Sparkles, Shield, UserPlus, Edit, Image as ImageIcon,
-  Key, Mail, Phone, User
+  Key, Mail, Phone, User, Search, Send, Clock, X
 } from 'lucide-react';
 
 const BrandSettings = () => {
@@ -30,10 +30,22 @@ const BrandSettings = () => {
   const canGrantCartelera = user?.role === 'admin' || Boolean(user?.module_cartelera);
   const canGrantLogistics = user?.role === 'admin' || Boolean(user?.module_logistics);
 
-  // Estados de gestión de Staff
+  // Estados de gestión de Staff (Creación + Invitaciones)
   const [staffList, setStaffList] = useState([]);
+  const [pendingInvitations, setPendingInvitations] = useState([]);
   const [loadingStaff, setLoadingStaff] = useState(true);
   const [showCreateStaffModal, setShowCreateStaffModal] = useState(false);
+  const [staffModalTab, setStaffModalTab] = useState('invite'); // 'invite' | 'create'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [selectedInviteUser, setSelectedInviteUser] = useState(null);
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [inviteModules, setInviteModules] = useState({
+    module_cartelera: canGrantCartelera,
+    module_logistics: canGrantLogistics
+  });
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
   const [isUpdatingStaff, setIsUpdatingStaff] = useState(false);
   const [newStaff, setNewStaff] = useState({
@@ -175,18 +187,87 @@ const BrandSettings = () => {
     fetchBrand();
   }, []);
 
-  // 2. Cargar lista de Staff propio
+  // 2. Cargar lista de Staff propio + invitaciones pendientes
   const fetchStaff = async () => {
     setLoadingStaff(true);
     try {
       const res = await api.get('/users/my-staff');
       if (res.data?.status === 'OK') {
         setStaffList(res.data.staff || []);
+        setPendingInvitations(res.data.pending_invitations || []);
       }
     } catch (err) {
       console.error('Error al cargar staff:', err);
     } finally {
       setLoadingStaff(false);
+    }
+  };
+
+  // Buscar usuarios existentes para invitar como Staff
+  useEffect(() => {
+    if (!showCreateStaffModal || staffModalTab !== 'invite') return;
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      setSearchingUsers(true);
+      try {
+        const res = await api.get(`/users/search-for-staff?q=${encodeURIComponent(q)}`);
+        setSearchResults(res.data?.users || []);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchingUsers(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery, showCreateStaffModal, staffModalTab]);
+
+  const handleSendInvite = async (e) => {
+    e.preventDefault();
+    if (!selectedInviteUser) {
+      Swal.fire('Selecciona un usuario', 'Busca y selecciona un usuario registrado para enviar la solicitud.', 'warning');
+      return;
+    }
+    setIsSendingInvite(true);
+    try {
+      const res = await api.post('/users/my-staff/invite', {
+        user_id: selectedInviteUser.id,
+        module_cartelera: canGrantCartelera ? Boolean(inviteModules.module_cartelera) : false,
+        module_logistics: canGrantLogistics ? Boolean(inviteModules.module_logistics) : false,
+        message: inviteMessage.trim() || undefined
+      });
+      if (res.data?.status === 'OK') {
+        Swal.fire({
+          icon: 'success',
+          title: '¡Solicitud Enviada!',
+          text: res.data.message,
+          background: '#16171f',
+          color: '#fff',
+          confirmButtonColor: primaryColor
+        });
+        setShowCreateStaffModal(false);
+        setSelectedInviteUser(null);
+        setSearchQuery('');
+        setSearchResults([]);
+        setInviteMessage('');
+        fetchStaff();
+      }
+    } catch (err) {
+      Swal.fire('Error', err?.response?.data?.message || 'No se pudo enviar la invitación.', 'error');
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
+
+  const handleCancelInvite = async (inv) => {
+    try {
+      await api.delete(`/users/my-staff/invite/${inv.id}`);
+      fetchStaff();
+    } catch (err) {
+      Swal.fire('Error', err?.response?.data?.message || 'No se pudo cancelar la invitación.', 'error');
     }
   };
 
@@ -277,7 +358,36 @@ const BrandSettings = () => {
         fetchStaff();
       }
     } catch (err) {
-      Swal.fire('Error', err?.response?.data?.message || 'Error al crear el staff.', 'error');
+      if (err?.response?.status === 409 && err?.response?.data?.status === 'USER_EXISTS') {
+        const existing = err.response.data.existing_user;
+        const confirmInvite = await Swal.fire({
+          icon: 'info',
+          title: 'Usuario ya registrado',
+          text: `${existing.name} (${existing.email}) ya tiene cuenta en la plataforma. ¿Deseas enviarle una solicitud para unirse a tu Staff?`,
+          showCancelButton: true,
+          confirmButtonText: 'Enviar Solicitud',
+          cancelButtonText: 'Cancelar',
+          background: '#16171f',
+          color: '#fff',
+          confirmButtonColor: primaryColor
+        });
+        if (confirmInvite.isConfirmed) {
+          try {
+            await api.post('/users/my-staff/invite', {
+              user_id: existing.id,
+              module_cartelera: canGrantCartelera ? Boolean(newStaff.module_cartelera) : false,
+              module_logistics: canGrantLogistics ? Boolean(newStaff.module_logistics) : false
+            });
+            Swal.fire('¡Solicitud Enviada!', `Se envió la invitación a ${existing.name}.`, 'success');
+            setShowCreateStaffModal(false);
+            fetchStaff();
+          } catch (invErr) {
+            Swal.fire('Error', invErr?.response?.data?.message || 'No se pudo enviar la invitación.', 'error');
+          }
+        }
+      } else {
+        Swal.fire('Error', err?.response?.data?.message || 'Error al crear el staff.', 'error');
+      }
     } finally {
       setIsCreatingStaff(false);
     }
@@ -744,13 +854,24 @@ const BrandSettings = () => {
               </div>
             </div>
 
-            <button 
-              onClick={() => setShowCreateStaffModal(true)}
-              className="btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', fontSize: '0.82rem' }}
-            >
-              <Plus size={16} /> Crear Staff
-            </button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button 
+                type="button"
+                onClick={() => { setStaffModalTab('invite'); setShowCreateStaffModal(true); }}
+                className="btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', fontSize: '0.82rem' }}
+              >
+                <Send size={15} /> Invitar Usuario
+              </button>
+              <button 
+                type="button"
+                onClick={() => { setStaffModalTab('create'); setShowCreateStaffModal(true); }}
+                className="btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', fontSize: '0.82rem' }}
+              >
+                <Plus size={16} /> Crear desde 0
+              </button>
+            </div>
           </div>
 
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
@@ -835,12 +956,51 @@ const BrandSettings = () => {
                 ))}
               </div>
             )}
+
+            {/* Solicitudes Pendientes */}
+            {pendingInvitations.length > 0 && (
+              <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f5c518', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                  <Clock size={14} /> Solicitudes Enviadas Pendientes ({pendingInvitations.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {pendingInvitations.map(inv => (
+                    <div
+                      key={inv.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 14px', borderRadius: '10px',
+                        background: 'rgba(245,197,24,0.06)', border: '1px solid rgba(245,197,24,0.2)'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff' }}>{inv.invitee_name}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {inv.invitee_email} · {inv.module_cartelera ? 'Cartelera ' : ''}{inv.module_logistics ? 'Logística' : ''}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelInvite(inv)}
+                        style={{
+                          background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
+                          color: '#f87171', padding: '5px 10px', borderRadius: '8px', cursor: 'pointer',
+                          fontSize: '0.75rem', fontWeight: 600
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
       </div>
 
-      {/* Modal Crear Staff */}
+      {/* Modal Fusionado: Invitar Usuario Existente o Crear Staff desde 0 */}
       {showCreateStaffModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -848,10 +1008,178 @@ const BrandSettings = () => {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 10000, padding: '20px'
         }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '24px' }}>
-            <h3 style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 800, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <UserPlus size={20} color={primaryColor} /> Nuevo Personal de Staff
-            </h3>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '460px', padding: '24px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ color: '#fff', fontSize: '1.15rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <UserPlus size={20} color={primaryColor} /> Agregar a tu Staff
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateStaffModal(false)}
+                style={{ background: 'rgba(255,255,255,0.06)', border: 'none', color: '#aaa', borderRadius: '8px', width: '30px', height: '30px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Selector de Modo */}
+            <div style={{ display: 'flex', gap: '6px', padding: '4px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', marginBottom: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setStaffModalTab('invite')}
+                style={{
+                  flex: 1, padding: '8px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                  fontSize: '0.8rem', fontWeight: 700,
+                  background: staffModalTab === 'invite' ? primaryColor : 'transparent',
+                  color: staffModalTab === 'invite' ? '#000' : 'var(--text-muted)'
+                }}
+              >
+                🔍 Invitar Existente (Google/FB)
+              </button>
+              <button
+                type="button"
+                onClick={() => setStaffModalTab('create')}
+                style={{
+                  flex: 1, padding: '8px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                  fontSize: '0.8rem', fontWeight: 700,
+                  background: staffModalTab === 'create' ? primaryColor : 'transparent',
+                  color: staffModalTab === 'create' ? '#000' : 'var(--text-muted)'
+                }}
+              >
+                ➕ Crear desde 0
+              </button>
+            </div>
+
+            {staffModalTab === 'invite' ? (
+              <form onSubmit={handleSendInvite} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
+                  Busca a cualquier usuario que ya haya iniciado sesión con Google, Facebook o correo y envíale una solicitud para unirse a tu equipo.
+                </p>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                    Buscar por correo o nombre:
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      className="input-field"
+                      style={{ paddingLeft: '36px' }}
+                      value={searchQuery}
+                      onChange={e => { setSearchQuery(e.target.value); setSelectedInviteUser(null); }}
+                      placeholder="Ej. maria@gmail.com o Juan..."
+                    />
+                  </div>
+                </div>
+
+                {searchingUsers && (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Buscando usuarios...</div>
+                )}
+
+                {searchResults.length > 0 && !selectedInviteUser && (
+                  <div style={{ maxHeight: '170px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.25)', padding: '8px', borderRadius: '10px' }}>
+                    {searchResults.map(u => {
+                      const disabled = u.is_already_staff || u.has_pending_invite;
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => setSelectedInviteUser(u)}
+                          style={{
+                            textAlign: 'left', padding: '8px 10px', borderRadius: '8px',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            background: disabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)',
+                            color: '#fff', cursor: disabled ? 'not-allowed' : 'pointer',
+                            opacity: disabled ? 0.55 : 1,
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '0.83rem', fontWeight: 700 }}>{u.name}</div>
+                            <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>{u.email}</div>
+                          </div>
+                          {u.is_already_staff && <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 700 }}>Ya es Staff</span>}
+                          {u.has_pending_invite && <span style={{ fontSize: '0.7rem', color: '#f5c518', fontWeight: 700 }}>Pendiente</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {selectedInviteUser && (
+                  <div style={{
+                    padding: '10px 12px', borderRadius: '10px',
+                    background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff' }}>✓ {selectedInviteUser.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>{selectedInviteUser.email}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedInviteUser(null)}
+                      style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700 }}
+                    >
+                      Cambiar
+                    </button>
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                    Módulos autorizados:
+                  </label>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    {canGrantCartelera && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: '#fff', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={inviteModules.module_cartelera}
+                          onChange={e => setInviteModules({ ...inviteModules, module_cartelera: e.target.checked })}
+                        />
+                        🎟️ Cartelera / Escáner
+                      </label>
+                    )}
+                    {canGrantLogistics && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: '#fff', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={inviteModules.module_logistics}
+                          onChange={e => setInviteModules({ ...inviteModules, module_logistics: e.target.checked })}
+                        />
+                        📦 Logística
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                    Mensaje opcional:
+                  </label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={inviteMessage}
+                    onChange={e => setInviteMessage(e.target.value)}
+                    placeholder="Ej. Únete para ayudarnos en logística del evento"
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                  <button type="button" onClick={() => setShowCreateStaffModal(false)} className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '8px' }}>
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={isSendingInvite || !selectedInviteUser} className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '8px', opacity: !selectedInviteUser ? 0.5 : 1 }}>
+                    {isSendingInvite ? 'Enviando...' : 'Enviar Solicitud'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+            <>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: '18px' }}>
               Este usuario podrá iniciar sesión con rol Staff y validar códigos en las campañas asignadas.
             </p>
@@ -970,6 +1298,8 @@ const BrandSettings = () => {
                 </button>
               </div>
             </form>
+            </>
+            )}
           </div>
         </div>
       )}

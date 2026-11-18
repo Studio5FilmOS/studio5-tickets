@@ -13,11 +13,18 @@ router.get('/customer-database', authMiddleware, roleMiddleware(['admin', 'organ
 // 3. Tarjeta de Garantía Payphone del Organizador
 router.post('/my-guarantee-card', authMiddleware, userController.updateMyGuaranteeCard);
 
-// 4. Gestión de Staff propio del Organizador
+// 4. Gestión de Staff propio del Organizador (Creación + Invitaciones tipo red social)
+router.get('/search-for-staff', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.searchUsersForStaff);
 router.get('/my-staff', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.getMyStaff);
 router.post('/my-staff', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.createMyStaff);
+router.post('/my-staff/invite', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.inviteStaff);
+router.delete('/my-staff/invite/:id', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.cancelStaffInvite);
 router.put('/my-staff/:id', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.updateMyStaff);
 router.delete('/my-staff/:id', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.deleteMyStaff);
+
+// 4.1 Invitaciones recibidas por cualquier usuario autenticado (Google/Facebook/Buyer/Organizer)
+router.get('/my-invitations', authMiddleware, userController.getMyInvitations);
+router.post('/my-invitations/:id/respond', authMiddleware, userController.respondToInvitation);
 
 // 5. Gestión de Marca Blanca (Logo, Colores, Enlace Directo)
 router.get('/my-brand', authMiddleware, roleMiddleware(['admin', 'organizer']), userController.getMyBrand);

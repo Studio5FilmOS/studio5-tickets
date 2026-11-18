@@ -163,6 +163,45 @@ const applyMigrations = async () => {
   await safe("ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_config JSONB DEFAULT '{\"primaryColor\": \"#DEB841\", \"tenantName\": \"\"}'::jsonb;");
   await safe("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_slug VARCHAR(100);");
 
+  // Multi-equipo: Membresías de Staff (un usuario puede ser staff de varios organizadores)
+  await safe(`
+    CREATE TABLE IF NOT EXISTS staff_memberships (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      organizer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      staff_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      module_cartelera BOOLEAN NOT NULL DEFAULT TRUE,
+      module_logistics BOOLEAN NOT NULL DEFAULT FALSE,
+      status VARCHAR(20) NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT unique_staff_membership UNIQUE (organizer_id, staff_user_id)
+    );
+  `);
+
+  // Invitaciones / Solicitudes de Staff tipo red social
+  await safe(`
+    CREATE TABLE IF NOT EXISTS staff_invitations (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      organizer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      invitee_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      module_cartelera BOOLEAN NOT NULL DEFAULT TRUE,
+      module_logistics BOOLEAN NOT NULL DEFAULT FALSE,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      message TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      responded_at TIMESTAMPTZ
+    );
+  `);
+
+  // Backfill de staff heredados en users.workgroup_organizer_id hacia staff_memberships
+  await safe(`
+    INSERT INTO staff_memberships (organizer_id, staff_user_id, module_cartelera, module_logistics, status)
+    SELECT workgroup_organizer_id, id, COALESCE(module_cartelera, TRUE), COALESCE(module_logistics, FALSE), 'active'
+    FROM users
+    WHERE role = 'staff' AND workgroup_organizer_id IS NOT NULL
+    ON CONFLICT (organizer_id, staff_user_id) DO NOTHING;
+  `);
+
   console.log('✅ Migraciones de columnas y tablas aplicadas correctamente.');
 };
 

@@ -385,15 +385,23 @@ exports.getStaffCampaigns = async (req, res) => {
   }
 };
 
-// Asignar un lote de canastas / tickets (Registro o Despacho)
+// Asignar un lote de canastas / tickets (soporta modo consecutivo o códigos dispersos)
 exports.dispatchItems = async (req, res) => {
-  const { campaign_id, start_code, quantity = 1, assigned_data, immediate_delivery = false } = req.body;
+  const { campaign_id, start_code, quantity = 1, item_codes, assigned_data, immediate_delivery = false } = req.body;
   const user = req.user;
   const staff_id = user?.id || null;
-  const countToAssign = Math.max(1, parseInt(quantity, 10));
+  const hasScatteredCodes = Array.isArray(item_codes) && item_codes.length > 0;
+  const countToAssign = hasScatteredCodes ? item_codes.length : Math.max(1, parseInt(quantity, 10));
 
   try {
-    const cleanStart = start_code.trim().padStart(4, '0');
+    const normalizedScattered = hasScatteredCodes
+      ? [...new Set(item_codes.map(c => String(c).trim().padStart(4, '0')).filter(Boolean))]
+      : [];
+    const cleanStart = !hasScatteredCodes && start_code ? String(start_code).trim().padStart(4, '0') : null;
+
+    if (!hasScatteredCodes && !cleanStart) {
+      return res.status(400).json({ status: 'ERROR', message: 'Debes indicar un código inicial o una lista de códigos.' });
+    }
 
     // 1. Validar restricción de lotes para personal de Staff
     if (user && user.role === 'staff') {
@@ -405,19 +413,29 @@ exports.dispatchItems = async (req, res) => {
       if (assignRes.rows.length > 0) {
         const { batch_start_code, batch_end_code } = assignRes.rows[0];
         if (batch_start_code && batch_end_code) {
-          const numStart = parseInt(batch_start_code, 10);
-          const numEnd = parseInt(batch_end_code, 10);
-          const numCode = parseInt(cleanStart, 10);
-          const lastCodeToAssign = numCode + countToAssign - 1;
+          if (hasScatteredCodes) {
+            const invalidCodes = normalizedScattered.filter(c => !isCodeWithinBatch(c, batch_start_code, batch_end_code));
+            if (invalidCodes.length > 0) {
+              return res.status(403).json({
+                status: 'ERROR',
+                message: `⛔ CÓDIGO RESTRINGIDO\nLos códigos ${invalidCodes.map(c => `#${c}`).join(', ')} están fuera de tu lote autorizado (#${batch_start_code} al #${batch_end_code}).`
+              });
+            }
+          } else {
+            const numStart = parseInt(batch_start_code, 10);
+            const numEnd = parseInt(batch_end_code, 10);
+            const numCode = parseInt(cleanStart, 10);
+            const lastCodeToAssign = numCode + countToAssign - 1;
 
-          const isStartOk = (!isNaN(numCode) && !isNaN(numStart)) ? (numCode >= numStart) : isCodeWithinBatch(cleanStart, batch_start_code, batch_end_code);
-          const isEndOk = (!isNaN(lastCodeToAssign) && !isNaN(numEnd)) ? (lastCodeToAssign <= numEnd) : true;
+            const isStartOk = (!isNaN(numCode) && !isNaN(numStart)) ? (numCode >= numStart) : isCodeWithinBatch(cleanStart, batch_start_code, batch_end_code);
+            const isEndOk = (!isNaN(lastCodeToAssign) && !isNaN(numEnd)) ? (lastCodeToAssign <= numEnd) : true;
 
-          if (!isStartOk || !isEndOk) {
-            return res.status(403).json({
-              status: 'ERROR',
-              message: `⛔ CÓDIGO RESTRINGIDO\nNo puedes registrar códigos fuera de tu lote autorizado (#${batch_start_code} al #${batch_end_code}).`
-            });
+            if (!isStartOk || !isEndOk) {
+              return res.status(403).json({
+                status: 'ERROR',
+                message: `⛔ CÓDIGO RESTRINGIDO\nNo puedes registrar códigos fuera de tu lote autorizado (#${batch_start_code} al #${batch_end_code}).`
+              });
+            }
           }
         }
       }
@@ -425,33 +443,60 @@ exports.dispatchItems = async (req, res) => {
 
     await query('BEGIN');
 
-    // Buscar disponibles secuenciales a partir de start_code
-    const itemsResult = await query(
-      `SELECT id, item_code FROM logistics_items 
-       WHERE campaign_id = $1 AND status = 'AVAILABLE' AND item_code >= $2 
-       ORDER BY item_code ASC LIMIT $3`,
-      [campaign_id, cleanStart, countToAssign]
-    );
+    let itemsResult;
+    if (hasScatteredCodes) {
+      const foundRes = await query(
+        `SELECT id, item_code, status FROM logistics_items
+         WHERE campaign_id = $1 AND item_code = ANY($2::text[])
+         ORDER BY item_code ASC`,
+        [campaign_id, normalizedScattered]
+      );
 
-    if (itemsResult.rows.length < countToAssign) {
-      await query('ROLLBACK');
-      return res.status(400).json({ 
-        status: 'ERROR', 
-        message: `Solo se encontraron ${itemsResult.rows.length} códigos consecutivos disponibles.` 
-      });
+      const foundMap = new Map(foundRes.rows.map(r => [r.item_code, r]));
+      const missing = normalizedScattered.filter(c => !foundMap.has(c));
+      const unavailable = foundRes.rows.filter(r => r.status !== 'AVAILABLE').map(r => `#${r.item_code} (${r.status})`);
+
+      if (missing.length > 0 || unavailable.length > 0) {
+        await query('ROLLBACK');
+        const parts = [];
+        if (missing.length > 0) parts.push(`No existen: ${missing.map(c => `#${c}`).join(', ')}`);
+        if (unavailable.length > 0) parts.push(`Ya usados: ${unavailable.join(', ')}`);
+        return res.status(400).json({
+          status: 'ERROR',
+          message: `No se pudieron asignar todos los códigos dispersos. ${parts.join(' | ')}`
+        });
+      }
+      itemsResult = { rows: foundRes.rows };
+    } else {
+      // Buscar disponibles secuenciales a partir de start_code
+      itemsResult = await query(
+        `SELECT id, item_code FROM logistics_items 
+         WHERE campaign_id = $1 AND status = 'AVAILABLE' AND item_code >= $2 
+         ORDER BY item_code ASC LIMIT $3`,
+        [campaign_id, cleanStart, countToAssign]
+      );
+
+      if (itemsResult.rows.length < countToAssign) {
+        await query('ROLLBACK');
+        return res.status(400).json({ 
+          status: 'ERROR', 
+          message: `Solo se encontraron ${itemsResult.rows.length} códigos consecutivos disponibles.` 
+        });
+      }
     }
 
     const idsToUpdate = itemsResult.rows.map(row => row.id);
     const batchCodes = itemsResult.rows.map(row => row.item_code);
+    const effectiveQty = batchCodes.length;
 
     const mergedData = {
       ...(assigned_data || {}),
-      cantidad: countToAssign,
+      cantidad: effectiveQty,
       batch_codes: batchCodes
     };
 
     const targetStatus = immediate_delivery ? 'RECEIVED' : 'DISPATCHED';
-    const deliveredQty = immediate_delivery ? countToAssign : 0;
+    const deliveredQty = immediate_delivery ? effectiveQty : 0;
 
     await query(
       `UPDATE logistics_items 
@@ -470,9 +515,11 @@ exports.dispatchItems = async (req, res) => {
     res.json({ 
       status: 'OK', 
       message: immediate_delivery 
-        ? `Asignados y entregados ${countToAssign} artículos exitosamente.`
-        : `Asignados ${countToAssign} artículos exitosamente al lote.`,
-      dispatched_range: `${batchCodes[0]} al ${batchCodes[batchCodes.length - 1]}`,
+        ? `Asignados y entregados ${effectiveQty} artículos exitosamente.`
+        : `Asignados ${effectiveQty} artículos exitosamente al lote.`,
+      dispatched_range: batchCodes.length > 1 && !hasScatteredCodes
+        ? `${batchCodes[0]} al ${batchCodes[batchCodes.length - 1]}`
+        : batchCodes.map(c => `#${c}`).join(', '),
       batch_codes: batchCodes
     });
   } catch (error) {
@@ -636,6 +683,122 @@ exports.getPublicCampaign = async (req, res) => {
 
     res.json({ status: 'OK', data: result.rows[0] });
   } catch (error) {
+    res.status(500).json({ status: 'ERROR', message: error.message });
+  }
+};
+
+// Editar un registro individual de canasta/artículo (Admin u Organizador dueño)
+exports.updateItemRecord = async (req, res) => {
+  const { id } = req.params;
+  const { nombre, celular, notas, status, delivered_quantity } = req.body;
+  const user = req.user;
+
+  try {
+    const checkSql = user.role === 'admin'
+      ? `SELECT i.*, c.organizer_id FROM logistics_items i JOIN logistics_campaigns c ON i.campaign_id = c.id WHERE i.id = $1`
+      : `SELECT i.*, c.organizer_id FROM logistics_items i JOIN logistics_campaigns c ON i.campaign_id = c.id WHERE i.id = $1 AND c.organizer_id = $2`;
+    const checkParams = user.role === 'admin' ? [id] : [id, user.id];
+
+    const itemRes = await query(checkSql, checkParams);
+    if (itemRes.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Registro no encontrado o sin permisos.' });
+    }
+
+    const current = itemRes.rows[0];
+    const targetStatus = status || current.status;
+
+    if (targetStatus === 'AVAILABLE') {
+      const updated = await query(
+        `UPDATE logistics_items
+         SET status = 'AVAILABLE',
+             assigned_data = NULL,
+             delivered_quantity = 0,
+             dispatched_at = NULL,
+             dispatched_by = NULL,
+             received_at = NULL,
+             received_by = NULL
+         WHERE id = $1
+         RETURNING *`,
+        [id]
+      );
+      return res.json({ status: 'OK', message: 'Registro liberado a Disponible.', data: updated.rows[0] });
+    }
+
+    const prevData = current.assigned_data || {};
+    const nextData = {
+      ...prevData,
+      ...(nombre !== undefined ? { nombre: nombre.trim() } : {}),
+      ...(celular !== undefined ? { celular: celular.trim() } : {}),
+      ...(notas !== undefined ? { notas: notas.trim() } : {})
+    };
+
+    const maxQty = parseInt(nextData.cantidad || 1, 10);
+    const nextDelivered = delivered_quantity !== undefined
+      ? Math.max(0, Math.min(maxQty, parseInt(delivered_quantity, 10) || 0))
+      : (targetStatus === 'RECEIVED' ? maxQty : parseInt(current.delivered_quantity || 0, 10));
+
+    const updated = await query(
+      `UPDATE logistics_items
+       SET status = $1,
+           assigned_data = $2,
+           delivered_quantity = $3,
+           dispatched_at = COALESCE(dispatched_at, NOW()),
+           dispatched_by = COALESCE(dispatched_by, $4),
+           received_at = CASE WHEN $1 = 'RECEIVED' THEN COALESCE(received_at, NOW()) ELSE NULL END,
+           received_by = CASE WHEN $1 = 'RECEIVED' THEN COALESCE(received_by, $4) ELSE NULL END
+       WHERE id = $5
+       RETURNING *`,
+      [targetStatus, JSON.stringify(nextData), nextDelivered, user.id, id]
+    );
+
+    res.json({ status: 'OK', message: 'Registro actualizado correctamente.', data: updated.rows[0] });
+  } catch (error) {
+    res.status(500).json({ status: 'ERROR', message: error.message });
+  }
+};
+
+// Anular / Liberar o Eliminar permanentemente un registro (Admin u Organizador dueño)
+exports.deleteItemRecord = async (req, res) => {
+  const { id } = req.params;
+  const { hard } = req.query;
+  const user = req.user;
+
+  try {
+    const checkSql = user.role === 'admin'
+      ? `SELECT i.id, i.campaign_id, i.item_code FROM logistics_items i JOIN logistics_campaigns c ON i.campaign_id = c.id WHERE i.id = $1`
+      : `SELECT i.id, i.campaign_id, i.item_code FROM logistics_items i JOIN logistics_campaigns c ON i.campaign_id = c.id WHERE i.id = $1 AND c.organizer_id = $2`;
+    const checkParams = user.role === 'admin' ? [id] : [id, user.id];
+
+    const itemRes = await query(checkSql, checkParams);
+    if (itemRes.rows.length === 0) {
+      return res.status(404).json({ status: 'ERROR', message: 'Registro no encontrado o sin permisos.' });
+    }
+
+    const item = itemRes.rows[0];
+    if (hard === 'true') {
+      await query('BEGIN');
+      await query('DELETE FROM logistics_items WHERE id = $1', [id]);
+      await query('UPDATE logistics_campaigns SET total_items = GREATEST(0, total_items - 1) WHERE id = $1', [item.campaign_id]);
+      await query('COMMIT');
+      return res.json({ status: 'OK', message: `Código #${item.item_code} eliminado permanentemente.` });
+    }
+
+    await query(
+      `UPDATE logistics_items
+       SET status = 'AVAILABLE',
+           assigned_data = NULL,
+           delivered_quantity = 0,
+           dispatched_at = NULL,
+           dispatched_by = NULL,
+           received_at = NULL,
+           received_by = NULL
+       WHERE id = $1`,
+      [id]
+    );
+
+    res.json({ status: 'OK', message: `Registro del código #${item.item_code} anulado. Ahora vuelve a estar Disponible.` });
+  } catch (error) {
+    await query('ROLLBACK').catch(() => {});
     res.status(500).json({ status: 'ERROR', message: error.message });
   }
 };

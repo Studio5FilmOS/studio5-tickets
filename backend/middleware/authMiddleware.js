@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
+const { query } = require('../config/db');
 
-module.exports = (req, res, next) => {
+module.exports = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer <TOKEN>
 
@@ -13,7 +14,31 @@ module.exports = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secreto_studio5_2026');
-    req.user = decoded;
+    req.user = { ...decoded, original_role: decoded.role };
+
+    // Soporte multi-equipo: si el cliente envía el organizador activo en X-Workspace-Organizer-Id,
+    // validamos la membresía activa en staff_memberships y aislamos req.user a ese equipo.
+    const workspaceOrgId = req.headers['x-workspace-organizer-id'];
+    if (workspaceOrgId && workspaceOrgId !== 'personal' && workspaceOrgId !== 'null' && workspaceOrgId !== 'undefined') {
+      const memRes = await query(
+        `SELECT m.organizer_id, m.module_cartelera, m.module_logistics,
+                org.module_cartelera AS org_cartelera, org.module_logistics AS org_logistics
+         FROM staff_memberships m
+         JOIN users org ON m.organizer_id = org.id
+         WHERE m.staff_user_id = $1 AND m.organizer_id = $2 AND m.status = 'active'
+         LIMIT 1`,
+        [decoded.id, workspaceOrgId]
+      );
+      if (memRes.rows.length > 0) {
+        const mem = memRes.rows[0];
+        req.user.role = 'staff';
+        req.user.workgroup_organizer_id = mem.organizer_id;
+        req.user.module_cartelera = Boolean(mem.module_cartelera && mem.org_cartelera);
+        req.user.module_logistics = Boolean(mem.module_logistics && mem.org_logistics);
+        req.user.active_team_id = mem.organizer_id;
+      }
+    }
+
     next();
   } catch (err) {
     return res.status(403).json({

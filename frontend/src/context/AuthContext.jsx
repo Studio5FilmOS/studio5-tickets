@@ -133,10 +133,34 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Refrescar usuario actual desde /auth/me (útil al cambiar de equipo o aceptar invitación)
+  const refreshUser = async () => {
+    const token = localStorage.getItem('studio5_token');
+    if (!token) return null;
+    try {
+      const res = await api.get('/auth/me');
+      if (res.data.status === 'OK') {
+        setUser(res.data.user);
+        localStorage.setItem('studio5_user', JSON.stringify(res.data.user));
+        if (res.data.user?.theme_config) {
+          const tc = typeof res.data.user.theme_config === 'string'
+            ? res.data.user.theme_config
+            : JSON.stringify(res.data.user.theme_config);
+          localStorage.setItem('studio5_theme_config', tc);
+        }
+        return res.data.user;
+      }
+    } catch (err) {
+      console.error('Error al refrescar sesión:', err);
+    }
+    return null;
+  };
+
   // Cerrar Sesión
   const logout = () => {
     localStorage.removeItem('studio5_token');
     localStorage.removeItem('studio5_user');
+    localStorage.removeItem('studio5_active_team');
     setUser(null);
   };
 
@@ -148,6 +172,7 @@ export const AuthProvider = ({ children }) => {
     register,
     verifyOtp,
     resendOtp,
+    refreshUser,
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',

@@ -34,6 +34,25 @@ const resolveEffectiveModules = async (user) => {
   return { tenant_slug, theme_config, module_cartelera, module_logistics };
 };
 
+// Helper para obtener todos los equipos de Staff activos de un usuario
+const getUserStaffTeams = async (userId) => {
+  const res = await query(
+    `SELECT m.organizer_id,
+            org.name AS organizer_name,
+            org.email AS organizer_email,
+            org.tenant_slug,
+            org.theme_config,
+            (m.module_cartelera AND COALESCE(org.module_cartelera, TRUE)) AS module_cartelera,
+            (m.module_logistics AND COALESCE(org.module_logistics, FALSE)) AS module_logistics
+     FROM staff_memberships m
+     JOIN users org ON m.organizer_id = org.id
+     WHERE m.staff_user_id = $1 AND m.status = 'active'
+     ORDER BY org.name ASC`,
+    [userId]
+  );
+  return res.rows;
+};
+
 // 1. Registro de usuarios con envío de OTP
 exports.register = async (req, res) => {
   const { name, email, phone, password, role, workgroup_organizer_id } = req.body;
@@ -194,6 +213,7 @@ exports.verifyOtp = async (req, res) => {
     );
 
     const resolved = await resolveEffectiveModules(user);
+    const staffTeams = await getUserStaffTeams(user.id);
 
     // Emitir Token JWT
     const token = jwt.sign(
@@ -212,13 +232,15 @@ exports.verifyOtp = async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.role,
+        base_role: user.role,
         token_tarjeta: user.token_tarjeta,
         debt_balance: user.debt_balance,
         module_cartelera: resolved.module_cartelera,
         module_logistics: resolved.module_logistics,
         tenant_slug: resolved.tenant_slug,
         theme_config: resolved.theme_config,
-        workgroup_organizer_id: user.workgroup_organizer_id
+        workgroup_organizer_id: user.workgroup_organizer_id,
+        staff_teams: staffTeams
       }
     });
   } catch (err) {
@@ -360,6 +382,7 @@ exports.login = async (req, res) => {
     }
 
     const resolved = await resolveEffectiveModules(user);
+    const staffTeams = await getUserStaffTeams(user.id);
 
     // Firmar JWT
     const token = jwt.sign(
@@ -378,13 +401,15 @@ exports.login = async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.role,
+        base_role: user.role,
         token_tarjeta: user.token_tarjeta,
         debt_balance: user.debt_balance,
         module_cartelera: resolved.module_cartelera,
         module_logistics: resolved.module_logistics,
         tenant_slug: resolved.tenant_slug,
         theme_config: resolved.theme_config,
-        workgroup_organizer_id: user.workgroup_organizer_id
+        workgroup_organizer_id: user.workgroup_organizer_id,
+        staff_teams: staffTeams
       }
     });
   } catch (err) {
@@ -411,11 +436,28 @@ exports.getMe = async (req, res) => {
     }
 
     const userData = userRes.rows[0];
-    const resolved = await resolveEffectiveModules(userData);
-    userData.tenant_slug = resolved.tenant_slug;
-    userData.theme_config = resolved.theme_config;
-    userData.module_cartelera = resolved.module_cartelera;
-    userData.module_logistics = resolved.module_logistics;
+    userData.base_role = userData.role;
+    const staffTeams = await getUserStaffTeams(userData.id);
+    userData.staff_teams = staffTeams;
+
+    if (req.user.active_team_id) {
+      const activeTeam = staffTeams.find(t => t.organizer_id === req.user.active_team_id);
+      if (activeTeam) {
+        userData.role = 'staff';
+        userData.workgroup_organizer_id = activeTeam.organizer_id;
+        userData.active_team_id = activeTeam.organizer_id;
+        userData.tenant_slug = activeTeam.tenant_slug;
+        userData.theme_config = activeTeam.theme_config;
+        userData.module_cartelera = activeTeam.module_cartelera;
+        userData.module_logistics = activeTeam.module_logistics;
+      }
+    } else {
+      const resolved = await resolveEffectiveModules(userData);
+      userData.tenant_slug = resolved.tenant_slug;
+      userData.theme_config = resolved.theme_config;
+      userData.module_cartelera = resolved.module_cartelera;
+      userData.module_logistics = resolved.module_logistics;
+    }
 
     res.json({
       status: 'OK',
@@ -486,6 +528,7 @@ exports.socialLogin = async (req, res) => {
     }
 
     const resolved = await resolveEffectiveModules(user);
+    const staffTeams = await getUserStaffTeams(user.id);
 
     // Firmar JWT (30 días de vigencia)
     const token = jwt.sign(
@@ -504,6 +547,7 @@ exports.socialLogin = async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.role,
+        base_role: user.role,
         avatar: avatar || null,
         token_tarjeta: user.token_tarjeta,
         debt_balance: user.debt_balance,
@@ -511,7 +555,8 @@ exports.socialLogin = async (req, res) => {
         module_logistics: resolved.module_logistics,
         tenant_slug: resolved.tenant_slug,
         theme_config: resolved.theme_config,
-        workgroup_organizer_id: user.workgroup_organizer_id
+        workgroup_organizer_id: user.workgroup_organizer_id,
+        staff_teams: staffTeams
       }
     });
   } catch (err) {

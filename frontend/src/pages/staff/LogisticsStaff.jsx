@@ -62,8 +62,32 @@ const LogisticsStaff = () => {
     nombre: '',
     celular: '',
     cantidad: 1,
-    immediate_delivery: true
+    immediate_delivery: true,
+    scatteredMode: false,
+    scatteredInput: ''
   });
+
+  // Helper para parsear códigos dispersos y rangos (ej. "2, 5, 10-12, 18")
+  const parseScatteredCodes = (rawText) => {
+    const tokens = String(rawText || '').split(/[\s,;]+/).map(t => t.trim()).filter(Boolean);
+    const out = [];
+    for (const token of tokens) {
+      const rangeMatch = token.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (rangeMatch) {
+        const start = parseInt(rangeMatch[1], 10);
+        const end = parseInt(rangeMatch[2], 10);
+        if (!isNaN(start) && !isNaN(end) && end >= start && (end - start) <= 200) {
+          for (let n = start; n <= end; n++) {
+            out.push(String(n).padStart(4, '0'));
+          }
+        }
+      } else {
+        const clean = token.replace(/^#/, '');
+        if (clean) out.push(clean.padStart(4, '0'));
+      }
+    }
+    return [...new Set(out)];
+  };
 
   // Estados para Entrega por Lotes (Si ya está asignado)
   const [deliverCount, setDeliverCount] = useState(1);
@@ -170,7 +194,9 @@ const LogisticsStaff = () => {
             nombre: '',
             celular: '',
             cantidad: 1,
-            immediate_delivery: true
+            immediate_delivery: true,
+            scatteredMode: false,
+            scatteredInput: it.item_code
           });
         } else {
           const pending = it.pending_quantity || 1;
@@ -366,18 +392,30 @@ const LogisticsStaff = () => {
       return;
     }
 
+    const scatteredCodes = regForm.scatteredMode ? parseScatteredCodes(regForm.scatteredInput) : [];
+    if (regForm.scatteredMode && scatteredCodes.length === 0) {
+      Swal.fire('Códigos Requeridos', 'Ingresa al menos un número de canasta (ej. 2, 5, 10-12).', 'warning');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const res = await api.post('/logistics/dispatch', {
+      const payload = {
         campaign_id: selectedCampaignId,
-        start_code: floatingItem.item_code,
-        quantity: regForm.cantidad,
         assigned_data: {
           nombre: regForm.nombre.trim(),
           celular: regForm.celular.trim()
         },
         immediate_delivery: regForm.immediate_delivery
-      });
+      };
+      if (regForm.scatteredMode) {
+        payload.item_codes = scatteredCodes;
+      } else {
+        payload.start_code = floatingItem.item_code;
+        payload.quantity = regForm.cantidad;
+      }
+
+      const res = await api.post('/logistics/dispatch', payload);
 
       if (res.data?.status === 'OK') {
         Swal.fire({
@@ -801,30 +839,78 @@ const LogisticsStaff = () => {
                   </div>
                 </div>
 
-                {/* Selector de Cantidad de Canastas para este beneficiario */}
+                {/* Selector de Modo: Consecutivo vs Números Dispersos */}
                 <div>
-                  <label style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 700, display: 'block', marginBottom: '6px' }}>
-                    Cantidad de Canastas / Artículos:
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <button 
-                      type="button" 
-                      onClick={() => setRegForm(p => ({ ...p, cantidad: Math.max(1, p.cantidad - 1) }))}
-                      style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 700 }}>
+                      Canastas / Códigos a Asignar:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setRegForm(p => ({ ...p, scatteredMode: !p.scatteredMode }))}
+                      style={{
+                        background: regForm.scatteredMode ? 'rgba(222,184,65,0.18)' : 'rgba(255,255,255,0.08)',
+                        border: `1px solid ${regForm.scatteredMode ? '#DEB841' : 'rgba(255,255,255,0.15)'}`,
+                        color: regForm.scatteredMode ? '#DEB841' : '#cbd5e1',
+                        padding: '3px 9px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                      }}
                     >
-                      <Minus size={18} />
-                    </button>
-                    <div style={{ flex: 1, textAlign: 'center', background: 'rgba(255,255,255,0.04)', padding: '10px', borderRadius: '10px', fontSize: '1.25rem', fontWeight: 900, color: '#DEB841' }}>
-                      {regForm.cantidad} {regForm.cantidad === 1 ? 'canasta' : 'canastas'}
-                    </div>
-                    <button 
-                      type="button" 
-                      onClick={() => setRegForm(p => ({ ...p, cantidad: p.cantidad + 1 }))}
-                      style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      <Plus size={18} />
+                      {regForm.scatteredMode ? '🔀 Modo Disperso Activo' : '🔀 Usar números saltados'}
                     </button>
                   </div>
+
+                  {!regForm.scatteredMode ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <button 
+                        type="button" 
+                        onClick={() => setRegForm(p => ({ ...p, cantidad: Math.max(1, p.cantidad - 1) }))}
+                        style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <Minus size={18} />
+                      </button>
+                      <div style={{ flex: 1, textAlign: 'center', background: 'rgba(255,255,255,0.04)', padding: '10px', borderRadius: '10px', fontSize: '1.25rem', fontWeight: 900, color: '#DEB841' }}>
+                        {regForm.cantidad} {regForm.cantidad === 1 ? 'canasta' : 'canastas'}
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setRegForm(p => ({ ...p, cantidad: p.cantidad + 1 }))}
+                        style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <Plus size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <input
+                        type="text"
+                        className="input-field"
+                        value={regForm.scatteredInput}
+                        onChange={e => setRegForm(p => ({ ...p, scatteredInput: e.target.value }))}
+                        placeholder="Ej. 2, 5, 10-12, 18"
+                      />
+                      <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+                        Separa números con coma o espacio (también puedes usar rangos como <code>10-12</code>).
+                      </div>
+                      {(() => {
+                        const parsed = parseScatteredCodes(regForm.scatteredInput);
+                        return parsed.length > 0 ? (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#DEB841', marginRight: '4px' }}>
+                              Total: {parsed.length}
+                            </span>
+                            {parsed.slice(0, 12).map(code => (
+                              <span key={code} style={{ padding: '2px 7px', borderRadius: '6px', background: 'rgba(222,184,65,0.15)', color: '#DEB841', fontSize: '0.72rem', fontWeight: 700 }}>
+                                #{code}
+                              </span>
+                            ))}
+                            {parsed.length > 12 && (
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>+{parsed.length - 12} más</span>
+                            )}
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
                 </div>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', cursor: 'pointer' }}>

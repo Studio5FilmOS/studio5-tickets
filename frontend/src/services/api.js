@@ -10,12 +10,16 @@ const api = axios.create({
   }
 });
 
-// Interceptor para inyectar automáticamente el token JWT en las cabeceras
+// Interceptor para inyectar automáticamente el token JWT y el equipo activo en las cabeceras
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('studio5_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    const activeTeam = localStorage.getItem('studio5_active_team');
+    if (activeTeam && activeTeam !== 'personal' && activeTeam !== 'null') {
+      config.headers['X-Workspace-Organizer-Id'] = activeTeam;
     }
     return config;
   },

@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
+import StaffNotificationBell from './components/StaffNotificationBell';
 import { getPublicSettings } from './services/settingsService';
 import { 
   Play, ScanLine, Flame, ShieldAlert, LogIn, LogOut, Ticket, 
@@ -300,6 +301,10 @@ const Sidebar = () => {
           <span>{theme.tenantName || 'STUDIO 5'}</span>
         </Link>
 
+        <div style={{ padding: '0 12px 6px 12px' }}>
+          <StaffNotificationBell />
+        </div>
+
         {/* Selector de Espacio de Trabajo */}
         <WorkspaceSwitcher />
 
@@ -430,6 +435,7 @@ const HeaderMobile = () => {
           />
           <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#fff', letterSpacing: '1px' }}>{theme.tenantName || 'STUDIO 5'}</span>
         </Link>
+        <StaffNotificationBell compact />
       </div>
       <WorkspaceSwitcher />
     </header>
