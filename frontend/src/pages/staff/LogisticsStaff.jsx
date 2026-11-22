@@ -139,31 +139,29 @@ const LogisticsStaff = () => {
 
   const handleDeleteStaffRecord = async (item) => {
     const result = await Swal.fire({
-      title: `¿Anular registro #${item.item_code}?`,
-      text: 'El código volverá a estar Disponible (AVAILABLE) y se borrarán los datos del beneficiario asignado.',
+      title: `¿Eliminar registro #${item.item_code}?`,
+      text: 'El código volverá a estar disponible.',
       icon: 'warning',
+      width: '340px',
       showCancelButton: true,
-      showDenyButton: true,
-      confirmButtonText: 'Liberar a Disponible',
-      denyButtonText: 'Eliminar código',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#3b82f6',
-      denyButtonColor: '#ef4444',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'No',
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#334155',
       background: '#16171f',
       color: '#fff'
     });
 
-    if (!result.isConfirmed && !result.isDenied) return;
+    if (!result.isConfirmed) return;
 
     try {
-      const hard = result.isDenied ? '?hard=true' : '';
-      const res = await api.delete(`/logistics/items/${item.id}${hard}`);
+      const res = await api.delete(`/logistics/items/${item.id}`);
       if (res.data?.status === 'OK') {
         Swal.fire({
           icon: 'success',
-          title: result.isDenied ? 'Código Eliminado' : 'Registro Liberado',
-          text: res.data.message,
-          timer: 1600,
+          title: 'Registro eliminado',
+          width: '320px',
+          timer: 1400,
           showConfirmButton: false,
           background: '#16171f',
           color: '#fff'

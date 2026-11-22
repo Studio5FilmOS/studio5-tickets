@@ -777,3 +777,8 @@ select option, .custom-select option {
 .smart-metric-card:active {
   transform: translateY(0);
 }
+
+/* Asegurar que SweetAlert2 siempre quede por encima de cualquier modal */
+.swal2-container {
+  z-index: 25000 !important;
+}
