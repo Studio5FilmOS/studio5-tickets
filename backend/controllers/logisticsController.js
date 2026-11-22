@@ -757,10 +757,9 @@ exports.updateItemRecord = async (req, res) => {
   }
 };
 
-// Anular / Liberar o Eliminar permanentemente un registro (Admin u Organizador dueño)
+// Limpiar / Dejar vacío un registro (siempre vuelve a AVAILABLE, nunca borra el código)
 exports.deleteItemRecord = async (req, res) => {
   const { id } = req.params;
-  const { hard } = req.query;
   const user = req.user;
 
   try {
@@ -775,14 +774,6 @@ exports.deleteItemRecord = async (req, res) => {
     }
 
     const item = itemRes.rows[0];
-    if (hard === 'true') {
-      await query('BEGIN');
-      await query('DELETE FROM logistics_items WHERE id = $1', [id]);
-      await query('UPDATE logistics_campaigns SET total_items = GREATEST(0, total_items - 1) WHERE id = $1', [item.campaign_id]);
-      await query('COMMIT');
-      return res.json({ status: 'OK', message: `Código #${item.item_code} eliminado permanentemente.` });
-    }
-
     await query(
       `UPDATE logistics_items
        SET status = 'AVAILABLE',
@@ -796,9 +787,8 @@ exports.deleteItemRecord = async (req, res) => {
       [id]
     );
 
-    res.json({ status: 'OK', message: `Registro del código #${item.item_code} anulado. Ahora vuelve a estar Disponible.` });
+    res.json({ status: 'OK', message: `Código #${item.item_code} limpiado. Ahora vuelve a estar Disponible.` });
   } catch (error) {
-    await query('ROLLBACK').catch(() => {});
     res.status(500).json({ status: 'ERROR', message: error.message });
   }
 };

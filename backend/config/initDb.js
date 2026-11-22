@@ -202,6 +202,24 @@ const applyMigrations = async () => {
     ON CONFLICT (organizer_id, staff_user_id) DO NOTHING;
   `);
 
+  // Recuperar código 0001 si fue eliminado accidentalmente en alguna campaña (ej. Navidad)
+  await safe(`
+    INSERT INTO logistics_items (campaign_id, item_code, status)
+    SELECT c.id, '0001', 'AVAILABLE'
+    FROM logistics_campaigns c
+    WHERE NOT EXISTS (
+      SELECT 1 FROM logistics_items i WHERE i.campaign_id = c.id AND i.item_code IN ('0001', '001')
+    )
+    AND EXISTS (
+      SELECT 1 FROM logistics_items i WHERE i.campaign_id = c.id
+    );
+  `);
+  await safe(`
+    UPDATE logistics_campaigns c
+    SET total_items = (SELECT COUNT(*) FROM logistics_items i WHERE i.campaign_id = c.id)
+    WHERE total_items < (SELECT COUNT(*) FROM logistics_items i WHERE i.campaign_id = c.id);
+  `);
+
   console.log('✅ Migraciones de columnas y tablas aplicadas correctamente.');
 };
 

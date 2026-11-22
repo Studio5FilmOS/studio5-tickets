@@ -139,12 +139,12 @@ const LogisticsStaff = () => {
 
   const handleDeleteStaffRecord = async (item) => {
     const result = await Swal.fire({
-      title: `¿Eliminar registro #${item.item_code}?`,
-      text: 'El código volverá a estar disponible.',
+      title: `¿Limpiar registro #${item.item_code}?`,
+      text: 'Quedará vacío (Disponible).',
       icon: 'warning',
       width: '340px',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, limpiar',
       cancelButtonText: 'No',
       confirmButtonColor: '#ef4444',
       cancelButtonColor: '#334155',
@@ -159,7 +159,7 @@ const LogisticsStaff = () => {
       if (res.data?.status === 'OK') {
         Swal.fire({
           icon: 'success',
-          title: 'Registro eliminado',
+          title: 'Registro limpiado',
           width: '320px',
           timer: 1400,
           showConfirmButton: false,
@@ -170,7 +170,7 @@ const LogisticsStaff = () => {
         fetchMetrics(selectedCampaignId);
       }
     } catch (err) {
-      Swal.fire('Error', err?.response?.data?.message || 'No se pudo eliminar el registro.', 'error');
+      Swal.fire('Error', err?.response?.data?.message || 'No se pudo limpiar el registro.', 'error');
     }
   };
 
