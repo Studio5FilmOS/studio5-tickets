@@ -116,18 +116,23 @@ const LogisticsStaff = () => {
         delivered_quantity: editingRecord.delivered_quantity
       });
       if (res.data?.status === 'OK') {
+        const updatedItem = res.data.data;
+        setStaffRecords(prev => prev.map(r => (
+          r.id === editingRecord.id
+            ? { ...r, ...(updatedItem || {}), status: updatedItem?.status || editingRecord.status }
+            : r
+        )));
+        setEditingRecord(null);
+        fetchMetrics(selectedCampaignId);
         Swal.fire({
           icon: 'success',
           title: 'Registro Actualizado',
-          text: res.data.message,
-          timer: 1600,
+          width: '300px',
+          timer: 1200,
           showConfirmButton: false,
           background: '#16171f',
           color: '#fff'
         });
-        setEditingRecord(null);
-        fetchStaffRecords(selectedCampaignId, staffRecordsPage, staffRecordsSearch, staffRecordsStatus);
-        fetchMetrics(selectedCampaignId);
       }
     } catch (err) {
       Swal.fire('Error', err?.response?.data?.message || 'No se pudo actualizar el registro.', 'error');
@@ -156,17 +161,21 @@ const LogisticsStaff = () => {
     try {
       const res = await api.delete(`/logistics/items/${item.id}`);
       if (res.data?.status === 'OK') {
+        setStaffRecords(prev => prev.map(r => (
+          r.id === item.id
+            ? { ...r, status: 'AVAILABLE', assigned_data: null, delivered_quantity: 0, dispatched_at: null, received_at: null }
+            : r
+        )));
+        fetchMetrics(selectedCampaignId);
         Swal.fire({
           icon: 'success',
           title: 'Registro limpiado',
-          width: '320px',
-          timer: 1400,
+          width: '300px',
+          timer: 1100,
           showConfirmButton: false,
           background: '#16171f',
           color: '#fff'
         });
-        fetchStaffRecords(selectedCampaignId, staffRecordsPage, staffRecordsSearch, staffRecordsStatus);
-        fetchMetrics(selectedCampaignId);
       }
     } catch (err) {
       Swal.fire('Error', err?.response?.data?.message || 'No se pudo limpiar el registro.', 'error');

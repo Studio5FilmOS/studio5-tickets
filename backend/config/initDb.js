@@ -272,6 +272,25 @@ const applyMigrations = async () => {
       await query('INSERT INTO app_migrations (key) VALUES ($1) ON CONFLICT DO NOTHING', [migKey]);
       console.log('✅ Corrección única aplicada en campaña "canasta de diciembre".');
     }
+
+    // Corrección global solicitada: revertir TODOS los registros marcados como RECEIVED (Entregados) a DISPATCHED (Asignados)
+    const migAllKey = 'fix_all_received_to_dispatched_2026_11_21';
+    const migAllExists = await query('SELECT 1 FROM app_migrations WHERE key = $1', [migAllKey]);
+    if (migAllExists.rows.length === 0) {
+      await query(`
+        UPDATE logistics_items i
+        SET status = 'DISPATCHED',
+            delivered_quantity = 0,
+            received_at = NULL,
+            received_by = NULL
+        FROM logistics_campaigns c
+        WHERE i.campaign_id = c.id
+          AND c.status = 'active'
+          AND i.status = 'RECEIVED'
+      `);
+      await query('INSERT INTO app_migrations (key) VALUES ($1) ON CONFLICT DO NOTHING', [migAllKey]);
+      console.log('✅ Todos los registros RECEIVED revertidos a DISPATCHED (Asignados).');
+    }
   } catch (migErr) {
     console.warn('⚠️ Aviso en migración canasta de diciembre:', migErr.message);
   }

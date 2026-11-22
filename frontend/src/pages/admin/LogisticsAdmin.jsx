@@ -52,18 +52,23 @@ const LogisticsAdmin = () => {
         delivered_quantity: editingRecord.delivered_quantity
       });
       if (res.data?.status === 'OK') {
+        const updatedItem = res.data.data;
+        setRecords(prev => prev.map(r => (
+          r.id === editingRecord.id
+            ? { ...r, ...(updatedItem || {}), status: updatedItem?.status || editingRecord.status }
+            : r
+        )));
+        setEditingRecord(null);
+        fetchCampaigns();
         Swal.fire({
           icon: 'success',
           title: 'Registro Actualizado',
-          text: res.data.message,
-          timer: 1600,
+          width: '300px',
+          timer: 1200,
           showConfirmButton: false,
           background: '#16171f',
           color: '#fff'
         });
-        setEditingRecord(null);
-        fetchCampaignRecords(viewingRegistrationsCampaign.id, recordsPage, recordsSearch, recordsStatus);
-        fetchCampaigns();
       }
     } catch (err) {
       Swal.fire('Error', err?.response?.data?.message || 'No se pudo actualizar el registro.', 'error');
@@ -92,17 +97,21 @@ const LogisticsAdmin = () => {
     try {
       const res = await api.delete(`/logistics/items/${row.id}`);
       if (res.data?.status === 'OK') {
+        setRecords(prev => prev.map(r => (
+          r.id === row.id
+            ? { ...r, status: 'AVAILABLE', assigned_data: null, delivered_quantity: 0, dispatched_at: null, received_at: null }
+            : r
+        )));
+        fetchCampaigns();
         Swal.fire({
           icon: 'success',
           title: 'Registro limpiado',
-          width: '320px',
-          timer: 1400,
+          width: '300px',
+          timer: 1100,
           showConfirmButton: false,
           background: '#16171f',
           color: '#fff'
         });
-        fetchCampaignRecords(viewingRegistrationsCampaign.id, recordsPage, recordsSearch, recordsStatus);
-        fetchCampaigns();
       }
     } catch (err) {
       Swal.fire('Error', err?.response?.data?.message || 'No se pudo limpiar el registro.', 'error');
