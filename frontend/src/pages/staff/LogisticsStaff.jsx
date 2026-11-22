@@ -7,7 +7,7 @@ import {
   Camera, Keyboard, ArrowRightCircle, CheckCircle2, 
   PackageSearch, RefreshCw, AlertTriangle, Layers, X, 
   Plus, Minus, Check, Sparkles, UserCheck, Phone, User,
-  Search, ClipboardList, ChevronLeft, ChevronRight, Power, Video
+  Search, ClipboardList, ChevronLeft, ChevronRight, Power, Video, Edit, Trash2
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -100,6 +100,81 @@ const LogisticsStaff = () => {
   const [staffRecordsStatus, setStaffRecordsStatus] = useState('ALL');
   const [staffRecordsPage, setStaffRecordsPage] = useState(0);
   const [staffRecordsTotal, setStaffRecordsTotal] = useState(0);
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [isSavingRecord, setIsSavingRecord] = useState(false);
+  const canManageRecords = user?.role === 'admin' || user?.role === 'organizer';
+
+  const handleUpdateStaffRecord = async (e) => {
+    e.preventDefault();
+    if (!editingRecord) return;
+    setIsSavingRecord(true);
+    try {
+      const res = await api.put(`/logistics/items/${editingRecord.id}`, {
+        nombre: editingRecord.nombre,
+        celular: editingRecord.celular,
+        notas: editingRecord.notas,
+        status: editingRecord.status,
+        delivered_quantity: editingRecord.delivered_quantity
+      });
+      if (res.data?.status === 'OK') {
+        Swal.fire({
+          icon: 'success',
+          title: 'Registro Actualizado',
+          text: res.data.message,
+          timer: 1600,
+          showConfirmButton: false,
+          background: '#16171f',
+          color: '#fff'
+        });
+        setEditingRecord(null);
+        fetchStaffRecords(selectedCampaignId, staffRecordsPage, staffRecordsSearch, staffRecordsStatus);
+        fetchMetrics(selectedCampaignId);
+      }
+    } catch (err) {
+      Swal.fire('Error', err?.response?.data?.message || 'No se pudo actualizar el registro.', 'error');
+    } finally {
+      setIsSavingRecord(false);
+    }
+  };
+
+  const handleDeleteStaffRecord = async (item) => {
+    const result = await Swal.fire({
+      title: `¿Anular registro #${item.item_code}?`,
+      text: 'El código volverá a estar Disponible (AVAILABLE) y se borrarán los datos del beneficiario asignado.',
+      icon: 'warning',
+      showCancelButton: true,
+      showDenyButton: true,
+      confirmButtonText: 'Liberar a Disponible',
+      denyButtonText: 'Eliminar código',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#3b82f6',
+      denyButtonColor: '#ef4444',
+      background: '#16171f',
+      color: '#fff'
+    });
+
+    if (!result.isConfirmed && !result.isDenied) return;
+
+    try {
+      const hard = result.isDenied ? '?hard=true' : '';
+      const res = await api.delete(`/logistics/items/${item.id}${hard}`);
+      if (res.data?.status === 'OK') {
+        Swal.fire({
+          icon: 'success',
+          title: result.isDenied ? 'Código Eliminado' : 'Registro Liberado',
+          text: res.data.message,
+          timer: 1600,
+          showConfirmButton: false,
+          background: '#16171f',
+          color: '#fff'
+        });
+        fetchStaffRecords(selectedCampaignId, staffRecordsPage, staffRecordsSearch, staffRecordsStatus);
+        fetchMetrics(selectedCampaignId);
+      }
+    } catch (err) {
+      Swal.fire('Error', err?.response?.data?.message || 'No se pudo eliminar el registro.', 'error');
+    }
+  };
 
   const fetchStaffRecords = async (campaignId, page = 0, search = '', status = 'ALL') => {
     if (!campaignId) return;
@@ -1317,16 +1392,56 @@ const LogisticsStaff = () => {
                         )}
                       </div>
 
-                      <div style={{ textAlign: 'right', minWidth: '70px' }}>
-                        <div style={{
-                          fontSize: '0.88rem', fontWeight: 900,
-                          color: isDone ? '#10b981' : isDisp ? 'var(--accent)' : '#94a3b8'
-                        }}>
-                          {delivered} / {assigned}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ textAlign: 'right', minWidth: '60px' }}>
+                          <div style={{
+                            fontSize: '0.88rem', fontWeight: 900,
+                            color: isDone ? '#10b981' : isDisp ? 'var(--accent)' : '#94a3b8'
+                          }}>
+                            {delivered} / {assigned}
+                          </div>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                            artículos
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                          artículos
-                        </div>
+
+                        {canManageRecords && (
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setEditingRecord({
+                                id: item.id,
+                                item_code: item.item_code,
+                                nombre: item.assigned_data?.nombre || '',
+                                celular: item.assigned_data?.celular || '',
+                                notas: item.assigned_data?.notas || '',
+                                status: item.status,
+                                delivered_quantity: delivered,
+                                max_quantity: Math.max(1, assigned)
+                              })}
+                              title="Editar registro"
+                              style={{
+                                padding: '6px 8px', borderRadius: '8px',
+                                background: 'rgba(59,130,246,0.16)', border: '1px solid rgba(59,130,246,0.35)',
+                                color: '#60a5fa', cursor: 'pointer', display: 'flex', alignItems: 'center'
+                              }}
+                            >
+                              <Edit size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStaffRecord(item)}
+                              title="Anular / Liberar o eliminar registro"
+                              style={{
+                                padding: '6px 8px', borderRadius: '8px',
+                                background: 'rgba(239,68,68,0.16)', border: '1px solid rgba(239,68,68,0.35)',
+                                color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center'
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1373,6 +1488,110 @@ const LogisticsStaff = () => {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Registro (Admin / Organizador) */}
+      {editingRecord && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)',
+          zIndex: 10060, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '430px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, color: '#fff', fontSize: '1.1rem', fontWeight: 800 }}>
+                Editar Registro #{editingRecord.item_code}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingRecord(null)}
+                style={{ background: 'rgba(255,255,255,0.06)', border: 'none', color: '#aaa', borderRadius: '8px', width: '30px', height: '30px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateStaffRecord} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Beneficiario / Nombre:
+                </label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={editingRecord.nombre}
+                  onChange={e => setEditingRecord({ ...editingRecord, nombre: e.target.value })}
+                  placeholder="Nombre del beneficiario"
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Cédula o Celular:
+                </label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={editingRecord.celular}
+                  onChange={e => setEditingRecord({ ...editingRecord, celular: e.target.value })}
+                  placeholder="Ej. 0999999999"
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Estado:
+                </label>
+                <select
+                  className="input-field"
+                  value={editingRecord.status}
+                  onChange={e => setEditingRecord({ ...editingRecord, status: e.target.value })}
+                >
+                  <option value="AVAILABLE">Disponible (Liberar)</option>
+                  <option value="DISPATCHED">Asignado / En Proceso</option>
+                  <option value="RECEIVED">Entregado</option>
+                </select>
+              </div>
+
+              {editingRecord.status !== 'AVAILABLE' && (
+                <div>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                    Unidades Entregadas (máx. {editingRecord.max_quantity}):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={editingRecord.max_quantity}
+                    className="input-field"
+                    value={editingRecord.delivered_quantity}
+                    onChange={e => setEditingRecord({ ...editingRecord, delivered_quantity: parseInt(e.target.value, 10) || 0 })}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Notas (opcional):
+                </label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={editingRecord.notas}
+                  onChange={e => setEditingRecord({ ...editingRecord, notas: e.target.value })}
+                  placeholder="Observaciones..."
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button type="button" onClick={() => setEditingRecord(null)} className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '8px' }}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={isSavingRecord} className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '8px' }}>
+                  {isSavingRecord ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
