@@ -529,7 +529,7 @@ const LogisticsAdmin = () => {
                         <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#3b82f6' }}>{dispatched}</div>
                       </div>
                       <div style={{ background: 'rgba(16,185,129,0.1)', padding: '10px', borderRadius: '10px', textAlign: 'center', border: '1px solid rgba(16,185,129,0.2)' }}>
-                        <span style={{ fontSize: '0.7rem', color: '#6ee7b7', textTransform: 'uppercase' }}>Canjeados</span>
+                        <span style={{ fontSize: '0.7rem', color: '#6ee7b7', textTransform: 'uppercase' }}>Entregados</span>
                         <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#10b981' }}>{received}</div>
                       </div>
                     </div>
@@ -897,7 +897,7 @@ const LogisticsAdmin = () => {
                   </span>
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>
-                  Busca por beneficiario, teléfono o código para auditar entregas y canjes.
+                  Busca por beneficiario, teléfono o código para auditar asignaciones y entregas.
                 </p>
               </div>
 

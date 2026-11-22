@@ -220,6 +220,62 @@ const applyMigrations = async () => {
     WHERE total_items < (SELECT COUNT(*) FROM logistics_items i WHERE i.campaign_id = c.id);
   `);
 
+  // Permiso granular de edición de registros logísticos para Staff (bajo autorización del organizador)
+  await safe("ALTER TABLE staff_memberships ADD COLUMN IF NOT EXISTS can_edit_logistics_records BOOLEAN NOT NULL DEFAULT FALSE;");
+  await safe("ALTER TABLE staff_invitations ADD COLUMN IF NOT EXISTS can_edit_logistics_records BOOLEAN NOT NULL DEFAULT FALSE;");
+  await safe("ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_logistics_records BOOLEAN NOT NULL DEFAULT FALSE;");
+
+  // Migraciones de datos ejecutadas una sola vez
+  await safe(`
+    CREATE TABLE IF NOT EXISTS app_migrations (
+      key VARCHAR(120) PRIMARY KEY,
+      applied_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  try {
+    const migKey = 'fix_canasta_diciembre_2026_11_21';
+    const migExists = await query('SELECT 1 FROM app_migrations WHERE key = $1', [migKey]);
+    if (migExists.rows.length === 0) {
+      // 1. Revertir ítems marcados como RECEIVED por el visto automático a DISPATCHED (Asignados) en "canasta de diciembre"
+      await query(`
+        UPDATE logistics_items i
+        SET status = 'DISPATCHED',
+            delivered_quantity = 0,
+            received_at = NULL,
+            received_by = NULL
+        FROM logistics_campaigns c
+        WHERE i.campaign_id = c.id
+          AND c.status = 'active'
+          AND LOWER(c.name) LIKE '%canasta de diciembre%'
+          AND i.status = 'RECEIVED'
+      `);
+
+      // 2. Limpiar códigos 0036 al 0042 en "canasta de diciembre" si quedaron sin nombre asignado
+      await query(`
+        UPDATE logistics_items i
+        SET status = 'AVAILABLE',
+            assigned_data = NULL,
+            delivered_quantity = 0,
+            dispatched_at = NULL,
+            dispatched_by = NULL,
+            received_at = NULL,
+            received_by = NULL
+        FROM logistics_campaigns c
+        WHERE i.campaign_id = c.id
+          AND c.status = 'active'
+          AND LOWER(c.name) LIKE '%canasta de diciembre%'
+          AND i.item_code IN ('0036','0037','0038','0039','0040','0041','0042','36','37','38','39','40','41','42')
+          AND (i.assigned_data IS NULL OR COALESCE(TRIM(i.assigned_data->>'nombre'), '') = '')
+      `);
+
+      await query('INSERT INTO app_migrations (key) VALUES ($1) ON CONFLICT DO NOTHING', [migKey]);
+      console.log('✅ Corrección única aplicada en campaña "canasta de diciembre".');
+    }
+  } catch (migErr) {
+    console.warn('⚠️ Aviso en migración canasta de diciembre:', migErr.message);
+  }
+
   console.log('✅ Migraciones de columnas y tablas aplicadas correctamente.');
 };
 

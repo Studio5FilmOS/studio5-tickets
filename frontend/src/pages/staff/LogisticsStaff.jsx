@@ -62,7 +62,6 @@ const LogisticsStaff = () => {
     nombre: '',
     celular: '',
     cantidad: 1,
-    immediate_delivery: true,
     scatteredMode: false,
     scatteredInput: ''
   });
@@ -102,7 +101,7 @@ const LogisticsStaff = () => {
   const [staffRecordsTotal, setStaffRecordsTotal] = useState(0);
   const [editingRecord, setEditingRecord] = useState(null);
   const [isSavingRecord, setIsSavingRecord] = useState(false);
-  const canManageRecords = user?.role === 'admin' || user?.role === 'organizer';
+  const canManageRecords = user?.role === 'admin' || user?.role === 'organizer' || (user?.role === 'staff' && Boolean(user?.can_edit_logistics_records));
 
   const handleUpdateStaffRecord = async (e) => {
     e.preventDefault();
@@ -267,7 +266,6 @@ const LogisticsStaff = () => {
             nombre: '',
             celular: '',
             cantidad: 1,
-            immediate_delivery: true,
             scatteredMode: false,
             scatteredInput: it.item_code
           });
@@ -479,7 +477,7 @@ const LogisticsStaff = () => {
           nombre: regForm.nombre.trim(),
           celular: regForm.celular.trim()
         },
-        immediate_delivery: regForm.immediate_delivery
+        immediate_delivery: false
       };
       if (regForm.scatteredMode) {
         payload.item_codes = scatteredCodes;
@@ -493,7 +491,7 @@ const LogisticsStaff = () => {
       if (res.data?.status === 'OK') {
         Swal.fire({
           icon: 'success',
-          title: regForm.immediate_delivery ? '¡Asignado y Entregado!' : '¡Lote Asignado!',
+          title: '¡Lote Asignado!',
           html: `<p style="color: #4ade80; font-weight: bold;">${res.data.message}</p>`,
           background: '#16171f',
           color: '#fff',
@@ -620,7 +618,7 @@ const LogisticsStaff = () => {
             <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#3b82f6' }}>{campaignMetrics.DISPATCHED || 0}</div>
           </div>
           <div style={{ background: 'rgba(16,185,129,0.08)', borderRadius: '12px', padding: '10px', textAlign: 'center', border: '1px solid rgba(16,185,129,0.2)' }}>
-            <span style={{ fontSize: '0.68rem', color: '#6ee7b7', textTransform: 'uppercase', fontWeight: 700 }}>Canjeados</span>
+            <span style={{ fontSize: '0.68rem', color: '#6ee7b7', textTransform: 'uppercase', fontWeight: 700 }}>Entregados</span>
             <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#10b981' }}>{campaignMetrics.RECEIVED || 0}</div>
           </div>
         </div>
@@ -852,7 +850,7 @@ const LogisticsStaff = () => {
                     color: floatingItem.status === 'AVAILABLE' ? '#34d399' : (floatingItem.status === 'RECEIVED' ? '#f87171' : '#60a5fa'),
                     border: `1px solid ${floatingItem.status === 'AVAILABLE' ? '#10b98155' : (floatingItem.status === 'RECEIVED' ? '#ef444455' : '#3b82f655')}`
                   }}>
-                    {floatingItem.status === 'AVAILABLE' ? '🟢 Disponible' : (floatingItem.status === 'RECEIVED' ? '⚠️ Canjeado Total' : '📦 Asignado')}
+                    {floatingItem.status === 'AVAILABLE' ? '🟢 Disponible' : (floatingItem.status === 'RECEIVED' ? '✅ Entregado Total' : '📦 Asignado')}
                   </span>
                   <span style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 600 }}>{floatingItem.campaign_name}</span>
                 </div>
@@ -986,25 +984,13 @@ const LogisticsStaff = () => {
                   )}
                 </div>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={regForm.immediate_delivery}
-                    onChange={e => setRegForm({ ...regForm, immediate_delivery: e.target.checked })}
-                    style={{ width: '18px', height: '18px', accentColor: '#10b981' }}
-                  />
-                  <span style={{ fontSize: '0.82rem', color: '#6ee7b7', fontWeight: 600 }}>
-                    Entregar y canjear canasta(s) en este mismo momento
-                  </span>
-                </label>
-
                 <button 
                   type="submit" 
                   className="btn-primary" 
                   disabled={isSubmitting}
                   style={{ padding: '14px', borderRadius: '12px', fontWeight: 800, fontSize: '0.95rem', marginTop: '6px' }}
                 >
-                  {isSubmitting ? 'Guardando...' : (regForm.immediate_delivery ? '💾 Guardar y Entregar Ahora' : '💾 Guardar y Asignar')}
+                  {isSubmitting ? 'Guardando...' : '💾 Guardar y Asignar'}
                 </button>
               </form>
             )}
@@ -1093,7 +1079,7 @@ const LogisticsStaff = () => {
               </div>
             )}
 
-            {/* CASO C: CÓDIGO TOTALMENTE CANJEADO (RECEIVED) */}
+            {/* CASO C: CÓDIGO TOTALMENTE ENTREGADO (RECEIVED) */}
             {floatingItem.status === 'RECEIVED' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'center' }}>
                 <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '14px', padding: '20px' }}>
@@ -1102,7 +1088,7 @@ const LogisticsStaff = () => {
                     Canasta Ya Entregada Anteriormente
                   </h3>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>
-                    Este código ya fue marcado como canjeado en su totalidad.
+                    Este código ya fue marcado como entregado en su totalidad.
                   </p>
                   <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '0.82rem', color: '#e2e8f0' }}>
                     Beneficiario: <b>{floatingItem.assigned_data?.nombre || 'General'}</b><br />

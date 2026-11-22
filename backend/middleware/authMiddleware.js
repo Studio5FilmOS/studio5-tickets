@@ -21,7 +21,7 @@ module.exports = async (req, res, next) => {
     const workspaceOrgId = req.headers['x-workspace-organizer-id'];
     if (workspaceOrgId && workspaceOrgId !== 'personal' && workspaceOrgId !== 'null' && workspaceOrgId !== 'undefined') {
       const memRes = await query(
-        `SELECT m.organizer_id, m.module_cartelera, m.module_logistics,
+        `SELECT m.organizer_id, m.module_cartelera, m.module_logistics, m.can_edit_logistics_records,
                 org.module_cartelera AS org_cartelera, org.module_logistics AS org_logistics
          FROM staff_memberships m
          JOIN users org ON m.organizer_id = org.id
@@ -35,8 +35,16 @@ module.exports = async (req, res, next) => {
         req.user.workgroup_organizer_id = mem.organizer_id;
         req.user.module_cartelera = Boolean(mem.module_cartelera && mem.org_cartelera);
         req.user.module_logistics = Boolean(mem.module_logistics && mem.org_logistics);
+        req.user.can_edit_logistics_records = Boolean(mem.can_edit_logistics_records && req.user.module_logistics);
         req.user.active_team_id = mem.organizer_id;
       }
+    } else if (decoded.role === 'staff' && decoded.workgroup_organizer_id) {
+      const memRes = await query(
+        `SELECT can_edit_logistics_records FROM staff_memberships
+         WHERE staff_user_id = $1 AND organizer_id = $2 AND status = 'active' LIMIT 1`,
+        [decoded.id, decoded.workgroup_organizer_id]
+      );
+      req.user.can_edit_logistics_records = Boolean(memRes.rows[0]?.can_edit_logistics_records);
     }
 
     next();

@@ -312,7 +312,8 @@ exports.getMyStaff = async (req, res) => {
     if (req.user.role === 'admin') {
       staffRes = await query(
         `SELECT u.id, u.name, u.email, u.phone, 'staff' AS role,
-                m.module_cartelera, m.module_logistics, m.organizer_id AS workgroup_organizer_id,
+                m.module_cartelera, m.module_logistics, COALESCE(m.can_edit_logistics_records, FALSE) AS can_edit_logistics_records,
+                m.organizer_id AS workgroup_organizer_id,
                 m.created_at, org.name AS organizer_name, u.role AS user_base_role
          FROM staff_memberships m
          JOIN users u ON m.staff_user_id = u.id
@@ -333,7 +334,8 @@ exports.getMyStaff = async (req, res) => {
     } else {
       staffRes = await query(
         `SELECT u.id, u.name, u.email, u.phone, 'staff' AS role,
-                m.module_cartelera, m.module_logistics, m.organizer_id AS workgroup_organizer_id,
+                m.module_cartelera, m.module_logistics, COALESCE(m.can_edit_logistics_records, FALSE) AS can_edit_logistics_records,
+                m.organizer_id AS workgroup_organizer_id,
                 m.created_at, u.role AS user_base_role
          FROM staff_memberships m
          JOIN users u ON m.staff_user_id = u.id
@@ -398,7 +400,7 @@ exports.searchUsersForStaff = async (req, res) => {
 exports.inviteStaff = async (req, res) => {
   try {
     const organizerId = req.user.id;
-    const { user_id, email, module_cartelera, module_logistics, message } = req.body;
+    const { user_id, email, module_cartelera, module_logistics, can_edit_logistics_records, message } = req.body;
 
     let targetUser = null;
     if (user_id) {
@@ -433,12 +435,13 @@ exports.inviteStaff = async (req, res) => {
     }
 
     const mods = await resolveStaffModulesForOrganizer(req.user, organizerId, module_cartelera, module_logistics);
+    const canEditLogistics = Boolean(mods.logistics && can_edit_logistics_records);
 
     const invRes = await query(
-      `INSERT INTO staff_invitations (organizer_id, invitee_user_id, module_cartelera, module_logistics, status, message)
-       VALUES ($1, $2, $3, $4, 'pending', $5)
+      `INSERT INTO staff_invitations (organizer_id, invitee_user_id, module_cartelera, module_logistics, can_edit_logistics_records, status, message)
+       VALUES ($1, $2, $3, $4, $5, 'pending', $6)
        RETURNING *`,
-      [organizerId, targetUser.id, mods.cartelera, mods.logistics, message || null]
+      [organizerId, targetUser.id, mods.cartelera, mods.logistics, canEditLogistics, message || null]
     );
 
     res.status(201).json({
@@ -509,14 +512,15 @@ exports.respondToInvitation = async (req, res) => {
 
     if (action === 'accept') {
       await query(
-        `INSERT INTO staff_memberships (organizer_id, staff_user_id, module_cartelera, module_logistics, status)
-         VALUES ($1, $2, $3, $4, 'active')
+        `INSERT INTO staff_memberships (organizer_id, staff_user_id, module_cartelera, module_logistics, can_edit_logistics_records, status)
+         VALUES ($1, $2, $3, $4, $5, 'active')
          ON CONFLICT (organizer_id, staff_user_id) DO UPDATE
          SET module_cartelera = EXCLUDED.module_cartelera,
              module_logistics = EXCLUDED.module_logistics,
+             can_edit_logistics_records = EXCLUDED.can_edit_logistics_records,
              status = 'active',
              updated_at = NOW()`,
-        [inv.organizer_id, req.user.id, inv.module_cartelera, inv.module_logistics]
+        [inv.organizer_id, req.user.id, inv.module_cartelera, inv.module_logistics, Boolean(inv.can_edit_logistics_records)]
       );
       await query(
         `UPDATE staff_invitations SET status = 'accepted', responded_at = NOW() WHERE id = $1`,
@@ -544,7 +548,7 @@ exports.respondToInvitation = async (req, res) => {
 exports.createMyStaff = async (req, res) => {
   try {
     const organizerId = req.user.id;
-    const { name, email, phone, password, module_cartelera, module_logistics } = req.body;
+    const { name, email, phone, password, module_cartelera, module_logistics, can_edit_logistics_records } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ status: 'ERROR', message: 'Nombre, correo y contraseña son obligatorios.' });
     }
@@ -559,22 +563,23 @@ exports.createMyStaff = async (req, res) => {
     }
 
     const mods = await resolveStaffModulesForOrganizer(req.user, organizerId, module_cartelera, module_logistics);
+    const canEditLogistics = Boolean(mods.logistics && can_edit_logistics_records);
     const hash = await bcrypt.hash(password, 10);
 
     await query('BEGIN');
     const result = await query(
-      `INSERT INTO users (name, email, phone, password_hash, role, is_verified, workgroup_organizer_id, module_logistics, module_cartelera)
-       VALUES ($1, $2, $3, $4, 'staff', TRUE, $5, $6, $7)
-       RETURNING id, name, email, phone, role, module_cartelera, module_logistics, workgroup_organizer_id, created_at`,
-      [name.trim(), cleanEmail, phone || null, hash, organizerId, mods.logistics, mods.cartelera]
+      `INSERT INTO users (name, email, phone, password_hash, role, is_verified, workgroup_organizer_id, module_logistics, module_cartelera, can_edit_logistics_records)
+       VALUES ($1, $2, $3, $4, 'staff', TRUE, $5, $6, $7, $8)
+       RETURNING id, name, email, phone, role, module_cartelera, module_logistics, can_edit_logistics_records, workgroup_organizer_id, created_at`,
+      [name.trim(), cleanEmail, phone || null, hash, organizerId, mods.logistics, mods.cartelera, canEditLogistics]
     );
     const newUser = result.rows[0];
 
     await query(
-      `INSERT INTO staff_memberships (organizer_id, staff_user_id, module_cartelera, module_logistics, status)
-       VALUES ($1, $2, $3, $4, 'active')
+      `INSERT INTO staff_memberships (organizer_id, staff_user_id, module_cartelera, module_logistics, can_edit_logistics_records, status)
+       VALUES ($1, $2, $3, $4, $5, 'active')
        ON CONFLICT (organizer_id, staff_user_id) DO NOTHING`,
-      [organizerId, newUser.id, mods.cartelera, mods.logistics]
+      [organizerId, newUser.id, mods.cartelera, mods.logistics, canEditLogistics]
     );
     await query('COMMIT');
 
@@ -590,7 +595,7 @@ exports.updateMyStaff = async (req, res) => {
   try {
     const { id } = req.params;
     const organizerId = req.user.id;
-    const { name, phone, password, module_cartelera, module_logistics, target_organizer_id } = req.body;
+    const { name, phone, password, module_cartelera, module_logistics, can_edit_logistics_records, target_organizer_id } = req.body;
 
     const effectiveOrgId = (req.user.role === 'admin' && target_organizer_id) ? target_organizer_id : organizerId;
 
@@ -610,11 +615,13 @@ exports.updateMyStaff = async (req, res) => {
       `UPDATE staff_memberships
        SET module_cartelera = COALESCE($1, module_cartelera),
            module_logistics = COALESCE($2, module_logistics),
+           can_edit_logistics_records = COALESCE($3, can_edit_logistics_records),
            updated_at = NOW()
-       WHERE id = $3`,
+       WHERE id = $4`,
       [
         module_cartelera !== undefined ? mods.cartelera : null,
         module_logistics !== undefined ? mods.logistics : null,
+        can_edit_logistics_records !== undefined ? Boolean(mods.logistics && can_edit_logistics_records) : null,
         mem.id
       ]
     );

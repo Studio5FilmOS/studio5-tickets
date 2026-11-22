@@ -43,7 +43,8 @@ const BrandSettings = () => {
   const [inviteMessage, setInviteMessage] = useState('');
   const [inviteModules, setInviteModules] = useState({
     module_cartelera: canGrantCartelera,
-    module_logistics: canGrantLogistics
+    module_logistics: canGrantLogistics,
+    can_edit_logistics_records: false
   });
   const [isSendingInvite, setIsSendingInvite] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
@@ -237,6 +238,7 @@ const BrandSettings = () => {
         user_id: selectedInviteUser.id,
         module_cartelera: canGrantCartelera ? Boolean(inviteModules.module_cartelera) : false,
         module_logistics: canGrantLogistics ? Boolean(inviteModules.module_logistics) : false,
+        can_edit_logistics_records: canGrantLogistics && inviteModules.module_logistics ? Boolean(inviteModules.can_edit_logistics_records) : false,
         message: inviteMessage.trim() || undefined
       });
       if (res.data?.status === 'OK') {
@@ -408,7 +410,8 @@ const BrandSettings = () => {
         phone: editingStaff.phone,
         password: editingStaff.password ? editingStaff.password : undefined,
         module_cartelera: canGrantCartelera ? Boolean(editingStaff.module_cartelera) : false,
-        module_logistics: canGrantLogistics ? Boolean(editingStaff.module_logistics) : false
+        module_logistics: canGrantLogistics ? Boolean(editingStaff.module_logistics) : false,
+        can_edit_logistics_records: canGrantLogistics && editingStaff.module_logistics ? Boolean(editingStaff.can_edit_logistics_records) : false
       };
       const res = await api.put(`/users/my-staff/${editingStaff.id}`, payload);
       if (res.data?.status === 'OK') {
@@ -920,6 +923,11 @@ const BrandSettings = () => {
                             📦 Logística
                           </span>
                         ) : null}
+                        {st.module_logistics && st.can_edit_logistics_records ? (
+                          <span style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: '4px', background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)', fontWeight: 600 }}>
+                            ✏️ Edita registros
+                          </span>
+                        ) : null}
                         {!st.module_cartelera && !st.module_logistics && (
                           <span style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: '4px', background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)', fontWeight: 600 }}>
                             ⚠️ Sin módulos asignados
@@ -937,7 +945,8 @@ const BrandSettings = () => {
                           phone: st.phone || '',
                           password: '',
                           module_cartelera: Boolean(st.module_cartelera),
-                          module_logistics: Boolean(st.module_logistics)
+                          module_logistics: Boolean(st.module_logistics),
+                          can_edit_logistics_records: Boolean(st.can_edit_logistics_records)
                         })}
                         style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)', color: '#60a5fa', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
                         title="Editar permisos y clave"
@@ -1151,6 +1160,16 @@ const BrandSettings = () => {
                           onChange={e => setInviteModules({ ...inviteModules, module_logistics: e.target.checked })}
                         />
                         📦 Logística
+                      </label>
+                    )}
+                    {canGrantLogistics && inviteModules.module_logistics && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: '#6ee7b7', cursor: 'pointer', width: '100%' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(inviteModules.can_edit_logistics_records)}
+                          onChange={e => setInviteModules({ ...inviteModules, can_edit_logistics_records: e.target.checked })}
+                        />
+                        ✏️ Autorizar editar / limpiar registros en Logística
                       </label>
                     )}
                   </div>
@@ -1404,10 +1423,27 @@ const BrandSettings = () => {
                     <div>
                       <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>📦 Logística & Entregas</span>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>
-                        {canGrantLogistics ? 'Validación y canje de kits/lotes en campañas' : 'No disponible (Tu organización no tiene contratado este módulo)'}
+                        {canGrantLogistics ? 'Validación y entregas de kits/lotes en campañas' : 'No disponible (Tu organización no tiene contratado este módulo)'}
                       </span>
                     </div>
                   </label>
+
+                  {canGrantLogistics && editingStaff.module_logistics && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', paddingLeft: '8px', borderLeft: '2px solid rgba(16,185,129,0.4)' }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editingStaff.can_edit_logistics_records)}
+                        onChange={e => setEditingStaff({ ...editingStaff, can_edit_logistics_records: e.target.checked })}
+                        style={{ width: '16px', height: '16px', accentColor: '#10b981' }}
+                      />
+                      <div>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#6ee7b7' }}>✏️ Autorizar Editar / Limpiar Registros</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>
+                          Permite corregir beneficiarios o limpiar asignaciones erróneas en tus campañas
+                        </span>
+                      </div>
+                    </label>
+                  )}
                 </div>
               </div>
 

@@ -43,7 +43,8 @@ const getUserStaffTeams = async (userId) => {
             org.tenant_slug,
             org.theme_config,
             (m.module_cartelera AND COALESCE(org.module_cartelera, TRUE)) AS module_cartelera,
-            (m.module_logistics AND COALESCE(org.module_logistics, FALSE)) AS module_logistics
+            (m.module_logistics AND COALESCE(org.module_logistics, FALSE)) AS module_logistics,
+            (COALESCE(m.can_edit_logistics_records, FALSE) AND m.module_logistics AND COALESCE(org.module_logistics, FALSE)) AS can_edit_logistics_records
      FROM staff_memberships m
      JOIN users org ON m.organizer_id = org.id
      WHERE m.staff_user_id = $1 AND m.status = 'active'
@@ -450,6 +451,7 @@ exports.getMe = async (req, res) => {
         userData.theme_config = activeTeam.theme_config;
         userData.module_cartelera = activeTeam.module_cartelera;
         userData.module_logistics = activeTeam.module_logistics;
+        userData.can_edit_logistics_records = Boolean(activeTeam.can_edit_logistics_records);
       }
     } else {
       const resolved = await resolveEffectiveModules(userData);
@@ -457,6 +459,12 @@ exports.getMe = async (req, res) => {
       userData.theme_config = resolved.theme_config;
       userData.module_cartelera = resolved.module_cartelera;
       userData.module_logistics = resolved.module_logistics;
+      if (userData.role === 'staff' && userData.workgroup_organizer_id) {
+        const ownTeam = staffTeams.find(t => t.organizer_id === userData.workgroup_organizer_id);
+        userData.can_edit_logistics_records = Boolean(ownTeam?.can_edit_logistics_records);
+      } else {
+        userData.can_edit_logistics_records = userData.role === 'admin' || userData.role === 'organizer';
+      }
     }
 
     res.json({

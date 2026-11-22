@@ -687,17 +687,22 @@ exports.getPublicCampaign = async (req, res) => {
   }
 };
 
-// Editar un registro individual de canasta/artículo (Admin u Organizador dueño)
+// Editar un registro individual de canasta/artículo (Admin, Organizador dueño, o Staff autorizado)
 exports.updateItemRecord = async (req, res) => {
   const { id } = req.params;
   const { nombre, celular, notas, status, delivered_quantity } = req.body;
   const user = req.user;
 
   try {
+    if (user.role === 'staff' && !user.can_edit_logistics_records) {
+      return res.status(403).json({ status: 'ERROR', message: 'No tienes autorización del organizador para editar registros.' });
+    }
+
+    const ownerId = user.role === 'staff' ? user.workgroup_organizer_id : user.id;
     const checkSql = user.role === 'admin'
       ? `SELECT i.*, c.organizer_id FROM logistics_items i JOIN logistics_campaigns c ON i.campaign_id = c.id WHERE i.id = $1`
       : `SELECT i.*, c.organizer_id FROM logistics_items i JOIN logistics_campaigns c ON i.campaign_id = c.id WHERE i.id = $1 AND c.organizer_id = $2`;
-    const checkParams = user.role === 'admin' ? [id] : [id, user.id];
+    const checkParams = user.role === 'admin' ? [id] : [id, ownerId];
 
     const itemRes = await query(checkSql, checkParams);
     if (itemRes.rows.length === 0) {
@@ -763,10 +768,15 @@ exports.deleteItemRecord = async (req, res) => {
   const user = req.user;
 
   try {
+    if (user.role === 'staff' && !user.can_edit_logistics_records) {
+      return res.status(403).json({ status: 'ERROR', message: 'No tienes autorización del organizador para limpiar registros.' });
+    }
+
+    const ownerId = user.role === 'staff' ? user.workgroup_organizer_id : user.id;
     const checkSql = user.role === 'admin'
       ? `SELECT i.id, i.campaign_id, i.item_code FROM logistics_items i JOIN logistics_campaigns c ON i.campaign_id = c.id WHERE i.id = $1`
       : `SELECT i.id, i.campaign_id, i.item_code FROM logistics_items i JOIN logistics_campaigns c ON i.campaign_id = c.id WHERE i.id = $1 AND c.organizer_id = $2`;
-    const checkParams = user.role === 'admin' ? [id] : [id, user.id];
+    const checkParams = user.role === 'admin' ? [id] : [id, ownerId];
 
     const itemRes = await query(checkSql, checkParams);
     if (itemRes.rows.length === 0) {
